@@ -41,6 +41,7 @@ enum VoiceCloningReferenceAudioSupport {
 }
 
 struct VoiceCloningView: View {
+    @AppStorage("vocello.voiceCloningConsent.v1") private var cloneConsentAcknowledged = false
     @Binding private var draft: VoiceCloningDraft
     @Binding private var pendingSavedVoiceHandoff: PendingVoiceCloningHandoff?
     @State private var coordinator = VoiceCloningCoordinator()
@@ -65,6 +66,7 @@ struct VoiceCloningView: View {
 
     private var canRunBatch: Bool {
         ttsEngineStore.isReady
+            && cloneConsentAcknowledged
             && draft.referenceAudioPath != nil
             && isModelAvailable
             && !ttsEngineStore.hasActiveGeneration
@@ -342,6 +344,7 @@ private extension VoiceCloningView {
                     selectedVoice: selectedVoice,
                     savedVoicesLoadError: savedVoicesLoadError,
                     transcriptLoadError: coordinator.transcriptLoadError,
+                    consentAcknowledged: $cloneConsentAcknowledged,
                     browseForAudio: { coordinator.browseForAudio(draft: $draft) },
                     recordReference: { isRecordSheetPresented = true },
                     clearReference: { coordinator.clearReference(draft: $draft) },
@@ -388,6 +391,7 @@ private extension VoiceCloningView {
                     batchAction: { coordinator.presentBatch(draft: draft) },
                     batchDisabled: !canRunBatch,
                     generateDisabled: !ttsEngineStore.isReady
+                        || !cloneConsentAcknowledged
                         || !isModelAvailable
                         || draft.referenceAudioPath == nil
                         || !draft.hasText
@@ -395,6 +399,7 @@ private extension VoiceCloningView {
                     isEmbedded: true,
                     usesFlexibleEmbeddedHeight: true,
                     onGenerate: {
+                        guard cloneConsentAcknowledged else { return }
                         coordinator.generate(
                             draft: $draft,
                             cloneModel: cloneModel,
@@ -469,6 +474,7 @@ private struct VoiceCloningReferenceSettings: View {
     let selectedVoice: Voice?
     let savedVoicesLoadError: String?
     let transcriptLoadError: String?
+    @Binding var consentAcknowledged: Bool
     let browseForAudio: () -> Void
     let recordReference: () -> Void
     let clearReference: () -> Void
@@ -491,6 +497,12 @@ private struct VoiceCloningReferenceSettings: View {
                 message: "Use permitted clips only.",
                 accessibilityIdentifier: "voiceCloning_consentNotice"
             )
+            Toggle(
+                "I confirm I own this voice or have permission to clone it.",
+                isOn: $consentAcknowledged
+            )
+            .toggleStyle(.checkbox)
+            .accessibilityIdentifier("voiceCloning_consentAcknowledgment")
             CloneReferenceStatus(
                 referenceAudioPath: referenceAudioPath,
                 selectedVoice: selectedVoice,

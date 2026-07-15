@@ -1,19 +1,23 @@
 import Foundation
+import QwenVoiceCore
+#if canImport(Darwin)
+import Darwin
+#endif
 
 enum AppPaths {
     static let appSupportOverrideEnvironmentKey = "QWENVOICE_APP_SUPPORT_DIR"
 
     // Single package: production data lives in `QwenVoice/`. When the runtime
-    // debug toggle is on, dev work is isolated in `QwenVoice-Debug/` so it never
+    // explicit process debug gate is on, dev work is isolated in `QwenVoice-Debug/` so it never
     // touches real data. (Resolved once at launch via DebugMode.isEnabled.)
     private static let defaultFolderName: String =
         DebugMode.isEnabled ? "QwenVoice-Debug" : "QwenVoice"
 
     static var appSupportDir: URL {
-        if let overridePath = ProcessInfo.processInfo.environment[appSupportOverrideEnvironmentKey]?
+        if let overridePath = RuntimeDebugGate.value(for: appSupportOverrideEnvironmentKey)?
             .trimmingCharacters(in: .whitespacesAndNewlines),
-           !overridePath.isEmpty {
-            return URL(fileURLWithPath: overridePath, isDirectory: true)
+           let validated = validatedDebugOverride(overridePath) {
+            return validated
         }
         return baseApplicationSupportDir().appendingPathComponent(defaultFolderName, isDirectory: true)
     }
@@ -45,6 +49,33 @@ enum AppPaths {
                     .appendingPathComponent("Library/Application Support"),
                 isDirectory: true
             )
+    }
+
+    /// The shippable app is unsandboxed for MLX, so an inherited environment
+    /// variable must not redirect production reads/writes to an arbitrary path.
+    /// The override is available only in explicit runtime-debug sessions and
+    /// must resolve to an absolute, user-owned, writable location.
+    private static func validatedDebugOverride(_ rawPath: String) -> URL? {
+        guard DebugMode.isEnabled,
+              !rawPath.isEmpty,
+              (rawPath as NSString).isAbsolutePath else {
+            return nil
+        }
+        let candidate = URL(fileURLWithPath: rawPath, isDirectory: true)
+            .standardizedFileURL
+            .resolvingSymlinksInPath()
+        let fileManager = FileManager.default
+        let validationURL = fileManager.fileExists(atPath: candidate.path)
+            ? candidate
+            : candidate.deletingLastPathComponent()
+        guard validationURL.path != "/",
+              fileManager.isWritableFile(atPath: validationURL.path),
+              let attributes = try? fileManager.attributesOfItem(atPath: validationURL.path),
+              let owner = attributes[.ownerAccountID] as? NSNumber,
+              owner.uint32Value == getuid() else {
+            return nil
+        }
+        return candidate
     }
 }
 

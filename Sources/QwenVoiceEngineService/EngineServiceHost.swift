@@ -16,6 +16,7 @@ private actor ServiceActiveGenerationCoordinator {
     private struct ActiveGeneration {
         let id: UUID
         let cancel: @Sendable () -> Void
+        let waitForTermination: @Sendable () async -> Void
     }
 
     private var activeGeneration: ActiveGeneration?
@@ -24,14 +25,21 @@ private actor ServiceActiveGenerationCoordinator {
         activeGeneration != nil
     }
 
-    func register(cancel: @escaping @Sendable () -> Void) throws -> UUID {
+    func register(
+        cancel: @escaping @Sendable () -> Void,
+        waitForTermination: @escaping @Sendable () async -> Void
+    ) throws -> UUID {
         guard activeGeneration == nil else {
             throw TTSEngineError.generationFailed(
                 "The engine is already generating audio. Wait for it to finish or cancel it before starting another generation."
             )
         }
         let id = UUID()
-        activeGeneration = ActiveGeneration(id: id, cancel: cancel)
+        activeGeneration = ActiveGeneration(
+            id: id,
+            cancel: cancel,
+            waitForTermination: waitForTermination
+        )
         return id
     }
 
@@ -40,10 +48,13 @@ private actor ServiceActiveGenerationCoordinator {
         activeGeneration = nil
     }
 
-    func cancelCurrent() {
-        let cancel = activeGeneration?.cancel
-        activeGeneration = nil
-        cancel?()
+    func cancelCurrent() async {
+        guard let current = activeGeneration else { return }
+        current.cancel()
+        await current.waitForTermination()
+        if activeGeneration?.id == current.id {
+            activeGeneration = nil
+        }
     }
 }
 
@@ -116,16 +127,9 @@ private final class RuntimeContext: @unchecked Sendable {
     var lastPublishedEvent: GenerationEvent?
     var lastPublishedSnapshot: TTSEngineSnapshot?
     let requestTimings = EngineServiceRequestTimingRegistry()
-    /// Long-running Task that drains the engine's bounded `events`
-    /// AsyncStream and publishes each event over XPC in order while the
-    /// consumer stays active. Replaces the prior
-    /// `objectWillChange.sink` slot-sampling path that could
-    /// silently drop the trailing `.chunk` event when
-    /// `NativeStreamingSynthesisSession.run` emitted it
-    /// back-to-back with `.completed`. Cancelled when the
-    /// `RuntimeContext` is replaced (only happens on a fresh
-    /// `appSupportDirectory`); otherwise lives for the host's
-    /// lifetime.
+    /// One scoped forwarder for the currently active generation. The service
+    /// admits only one generation at a time, so replacing this task cannot
+    /// cross streams between requests.
     var eventForwardingTask: Task<Void, Never>?
 
     init(appSupportDirectory: URL, engine: MLXTTSEngine) {
@@ -342,28 +346,41 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
             return .void
         case .generate(let request):
             let runtimeContext = try requireRuntimeContext()
-            if let generationID = request.generationID {
-                runtimeContext.requestTimings.recordAcceptance(for: generationID)
-            }
+            let request = request.generationID == nil
+                ? request.withGenerationID(UUID())
+                : request
+            let requestGenerationID = request.generationID!
+            runtimeContext.requestTimings.recordAcceptance(for: requestGenerationID)
+            runtimeContext.eventForwardingTask?.cancel()
+            let eventForwardingTask = startEventForwarding(
+                generationID: requestGenerationID,
+                runtimeContext: runtimeContext
+            )
+            runtimeContext.eventForwardingTask = eventForwardingTask
             let generationTask = Task { @MainActor in
                 try await runtimeContext.engine.generate(request)
             }
             let generationID: UUID
             do {
-                generationID = try await activeGenerationCoordinator.register {
-                    generationTask.cancel()
-                }
+                generationID = try await activeGenerationCoordinator.register(
+                    cancel: { generationTask.cancel() },
+                    waitForTermination: { _ = await generationTask.result }
+                )
             } catch {
-                runtimeContext.requestTimings.discard(request.generationID)
+                runtimeContext.requestTimings.discard(requestGenerationID)
                 generationTask.cancel()
+                _ = await generationTask.result
+                await eventForwardingTask.value
                 throw error
             }
             do {
                 let result = try await generationTask.value
+                await eventForwardingTask.value
                 await activeGenerationCoordinator.finish(id: generationID)
                 return .generationResult(result)
             } catch {
-                runtimeContext.requestTimings.discard(request.generationID)
+                runtimeContext.requestTimings.discard(requestGenerationID)
+                await eventForwardingTask.value
                 await activeGenerationCoordinator.finish(id: generationID)
                 throw error
             }
@@ -388,9 +405,10 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
             }
             let generationID: UUID
             do {
-                generationID = try await activeGenerationCoordinator.register {
-                    generationTask.cancel()
-                }
+                generationID = try await activeGenerationCoordinator.register(
+                    cancel: { generationTask.cancel() },
+                    waitForTermination: { _ = await generationTask.result }
+                )
             } catch {
                 generationTask.cancel()
                 throw error
@@ -404,8 +422,10 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
                 throw error
             }
         case .cancelActiveGeneration:
+            let runtimeContext = try requireRuntimeContext()
+            try await runtimeContext.engine.cancelActiveGeneration(reason: .user)
             await activeGenerationCoordinator.cancelCurrent()
-            try requireRuntimeContext().engine.clearGenerationActivity()
+            runtimeContext.engine.clearGenerationActivity()
             return .void
         case .listPreparedVoices:
             return .preparedVoices(try await requireRuntimeContext().engine.listPreparedVoices())
@@ -504,41 +524,31 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
             }
             .store(in: &runtimeContext.cancellables)
 
-        // Cancel any prior context's forwarding task before we create the new
-        // one. Without this ordering, the prior task can race the new one
-        // publishing into the same XPC channel.
+        // Cancel a prior context's generation-scoped forwarder before replacing
+        // the runtime. A new one is created only when `.generate` is accepted.
         self.runtimeContext?.eventForwardingTask?.cancel()
 
-        // Chunk delivery via the engine's ordered AsyncStream. The
-        // producer (`MLXTTSEngine`'s
-        // `eventSink` callback) yields every event into
-        // `engine.events`; this Task drains the stream serially while
-        // active. Preview-audio chunks are never dropped here. No
-        // slot-sampling, no dedup, no race window.
-        let eventStream = runtime.engine.events
-        runtimeContext.eventForwardingTask = Task.detached(priority: .utility) { [weak self, weak runtimeContext, appSupportDirectory, eventStream] in
+        self.runtimeContext = runtimeContext
+        return runtimeContext
+    }
+
+    @MainActor
+    private func startEventForwarding(
+        generationID: UUID,
+        runtimeContext: RuntimeContext
+    ) -> Task<Void, Never> {
+        let appSupportDirectory = runtimeContext.appSupportDirectory
+        let eventStream = runtimeContext.engine.events(for: generationID)
+        return Task.detached(priority: .utility) { [weak self, weak runtimeContext, appSupportDirectory, eventStream] in
             var expectedChunkSequence: UInt64 = 0
-            var gapDetectionGenerationID: UUID?
-            // Per-generation middle-layer transport accumulators. Integer/Double
-            // arithmetic only on the hot path; the actual JSONL write is deferred to
-            // the terminal event and dispatched off this loop (see flush helper),
-            // so the unbounded chunk-delivery stream is never blocked on file I/O.
             var transport = EngineServiceTransportAccumulator()
+
             for await event in eventStream {
                 guard let self, let runtimeContext else { return }
-                if case .chunk(let chunk) = event, let sequence = chunk.chunkSequence {
-                    // chunkSequence restarts at 0 for each generation, so reset
-                    // the expected counter when the generation identity changes;
-                    // otherwise the gap detector goes dead after generation #1
-                    // (and can false-positive on a longer subsequent generation).
-                    if chunk.generationID != gapDetectionGenerationID {
-                        gapDetectionGenerationID = chunk.generationID
-                        expectedChunkSequence = 0
-                    }
+                if case .chunk(let chunk) = event,
+                   let sequence = chunk.chunkSequence {
                     if sequence > expectedChunkSequence + 1 {
                         let expected = expectedChunkSequence + 1
-                        // Diagnostics only — never block the chunk-delivery loop
-                        // on file I/O (gaps can cluster under buffer pressure).
                         Task.detached(priority: .background) {
                             Self.recordChunkSequenceGap(
                                 expected: expected,
@@ -549,12 +559,11 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
                     }
                     expectedChunkSequence = max(expectedChunkSequence, sequence)
                 }
-                // Accumulate transport telemetry; flushes the engine-service record
-                // on terminal events (.completed/.failed) and on generation switch.
+
                 let requestAcceptedUptime: Double?
                 if case .chunk(let chunk) = event,
-                   let generationID = chunk.generationID,
-                   generationID != transport.snapshot.generationID {
+                   chunk.generationID == generationID,
+                   transport.snapshot.generationID == nil {
                     requestAcceptedUptime = runtimeContext.requestTimings.consumeAcceptance(
                         for: generationID
                     )
@@ -573,16 +582,13 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
                         )
                     }
                 }
-                let stripped = event.withoutPreviewAudioPayload()
                 self.publish(.generationChunk(event))
+                let stripped = event.withoutPreviewAudioPayload()
                 await MainActor.run {
                     runtimeContext.lastPublishedEvent = stripped
                 }
             }
         }
-
-        self.runtimeContext = runtimeContext
-        return runtimeContext
     }
 
     @MainActor
@@ -644,6 +650,7 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
             // `MLXTTSEngineError.notInitialized`. See the May 2026 fix
             // commit for the full timeline (Tier 4.4).
             let contextAtSessionEnd = self.runtimeContext
+            try? await contextAtSessionEnd?.engine.cancelActiveGeneration(reason: .shutdown)
             await self.activeGenerationCoordinator.cancelCurrent()
             guard self.isStillTerminatingSession(sessionID) else { return }
             await contextAtSessionEnd?.engine.cancelClonePreparationIfNeeded()

@@ -12,24 +12,30 @@ struct IOSModelDeliveryConfiguration: Sendable {
 
     let catalogURL: URL
     let allowedHosts: Set<String>
+    let allowedRedirectHostSuffixes: Set<String>
     let backgroundSessionIdentifier: String
     let allowsInsecureTransport: Bool
 
     init(
         catalogURL: URL,
         allowedHosts: Set<String>? = nil,
+        allowedRedirectHostSuffixes: Set<String> = ["huggingface.co", "hf.co"],
         backgroundSessionIdentifier: String,
         allowsInsecureTransport: Bool = false
     ) {
         self.catalogURL = catalogURL
         self.allowedHosts = allowedHosts ?? Set([catalogURL.host].compactMap { $0?.lowercased() })
+        self.allowedRedirectHostSuffixes = Set(allowedRedirectHostSuffixes.map { $0.lowercased() })
         self.backgroundSessionIdentifier = backgroundSessionIdentifier
         self.allowsInsecureTransport = allowsInsecureTransport
     }
 
     static func `default`(bundle: Bundle = .main) -> IOSModelDeliveryConfiguration {
         let environment = ProcessInfo.processInfo.environment
-        let rawOverride = environment[catalogURLEnvironmentKey]?
+        let rawOverride = RuntimeDebugGate.value(
+            for: catalogURLEnvironmentKey,
+            environment: environment
+        )?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedOverride = rawOverride.flatMap(normalizedCatalogOverrideString(_:))
         let overrideURL = normalizedOverride.flatMap(URL.init(string:))
@@ -39,7 +45,7 @@ struct IOSModelDeliveryConfiguration: Sendable {
         let bundleURL = normalizedBundleDefault.flatMap(URL.init(string:))
         let catalogURL = overrideURL ?? bundleURL ?? URL(string: defaultCatalogURLString)!
         let overrideHosts = Set(
-            environment[allowedHostsEnvironmentKey]?
+            RuntimeDebugGate.value(for: allowedHostsEnvironmentKey, environment: environment)?
                 .split(separator: ",")
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
                 .filter { !$0.isEmpty } ?? []
@@ -55,6 +61,7 @@ struct IOSModelDeliveryConfiguration: Sendable {
         return IOSModelDeliveryConfiguration(
             catalogURL: catalogURL,
             allowedHosts: defaultHost.union(overrideHosts),
+            allowedRedirectHostSuffixes: ["huggingface.co", "hf.co"],
             backgroundSessionIdentifier: backgroundIdentifier,
             allowsInsecureTransport: false
         )

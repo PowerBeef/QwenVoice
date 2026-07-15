@@ -47,6 +47,8 @@ Vocello bundles three model families, each from the `mlx-community` Hugging Face
 - **8-bit = Quality**, **4-bit = Speed**. macOS defaults to Quality unless the device is in the `floor8GBMac` memory class, in which case Speed is selected. iOS always uses the Speed variant.
 - Qwen3-TTS also publishes **0.6B** checkpoints. Vocello currently pins only the **1.7B** variants.
 - `supportsInstructionControl` is `true` for Custom Voice and Voice Design, `false` for the Base clone model.
+- `supportsXVectorOnlyClone` is explicitly `true` only for the Base clone model; audio-only
+  cloning fails before model preparation if a future checkpoint does not declare it.
 - `requiresSpeakerEncoder` is `true` only for the clone model.
 
 ---
@@ -186,7 +188,7 @@ Qwen3PromptAssembly(
 ```
 
 - Instruction control is **only available on the 1.7B CustomVoice model**. The 0.6B model (not shipped in Vocello) does not support it.
-- For English text, `GenerationSemantics` appends a diction-reinforcement clause (`Native English pronunciation with clear English diction and natural stress.`) unless the instruction already contains diction-related words or the feature is disabled via `QWENVOICE_ENGLISH_DICTION_REINFORCEMENT=off`.
+- For English text, `GenerationSemantics` appends a diction-reinforcement clause (`Native English pronunciation with clear English diction and natural stress.`) unless the instruction already contains diction-related words or the feature is disabled via the debug-gated `QWENVOICE_ENGLISH_DICTION_REINFORCEMENT=off` diagnostic override.
 - Celebrity imitation / voice impersonation instructions are rejected by `validateQwenPromptContract`.
 
 ### 5.2 Voice Design
@@ -225,7 +227,10 @@ Qwen3PromptAssembly(
 ```
 
 - Requires the **Base** model and the speaker encoder.
-- A transcript (`refText`) improves quality but is optional. Vocello also accepts a sidecar `.txt` file next to the reference audio.
+- A transcript (`refText`) improves quality but is optional. Vocello also accepts a sidecar `.txt`
+  file next to the reference audio. Inline or sidecar text selects typed transcript-backed ICL
+  conditioning; absent, empty, or whitespace-only text selects true speaker-embedding-only
+  x-vector conditioning rather than falling back to Voice Design.
 - The Base model **does not follow delivery/emotion instructions**. To get a styled clone, use **design-then-clone**: generate a styled reference clip with Voice Design, build a clone prompt from it, then generate with the Base model using that prompt.
 
 ### 5.4 Design-then-clone workflow
@@ -351,8 +356,15 @@ Implemented in `Sources/QwenVoiceCore/NativeCloneSupport.swift`.
    The recommended reference window is **10–20 seconds of clean speech**.
 
 5. **Clone prompt creation**
-   - If a transcript exists and the model supports optimized cloning, call `createVoiceClonePrompt(refAudio:refText:xVectorOnlyMode: false)`.
-   - The resulting `Qwen3TTSVoiceClonePrompt` is cached in memory and persisted to disk (under `voicesDirectory`) keyed by model ID, reference fingerprint, and transcript hash.
+   - A resolved transcript calls
+     `createVoiceClonePrompt(refAudio:refText:xVectorOnlyMode: false)` and produces ICL reference
+     codes plus a speaker embedding.
+   - No resolved transcript calls
+     `createVoiceClonePrompt(refAudio: referenceAudio, refText: nil, xVectorOnlyMode: true)` and
+     produces a speaker-embedding-only prompt.
+   - Priming and direct generation consume the same typed prompt. The prompt is cached in memory
+     and persisted under `voicesDirectory`, keyed by model ID, reference fingerprint,
+     conditioning mode, language, and transcript hash when present.
    - Re-use the same prompt across multiple generations to avoid recomputing speaker features.
 
 ---
@@ -384,7 +396,12 @@ policy while preserving a typed override surface for controlled experiments.
 Streaming:
 
 - `appStreamingInterval = 0.32` s (configurable, used to batch decoder output into user-facing chunks).
-- PCM preview data is emitted by default on both platforms (`QWENVOICE_STREAMING_PREVIEW_DATA=emit`).
+- PCM preview data is emitted by default on both platforms. A preview-policy environment override is
+  production-affecting and therefore inert unless the `QWENVOICE_DEBUG` master gate is enabled.
+
+`config/runtime-debug-knobs.json` is the exhaustive authority for these environment surfaces. Never
+add a behavior-changing reader outside `RuntimeDebugGate` or describe a debug-gated override as
+shipped product policy.
 
 ---
 

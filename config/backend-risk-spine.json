@@ -10,9 +10,9 @@
   "items": [
     {
       "id": "H1",
-      "vendorPatchID": "CONC-001",
+      "runtimeCapabilityID": "bounded-streaming",
       "title": "Generation-gate FIFO, cancellation transfer, holder failure, and deterministic stress",
-      "source": "third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
+      "source": "Packages/VocelloQwen3Core/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
       "tests": [
         "Qwen3RuntimeTests/Qwen3GenerationGateTests/testWaitersAcquireInFIFOOrder",
         "Qwen3RuntimeTests/Qwen3GenerationGateTests/testQueuedCancellationDoesNotReleaseCurrentOwner",
@@ -25,9 +25,9 @@
     },
     {
       "id": "H2",
-      "vendorPatchID": "PKG-001",
+      "runtimeCapabilityID": "package-surface",
       "title": "Dedicated owned Qwen3 runtime target with Metal resources",
-      "source": "third_party_patches/mlx-audio-swift/Package.swift",
+      "source": "Packages/VocelloQwen3Core/Package.swift",
       "tests": [
         "Qwen3RuntimeTests/Qwen3DecoderPartitionTests/testTimingInstrumentationDoesNotChangeWaveform"
       ],
@@ -36,9 +36,9 @@
     },
     {
       "id": "MH1",
-      "vendorPatchID": "LOAD-001",
+      "runtimeCapabilityID": "qwen3-loading-and-sampling",
       "title": "Requested learned tokenizer and speaker components require real weights",
-      "source": "third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
+      "source": "Packages/VocelloQwen3Core/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
       "tests": [
         "Qwen3RuntimeTests/Qwen3LearnedComponentWeightTests/testSpeakerComponentLoadingRejectsMissingWeights",
         "Qwen3RuntimeTests/Qwen3LearnedComponentWeightTests/testSpeechTokenizerLoadingRejectsMissingWeights"
@@ -48,9 +48,9 @@
     },
     {
       "id": "MH2",
-      "vendorPatchID": "CLONE-001",
+      "runtimeCapabilityID": "clone-artifacts",
       "title": "Clone artifact atomic publication, tensor round trip, integrity, and mode requirements",
-      "source": "third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
+      "source": "Packages/VocelloQwen3Core/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
       "tests": [
         "Qwen3RuntimeTests/Qwen3CloneArtifactIntegrityTests/testNonEmptyTensorRoundTripPreservesShapeDTypeAndValues",
         "Qwen3RuntimeTests/Qwen3CloneArtifactIntegrityTests/testAtomicReplacementPublishesOnlyCompleteNewArtifact",
@@ -81,9 +81,9 @@
     },
     {
       "id": "STREAM",
-      "vendorPatchID": "STREAM-001",
+      "runtimeCapabilityID": "bounded-streaming",
       "title": "Streaming bounded retention, scheduling, cancellation, and final barrier",
-      "source": "third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
+      "source": "Packages/VocelloQwen3Core/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
       "tests": [
         "Qwen3RuntimeTests/Qwen3StreamingContractTests/testPendingRetentionIsBoundedAndFirstLaterSchedulingIsExact",
         "Qwen3RuntimeTests/Qwen3StreamingContractTests/testCancellationStopsConsumerAndRunsTermination",
@@ -95,9 +95,9 @@
     },
     {
       "id": "DECODER",
-      "vendorPatchID": "CODEC-001",
+      "runtimeCapabilityID": "mimi-codec",
       "title": "Seeded Metal decoder partition invariance, reset isolation, and timing parity",
-      "source": "third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSSpeechTokenizer.swift",
+      "source": "Packages/VocelloQwen3Core/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSSpeechTokenizer.swift",
       "tests": [
         "Qwen3RuntimeTests/Qwen3DecoderPartitionTests/testFixedAndRandomizedPartitionsAreWaveformInvariant",
         "Qwen3RuntimeTests/Qwen3DecoderPartitionTests/testResetIsolationRestoresDeterministicWaveform",

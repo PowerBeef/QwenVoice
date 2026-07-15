@@ -1,7 +1,8 @@
+import CryptoKit
 import Foundation
 
 public enum GenerationSemantics {
-    public enum DesignWarmBucket: String, Sendable {
+    public enum DesignWarmBucket: String, Hashable, Sendable {
         case short
         case long
     }
@@ -21,6 +22,297 @@ public enum GenerationSemantics {
         public let speakerID: String?
         public let usesInstructionControl: Bool
         public let cloneUsesTranscript: Bool
+    }
+
+    /// Collision-safe value identity for a resolved Voice Design warm state.
+    ///
+    /// Equality and hashing operate on typed fields rather than a delimiter-
+    /// composed string. `canonicalSerialization` is UTF-8 length framed for
+    /// deterministic diagnostics; cache boundaries use its opaque digest.
+    public struct DesignConditioningIdentity: Hashable, Sendable {
+        public let modelID: String
+        public let language: String
+        public let instruction: String
+        public let bucket: DesignWarmBucket
+
+        public var canonicalSerialization: String {
+            GenerationSemantics.canonicalIdentitySerialization(
+                namespace: "design-conditioning",
+                components: [modelID, language, instruction, bucket.rawValue]
+            )
+        }
+
+        public var digest: String {
+            GenerationSemantics.canonicalIdentityDigest(canonicalSerialization)
+        }
+
+        public var cacheKey: String { "qv-design-v1-\(digest)" }
+
+        /// Compatibility output for callers that display or compare the
+        /// pre-v1 key. Runtime cache ownership must use this value type.
+        public var legacyKey: String {
+            [
+                modelID,
+                GenerationMode.design.rawValue,
+                language,
+                instruction,
+                bucket.rawValue,
+            ].joined(separator: "|")
+        }
+    }
+
+    /// Collision-safe clone identity. The optional fingerprint remains a
+    /// separate field internally instead of being appended to a path with
+    /// `#`, so paths containing separators cannot alias another reference.
+    public struct CloneReferenceIdentity: Hashable, Sendable {
+        public let modelID: String
+        public let conditioningMode: CloneConditioningMode
+        public let referenceAudio: String
+        public let referenceFingerprint: String?
+
+        public init(modelID: String, refAudio: String, refText: String?) {
+            self.init(
+                modelID: modelID,
+                referenceAudio: refAudio,
+                referenceFingerprint: nil,
+                conditioningMode: CloneConditioningMode(transcript: refText)
+            )
+        }
+
+        init(
+            modelID: String,
+            referenceAudio: String,
+            referenceFingerprint: String?,
+            conditioningMode: CloneConditioningMode
+        ) {
+            self.modelID = modelID
+            self.referenceAudio = referenceAudio.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedFingerprint = referenceFingerprint?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            self.referenceFingerprint = normalizedFingerprint?.isEmpty == false
+                ? normalizedFingerprint
+                : nil
+            self.conditioningMode = conditioningMode.normalized
+        }
+
+        public var canonicalSerialization: String {
+            GenerationSemantics.canonicalIdentitySerialization(
+                namespace: "clone-reference",
+                components: [
+                    modelID,
+                    conditioningMode.identifier,
+                    referenceAudio,
+                    referenceFingerprint ?? "",
+                    conditioningMode.transcript ?? "",
+                ]
+            )
+        }
+
+        public var digest: String {
+            GenerationSemantics.canonicalIdentityDigest(canonicalSerialization)
+        }
+
+        public var cacheKey: String { "qv-clone-v1-\(digest)" }
+
+        /// Compatibility output used by existing UI identity/state APIs and
+        /// the persistent clone-artifact directory derivation.
+        public var legacyKey: String {
+            let legacyAudio = referenceFingerprint.map { "\(referenceAudio)#\($0)" }
+                ?? referenceAudio
+            return [
+                modelID,
+                GenerationMode.clone.rawValue,
+                conditioningMode.identifier,
+                legacyAudio,
+                conditioningMode.transcript ?? "",
+            ].joined(separator: "|")
+        }
+    }
+
+    /// Typed identity for the three semantically distinct prewarm scopes.
+    public enum PrewarmIdentity: Hashable, Sendable {
+        case model(modelID: String, mode: GenerationMode)
+        case customRequest(
+            modelID: String,
+            language: String,
+            speakerID: String,
+            instruction: String
+        )
+        case clone(CloneReferenceIdentity)
+
+        public var canonicalSerialization: String {
+            switch self {
+            case .model(let modelID, let mode):
+                GenerationSemantics.canonicalIdentitySerialization(
+                    namespace: "model-prewarm",
+                    components: [modelID, mode.rawValue]
+                )
+            case .customRequest(let modelID, let language, let speakerID, let instruction):
+                GenerationSemantics.canonicalIdentitySerialization(
+                    namespace: "custom-request-prewarm",
+                    components: [modelID, language, speakerID, instruction]
+                )
+            case .clone(let identity):
+                GenerationSemantics.canonicalIdentitySerialization(
+                    namespace: "clone-prewarm",
+                    components: [identity.canonicalSerialization]
+                )
+            }
+        }
+
+        public var digest: String {
+            GenerationSemantics.canonicalIdentityDigest(canonicalSerialization)
+        }
+
+        public var cacheKey: String { "qv-prewarm-v1-\(digest)" }
+
+        /// Compatibility output for existing public string APIs.
+        public var legacyKey: String {
+            switch self {
+            case .model(let modelID, let mode):
+                [modelID, mode.rawValue].joined(separator: "|")
+            case .customRequest(let modelID, let language, let speakerID, let instruction):
+                [modelID, GenerationMode.custom.rawValue, language, speakerID, instruction]
+                    .joined(separator: "|")
+            case .clone(let identity):
+                identity.legacyKey
+            }
+        }
+    }
+
+    /// Collision-safe identity for a batch generation session.
+    ///
+    /// The former implementation concatenated payload fields with `|` before
+    /// applying a 64-bit FNV hash. Inputs containing that delimiter could alias
+    /// a different semantic request. This value keeps the fields typed and uses
+    /// the same UTF-8 length framing + SHA-256 boundary as the other runtime
+    /// identities.
+    public enum GenerationSessionIdentity: Hashable, Sendable {
+        case custom(
+            modelID: String,
+            language: String,
+            speakerID: String,
+            deliveryStyle: String?
+        )
+        case design(
+            modelID: String,
+            language: String,
+            voiceDescription: String,
+            deliveryStyle: String?
+        )
+        case clone(
+            modelID: String,
+            language: String,
+            audioPath: String,
+            conditioningMode: CloneConditioningMode,
+            preparedVoiceID: String?
+        )
+
+        public var canonicalSerialization: String {
+            switch self {
+            case .custom(let modelID, let language, let speakerID, let deliveryStyle):
+                GenerationSemantics.canonicalIdentitySerialization(
+                    namespace: "generation-session-custom-v1",
+                    components: [
+                        modelID,
+                        language,
+                        speakerID,
+                        deliveryStyle == nil ? "none" : "some",
+                        deliveryStyle ?? "",
+                    ]
+                )
+            case .design(let modelID, let language, let voiceDescription, let deliveryStyle):
+                GenerationSemantics.canonicalIdentitySerialization(
+                    namespace: "generation-session-design-v1",
+                    components: [
+                        modelID,
+                        language,
+                        voiceDescription,
+                        deliveryStyle == nil ? "none" : "some",
+                        deliveryStyle ?? "",
+                    ]
+                )
+            case .clone(
+                let modelID,
+                let language,
+                let audioPath,
+                let conditioningMode,
+                let preparedVoiceID
+            ):
+                GenerationSemantics.canonicalIdentitySerialization(
+                    namespace: "generation-session-clone-v1",
+                    components: [
+                        modelID,
+                        language,
+                        audioPath,
+                        conditioningMode.identifier,
+                        conditioningMode.transcript ?? "",
+                        preparedVoiceID == nil ? "none" : "some",
+                        preparedVoiceID ?? "",
+                    ]
+                )
+            }
+        }
+
+        public var digest: String {
+            GenerationSemantics.canonicalIdentityDigest(canonicalSerialization)
+        }
+
+        public var sessionKey: GenerationSessionKey {
+            switch self {
+            case .custom(let modelID, let language, _, _):
+                GenerationSessionKey(
+                    modelID: modelID,
+                    mode: .custom,
+                    language: language,
+                    speakerOrVoiceDescriptionHash: digest
+                )
+            case .design(let modelID, let language, _, _):
+                GenerationSessionKey(
+                    modelID: modelID,
+                    mode: .design,
+                    language: language,
+                    speakerOrVoiceDescriptionHash: digest
+                )
+            case .clone(let modelID, let language, _, _, _):
+                GenerationSessionKey(
+                    modelID: modelID,
+                    mode: .clone,
+                    language: language,
+                    cloneReferenceHash: digest
+                )
+            }
+        }
+    }
+
+    public static func generationSessionIdentity(
+        for request: GenerationRequest
+    ) -> GenerationSessionIdentity {
+        let language = qwenLanguageHint(for: request)
+        switch request.payload {
+        case .custom(let speakerID, let deliveryStyle):
+            return .custom(
+                modelID: request.modelID,
+                language: language,
+                speakerID: speakerID,
+                deliveryStyle: deliveryStyle
+            )
+        case .design(let voiceDescription, let deliveryStyle):
+            return .design(
+                modelID: request.modelID,
+                language: language,
+                voiceDescription: voiceDescription,
+                deliveryStyle: deliveryStyle
+            )
+        case .clone(let reference):
+            return .clone(
+                modelID: request.modelID,
+                language: language,
+                audioPath: reference.audioPath,
+                conditioningMode: reference.conditioningMode,
+                preparedVoiceID: reference.preparedVoiceID
+            )
+        }
     }
 
     public static let appStreamingInterval = 0.32
@@ -74,18 +366,12 @@ public enum GenerationSemantics {
         voiceDescription: String,
         emotion: String?
     ) -> String {
-        let normalizedLanguage = language
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-        let resolvedInstruction = englishDictionReinforcedInstruction(
-            baseInstruction: designInstruction(
-                voiceDescription: voiceDescription,
-                emotion: emotion ?? ""
-            ),
-            language: normalizedLanguage
-        ) ?? ""
-        let normalizedInstruction = normalizedConditioningCacheKeyText(resolvedInstruction)
-        return "\(normalizedLanguage)|\(normalizedInstruction)"
+        let components = normalizedDesignConditioningComponents(
+            language: language,
+            voiceDescription: voiceDescription,
+            emotion: emotion
+        )
+        return "\(components.language)|\(components.instruction)"
     }
 
     public static func customInstruction(deliveryStyle: String?) -> String? {
@@ -186,7 +472,7 @@ public enum GenerationSemantics {
     /// adherence; an optional listening note may supplement that evidence.
     /// Resolved once; production default is unchanged (reinforcement on).
     private static let englishDictionReinforcementDisabled: Bool = {
-        let raw = ProcessInfo.processInfo.environment["QWENVOICE_ENGLISH_DICTION_REINFORCEMENT"]?
+        let raw = RuntimeDebugGate.value(for: "QWENVOICE_ENGLISH_DICTION_REINFORCEMENT")?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
         return raw == "off" || raw == "0" || raw == "false" || raw == "no"
@@ -321,29 +607,51 @@ public enum GenerationSemantics {
         emotion: String?,
         text: String
     ) -> String {
-        let normalizedConditioning = normalizedDesignConditioningIdentity(
+        designConditioningIdentity(
+            modelID: modelID,
             language: language,
             voiceDescription: voiceDescription,
-            emotion: emotion
-        )
-        return [
-            modelID,
-            GenerationMode.design.rawValue,
-            normalizedConditioning,
-            designWarmBucket(for: text).rawValue,
-        ].joined(separator: "|")
+            emotion: emotion,
+            text: text
+        ).legacyKey
     }
 
     public static func designConditioningWarmKey(
         for request: GenerationRequest
     ) -> String? {
+        designConditioningIdentity(for: request)?.legacyKey
+    }
+
+    public static func designConditioningIdentity(
+        modelID: String,
+        language: String,
+        voiceDescription: String,
+        emotion: String?,
+        text: String
+    ) -> DesignConditioningIdentity {
+        let components = normalizedDesignConditioningComponents(
+            language: language,
+            voiceDescription: voiceDescription,
+            emotion: emotion
+        )
+        return DesignConditioningIdentity(
+            modelID: modelID,
+            language: components.language,
+            instruction: components.instruction,
+            bucket: designWarmBucket(for: text)
+        )
+    }
+
+    public static func designConditioningIdentity(
+        for request: GenerationRequest
+    ) -> DesignConditioningIdentity? {
         guard case .design(let voiceDescription, let emotion) = request.payload else {
             return nil
         }
         let trimmedVoiceDescription = voiceDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedVoiceDescription.isEmpty else { return nil }
         let language = qwenLanguageHint(for: request)
-        return designConditioningWarmKey(
+        return designConditioningIdentity(
             modelID: request.modelID,
             language: language,
             voiceDescription: voiceDescription,
@@ -360,12 +668,29 @@ public enum GenerationSemantics {
         refAudio: String? = nil,
         refText: String? = nil
     ) -> String {
+        prewarmIdentity(
+            modelID: modelID,
+            mode: mode,
+            voice: voice,
+            instruct: instruct,
+            refAudio: refAudio,
+            refText: refText
+        ).legacyKey
+    }
+
+    public static func prewarmIdentity(
+        modelID: String,
+        mode: GenerationMode,
+        voice: String? = nil,
+        instruct: String? = nil,
+        refAudio: String? = nil,
+        refText: String? = nil
+    ) -> PrewarmIdentity {
         let trimmedVoice = voice?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let trimmedRefAudio = refAudio?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let trimmedRefText = refText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let trimmedInstruction = instruct?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let normalizedInstruction = hasMeaningfulDeliveryInstruction(trimmedInstruction) ? trimmedInstruction : ""
-        let identityParts: [String]
 
         switch mode {
         case .custom:
@@ -373,14 +698,18 @@ public enum GenerationSemantics {
             _ = normalizedInstruction
             // Keep custom interactive readiness stable at the model level so
             // UI draft churn does not invalidate the hot model state.
-            identityParts = [modelID, mode.rawValue]
+            return .model(modelID: modelID, mode: mode)
         case .design:
-            identityParts = [modelID, mode.rawValue]
+            return .model(modelID: modelID, mode: mode)
         case .clone:
-            identityParts = [modelID, mode.rawValue, trimmedRefAudio, trimmedRefText]
+            return .clone(
+                CloneReferenceIdentity(
+                    modelID: modelID,
+                    refAudio: trimmedRefAudio,
+                    refText: trimmedRefText
+                )
+            )
         }
-
-        return identityParts.joined(separator: "|")
     }
 
     public static func cloneReferenceIdentityKey(
@@ -388,11 +717,36 @@ public enum GenerationSemantics {
         refAudio: String,
         refText: String?
     ) -> String {
-        prewarmIdentityKey(
+        cloneReferenceIdentity(
             modelID: modelID,
-            mode: .clone,
             refAudio: refAudio,
             refText: refText
+        ).legacyKey
+    }
+
+    public static func cloneReferenceIdentity(
+        modelID: String,
+        refAudio: String,
+        refText: String?
+    ) -> CloneReferenceIdentity {
+        CloneReferenceIdentity(
+            modelID: modelID,
+            refAudio: refAudio,
+            refText: refText
+        )
+    }
+
+    static func internalCloneReferenceIdentity(
+        modelID: String,
+        normalizedReferencePath: String,
+        referenceFingerprint: String,
+        conditioningMode: CloneConditioningMode
+    ) -> CloneReferenceIdentity {
+        CloneReferenceIdentity(
+            modelID: modelID,
+            referenceAudio: normalizedReferencePath,
+            referenceFingerprint: referenceFingerprint,
+            conditioningMode: conditioningMode
         )
     }
 
@@ -405,38 +759,80 @@ public enum GenerationSemantics {
     /// Live callers: NativeEngineRuntime, XPCNativeEngineClient,
     /// GenerationSemanticsTests.
     public static func prewarmIdentityKey(for request: GenerationRequest) -> String {
+        prewarmIdentity(for: request).legacyKey
+    }
+
+    public static func prewarmIdentity(for request: GenerationRequest) -> PrewarmIdentity {
         switch request.payload {
         case .custom(let speakerID, let deliveryStyle):
             let normalizedInstruction = hasMeaningfulDeliveryInstruction(deliveryStyle ?? "")
                 ? deliveryStyle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 : ""
-            return [
-                request.modelID,
-                request.modeIdentifier,
-                qwenLanguageHint(for: request),
-                speakerID.trimmingCharacters(in: .whitespacesAndNewlines),
-                normalizedInstruction,
-            ].joined(separator: "|")
+            return .customRequest(
+                modelID: request.modelID,
+                language: qwenLanguageHint(for: request),
+                speakerID: speakerID.trimmingCharacters(in: .whitespacesAndNewlines),
+                instruction: normalizedInstruction
+            )
         case .design:
-            return [
-                request.modelID,
-                request.modeIdentifier,
-            ].joined(separator: "|")
+            return .model(modelID: request.modelID, mode: .design)
         case .clone(let reference):
-            return clonePreparationKey(modelID: request.modelID, reference: reference)
+            return .clone(
+                cloneReferenceIdentity(
+                    modelID: request.modelID,
+                    refAudio: reference.audioPath,
+                    refText: reference.transcript
+                )
+            )
         }
     }
 
     /// Public clone-preparation cache key. Mirrors the engine-support
     /// signature so production callers can switch to this copy without
-    /// changing arguments. Format: "<modelID>|clone|<audioPath>|<transcript>".
+    /// changing arguments. Format:
+    /// "<modelID>|clone|<conditioningMode>|<audioPath>|<transcript>".
     public static func clonePreparationKey(modelID: String, reference: CloneReference) -> String {
-        [
-            modelID,
-            "clone",
-            reference.audioPath.trimmingCharacters(in: .whitespacesAndNewlines),
-            reference.transcript?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
-        ].joined(separator: "|")
+        cloneReferenceIdentityKey(
+            modelID: modelID,
+            refAudio: reference.audioPath,
+            refText: reference.transcript
+        )
+    }
+
+    private static func normalizedDesignConditioningComponents(
+        language: String,
+        voiceDescription: String,
+        emotion: String?
+    ) -> (language: String, instruction: String) {
+        let normalizedLanguage = language
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let resolvedInstruction = englishDictionReinforcedInstruction(
+            baseInstruction: designInstruction(
+                voiceDescription: voiceDescription,
+                emotion: emotion ?? ""
+            ),
+            language: normalizedLanguage
+        ) ?? ""
+        return (
+            normalizedLanguage,
+            normalizedConditioningCacheKeyText(resolvedInstruction)
+        )
+    }
+
+    private static func canonicalIdentitySerialization(
+        namespace: String,
+        components: [String]
+    ) -> String {
+        ([namespace] + components).map { component in
+            "\(component.utf8.count):\(component)"
+        }.joined()
+    }
+
+    private static func canonicalIdentityDigest(_ serialization: String) -> String {
+        SHA256.hash(data: Data(serialization.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
     }
 
     private static func detectedQwenLanguage(in text: String) -> Qwen3SupportedLanguage? {

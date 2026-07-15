@@ -29,6 +29,76 @@ final class ModelDownloadLifecycleTests: XCTestCase {
         XCTAssertFalse(encoded.contains("/Users/"))
     }
 
+    func testArtifactURLPolicyRejectsUnsafeInitialHostsAndRedirects() throws {
+        let policy = ModelArtifactURLPolicy(
+            allowedInitialHosts: ["huggingface.co"],
+            allowedRedirectHostSuffixes: ["huggingface.co", "hf.co"]
+        )
+        let source = try XCTUnwrap(URL(string: "https://huggingface.co/org/model/resolve/"))
+        XCTAssertTrue(policy.allowsInitialRequest(source))
+        XCTAssertTrue(policy.allowsRedirect(
+            from: source,
+            to: try XCTUnwrap(URL(string: "https://cdn-lfs.huggingface.co/object"))
+        ))
+        XCTAssertTrue(policy.allowsRedirect(
+            from: source,
+            to: try XCTUnwrap(URL(string: "https://cas-bridge.xethub.hf.co/object"))
+        ))
+        for value in [
+            "http://huggingface.co/object",
+            "https://attacker.invalid/object",
+            "https://127.0.0.1/object",
+            "https://localhost/object",
+            "https://user:secret@huggingface.co/object",
+        ] {
+            XCTAssertFalse(policy.allowsRedirect(
+                from: source,
+                to: try XCTUnwrap(URL(string: value))
+            ), value)
+        }
+        XCTAssertFalse(policy.allowsRedirect(
+            from: try XCTUnwrap(URL(string: "https://attacker.invalid/source")),
+            to: try XCTUnwrap(URL(string: "https://huggingface.co/object"))
+        ))
+    }
+
+    func testTaskIdentityRejectsMissingDigestUnsafePathAndUnsafeIdentity() {
+        let missingDigest = ModelDownloadTaskIdentity(
+            logicalRequestID: "request",
+            modelID: "model",
+            artifactVersion: "v1",
+            relativePath: "weights/model.safetensors",
+            expectedSize: 42,
+            expectedSHA256: nil
+        )
+        let unsafePath = ModelDownloadTaskIdentity(
+            logicalRequestID: "request",
+            modelID: "model",
+            artifactVersion: "v1",
+            relativePath: "../model.safetensors",
+            expectedSize: 42,
+            expectedSHA256: String(repeating: "a", count: 64)
+        )
+        let unsafeModel = ModelDownloadTaskIdentity(
+            logicalRequestID: "request",
+            modelID: "https://attacker.invalid/model",
+            artifactVersion: "v1",
+            relativePath: "weights/model.safetensors",
+            expectedSize: 42,
+            expectedSHA256: String(repeating: "a", count: 64)
+        )
+
+        for identity in [missingDigest, unsafePath, unsafeModel] {
+            XCTAssertFalse(identity.isValidProductionIdentity)
+            XCTAssertNil(identity.encodedTaskDescription)
+            let plan = ModelDownloadTaskReconciler.plan(
+                expected: [self.identity()],
+                existing: [ModelDownloadExistingTask(taskID: 1, identity: identity)]
+            )
+            XCTAssertEqual(plan.cancelledTaskIDs, [1])
+        }
+    }
+
     func testExistingTaskIsAdoptedWithNoDuplicateCreation() {
         let expected = identity()
         let plan = ModelDownloadTaskReconciler.plan(
@@ -247,8 +317,8 @@ final class ModelDownloadLifecycleTests: XCTestCase {
             logicalRequestID: "logical",
             modelID: "model",
             artifactVersion: "v1",
-            repo: "repo",
-            revision: "revision",
+            repo: "org/repo",
+            revision: String(repeating: "a", count: 40),
             targetFolder: "model-folder",
             expectedFiles: ["weights/model.safetensors"],
             verifiedFiles: [],
@@ -289,8 +359,8 @@ final class ModelDownloadLifecycleTests: XCTestCase {
                 logicalRequestID: id,
                 modelID: "model",
                 artifactVersion: "v1",
-                repo: "repo",
-                revision: "revision",
+                repo: "org/repo",
+                revision: String(repeating: "a", count: 40),
                 targetFolder: "model-folder",
                 expectedFiles: [path],
                 verifiedFiles: [],
@@ -303,9 +373,40 @@ final class ModelDownloadLifecycleTests: XCTestCase {
 
         XCTAssertThrowsError(try IOSModelDownloadLedger(requests: [request(id: "a", path: "/tmp/file")]).validated())
         XCTAssertThrowsError(try IOSModelDownloadLedger(requests: [request(id: "a", path: "../file")]).validated())
+        XCTAssertThrowsError(try IOSModelDownloadLedger(requests: [request(id: "a", path: "%2e%2e/file")]).validated())
         XCTAssertThrowsError(try IOSModelDownloadLedger(requests: [
             request(id: "a", path: "one"),
             request(id: "b", path: "two"),
+        ]).validated())
+    }
+
+    func testLedgerRejectsMutableRevisionAndUnverifiedReceiptIdentity() {
+        func request(revision: String, verifiedSHA: String?) -> IOSModelDownloadLedger.Request {
+            IOSModelDownloadLedger.Request(
+                logicalRequestID: "logical",
+                modelID: "model",
+                artifactVersion: "v1",
+                repo: "org/repo",
+                revision: revision,
+                targetFolder: "model-folder",
+                expectedFiles: ["weights/model.safetensors"],
+                verifiedFiles: [IOSModelDownloadLedger.VerifiedFile(
+                    relativePath: "weights/model.safetensors",
+                    expectedSize: 42,
+                    sha256: verifiedSHA
+                )],
+                retryCount: 0,
+                receivedBytes: 42,
+                totalBytes: 42,
+                status: .verifying
+            )
+        }
+
+        XCTAssertThrowsError(try IOSModelDownloadLedger(requests: [
+            request(revision: "main", verifiedSHA: String(repeating: "a", count: 64))
+        ]).validated())
+        XCTAssertThrowsError(try IOSModelDownloadLedger(requests: [
+            request(revision: String(repeating: "a", count: 40), verifiedSHA: nil)
         ]).validated())
     }
 

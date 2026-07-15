@@ -5,6 +5,11 @@ been measured/optimized/shipped, and the prioritized future work. The iOS engine
 optimization problem from the macOS engine (different process model, a hard per-app Jetsam ceiling,
 streaming-first), so it gets its own doc.
 
+All Vocello-owned production-affecting environment overrides named below are registered in
+`config/runtime-debug-knobs.json` and are inert unless `QWENVOICE_DEBUG=1`. Bounded observability and
+the separately compiled physical-device diagnostics target are classified independently by that
+registry.
+
 Companion docs: [`../../benchmarks/OPTIMIZATION.md`](../../benchmarks/OPTIMIZATION.md) (backend/MLX
 decode-loop + output-quality work, shared by both platforms — the deep §A–§F findings live there),
 [`ios-increased-memory-entitlement-request.md`](ios-increased-memory-entitlement-request.md) (the
@@ -16,20 +21,22 @@ this doc.** All claims below are cited to a file or commit; re-verify before rel
 
 ---
 
-## TL;DR — current state (iPhone 17 Pro, on `main`)
+## TL;DR — latest clean canonical evidence (iPhone 17 Pro)
 
 - **In-process, Speed (4-bit) only.** The engine runs inside the app process (`MLXTTSEngine` via
   `NativeRuntimeFactory`); the ExtensionKit extension was removed (it could never load the model —
   see §1). iPhone runs the 4-bit Speed variant only; 8-bit Quality is macOS-only by contract.
-- **Faster than realtime, flat memory.** Custom/Design/Clone all run at **RTF ≈ 1.6–1.9** (>1 =
-  faster than realtime) with **physFootprint ≈ 2.4–3.3 GB** and **0 memory trims** (§6).
-- **Streaming-first is the headline RAM win.** The streaming path peaks ~3 GB **flat with length**
+- **Faster than realtime with bounded memory.** The clean 29-take schema-v2 record
+  [`ios-xcui-benchmark-20260714-113139-3b4b6d6c`](../../benchmarks/runs/ui-generation/ios-xcui-benchmark-20260714-113139-3b4b6d6c.json)
+  measured per-cell median RTF **1.47–1.95** and peak physical footprint **2.54–3.51 GB**. Every
+  take recorded the allowed `memory.pressure.soft_trim` warning, with no memory warning or exit (§6).
+- **Streaming-first is the headline RAM win.** The canonical path stays in the ~2.5–3.5 GB band
   vs ~7–8.7 GB for the legacy non-streaming bench path (`--no-stream`) — iOS never incurs the accumulation (§3).
 - **Entitlement enabled, self-serve.** `increased-memory-limit` is on the app App ID; measured
   entitled per-app limit ≈ **~6 GB** on the 17 Pro, ~5–5.5 GB on 8 GB devices. No hard
   `Memory.memoryLimit` on any tier (§2).
-- **Remaining work (§9):** the design-mode `fail:dropout` / `warn:clicks` audioQC lead (fixed-seed
-  WAV/ASR diagnosis), an 8 GB-device proof (only the 17 Pro is measured), App Store credential/metadata setup, and the
+- **Remaining work (§9):** a fresh clean canonical run after the current runtime-impacting changes,
+  an 8 GB-device proof (only the 17 Pro is measured), App Store credential/metadata setup, and the
   gated mlx-swift 0.31 bump. (The 0.6B variant evaluation was **ruled out 2026-07-02** — see §9 P2.)
 
 ---
@@ -67,7 +74,8 @@ community-estimated to ~75% — Apple publishes no exact number). The authoritat
 per-app limit is computed as `impliedProcessLimitBytes = physFootprint + availableHeadroom`.
 
 **Measured** (iPhone 17 Pro, 12 GB): entitled per-app limit ≈ **~6 GB**. 8 GB devices
-(15/16/17 non-Pro and Pro through 16 Pro Max) ≈ **~5–5.5 GB**. The clone peak (~3.3 GB physFoot, §6)
+(15/16/17 non-Pro and Pro through 16 Pro Max) ≈ **~5–5.5 GB**. The latest clean canonical clone
+peak was 3.51 GB physical footprint (§6)
 fits every entitled device. The entitlement is **self-serve** (enable on the App ID, regenerate the
 profile — no Apple grant) and is enabled on `com.patricedery.vocello`. Full detail + device-free
 verification: [`ios-increased-memory-entitlement-request.md`](ios-increased-memory-entitlement-request.md).
@@ -150,18 +158,20 @@ well. On the same 69–76 s custom/Speed input:
 | non-streaming (legacy CLI default, now `--no-stream`) | ~8.0 GB | ~7.6 GB |
 | **streaming (iOS / current CLI default)** | **~3.0 GB** | **~3.0 GB** |
 
-And the streaming peak is **flat with length** — short 2901 MB · medium 2860 MB · long-76 s 2992 MB.
-So the non-streaming numbers that drove the *original* "iPhone is marginal/infeasible" verdict
-**overstated the iOS-relevant peak by ~2.5×**. In the real iOS path, Custom/Design Speed peaks ~3 GB
-regardless of length, and clone ~3.3 GB (§6) — comfortably inside every entitled device.
+That dated long-input experiment was nearly flat with length — short 2901 MB · medium 2860 MB ·
+long-76 s 2992 MB — and showed why the original non-streaming "iPhone is marginal/infeasible"
+verdict overstated the iOS-relevant peak. The newer canonical UI matrix (§6) measured Custom at
+2.54–2.71 GB, Design at 2.89–3.16 GB, and Clone at 2.94–3.51 GB. Use that tracked record for current
+cross-length evidence instead of generalizing the older ~3 GB experiment.
 
 How the streaming path stays flat (all `iPhonePro`-tuned, §2.2):
 
-- **Bounded event buffer.** `MLXTTSEngine.events` uses `.bufferingNewest(64)` on iOS (vs `.unbounded`
-  on macOS, which must never drop playback chunks). (`MLXTTSEngine.swift`.)
+- **Bounded, measured event buffers.** `MLXTTSEngine.events` uses `.bufferingNewest(96)` on iOS and
+  `.bufferingNewest(256)` on macOS. `GenerationEventDeliveryProbe` accounts for accepted/dropped
+  yields; consumers drain continuously. (`MLXTTSEngine.swift`.)
 - **Inline PCM preview emitted by default.** On every platform, including physical iOS, the streaming
   chunk's `previewAudio` PCM is emitted (`NativeStreamingPreviewDataPolicy` → `.emit`). Opt out with
-  `QWENVOICE_STREAMING_PREVIEW_DATA=off` for memory-isolated benchmarks or debugging.
+  debug-gated `QWENVOICE_STREAMING_PREVIEW_DATA=off` for memory-isolated benchmarks or debugging.
   (`SemanticTypes.swift` / `NativeStreamingSynthesisSession.swift`.)
 - **Per-chunk + per-50-token MLX cache clears** (`Qwen3StreamingMemoryTuning`,
   `clearCacheOnStreamChunkEmit=true`, `tokenMemoryClearCadenceOverride=50`).
@@ -188,7 +198,7 @@ inert at the current token cap (§9, OPTIMIZATION.md §F.2).
 - **Proactive warm is band-gated only.** `TTSEngineStore.allowsProactiveWarmOperations` warms on the
   physical-device Release build when the memory band is healthy (the old blanket "disabled on Release"
   caution was removed once the entitlement + band guard were in place). Escape hatch:
-  `QVOICE_IOS_DISABLE_PROACTIVE_PREFETCH=1` (A/B / battery testing).
+  debug-gated `QVOICE_IOS_DISABLE_PROACTIVE_PREFETCH=1` (A/B / battery testing).
 - **Clone is warm-by-design.** Clone primes its reference conditioning before generating (the
   device-diagnostics runner calls `ensureCloneReferencePrimed`), so a "cold" clone cell in a bench is a bench artifact,
   not the production path.
@@ -197,7 +207,7 @@ inert at the current token cap (§9, OPTIMIZATION.md §F.2).
 
 ## 5. Backend compute — what's already optimal, what's bounded
 
-The vendored `mlx-audio-swift` Qwen3-TTS port already implements the large majority of the standard
+The owned Vocello Qwen3 Core runtime already implements the large majority of the standard
 iPhone-Qwen3-TTS optimization playbook (OPTIMIZATION.md "Grounding"): `small_to_mtp_projection`
 2048→1024 bridge, 2048-dim speaker embedding, interleaved MRoPE `[24,20,20]`, Q/K RMSNorm,
 `MLXFast.scaledDotProductAttention`, a single per-frame `eval()` (no per-step `.item()`), `asyncEval`
@@ -229,29 +239,38 @@ focuses on 1.7B variants only (mlx-swift bump when gated review passes, kernel-l
 
 ## 6. Measured on-device performance
 
-iPhone 17 Pro · Speed (4-bit) · in-process · streaming · `iphone_pro` tier · 0 trims everywhere.
-Captured headlessly via `scripts/ios_device.sh bench` (`IOSDeviceDiagnosticsRunner` →
-`summarize_generation_telemetry.py`). Numbers are warm medians over the accumulated device pool;
-fresh single-run RTFs from the latest validation were custom 1.68, clone 1.65.
+Latest clean canonical record: iPhone 17 Pro · Speed (4-bit) · in-process · streaming · 29 XCUITest
+takes · source `6ffdbfdd…` ·
+[`ios-xcui-benchmark-20260714-113139-3b4b6d6c`](../../benchmarks/runs/ui-generation/ios-xcui-benchmark-20260714-113139-3b4b6d6c.json).
+Warm rows below are per-cell medians across three takes; cold rows contain one take. Peak footprint is
+the maximum within the cell. This record remains valid for its pinned source, but it does not prove
+later runtime-impacting changes.
 
-| mode | state | RTF | tok/s | physFoot MB | peakGPU MB | trims | audioQC |
-|---|---|---|---|---|---|---|---|
-| custom | cold/short | 1.59 | 19.9 | 2364 | 2088 | 0 | pass |
-| custom | warm/short | **1.82** | 22.7 | 2557–2626 | 2508 | 0 | warn:dropout |
-| design | cold/short | 1.90 | 23.8 | 2444 | 2287 | 0 | fail:dropout |
-| design | warm/short | **1.90** | 23.8 | 2414 | 2287 | 0 | warn:clicks |
-| clone | warm/short | **1.72** | 21.5 | 3241–3335 | 3086 | 0 | pass |
-| clone | warm/medium | 1.61 | 20.2 | 2727 | 2556 | 0 | pass |
+| mode | state/length | median RTF | peak physFoot MB | max soft trims | audioQC |
+|---|---|---:|---:|---:|---|
+| custom | cold/medium | 1.713 | 2536 | 1 | pass |
+| custom | warm/short | 1.756 | 2585 | 1 | pass |
+| custom | warm/medium | 1.832 | 2705 | 1 | pass |
+| custom | warm/long | 1.833 | 2700 | 1 | pass |
+| design | cold/medium | 1.948 | 3157 | 1 | pass |
+| design | warm/short | 1.887 | 2891 | 1 | pass |
+| design | warm/medium | 1.905 | 3109 | 1 | pass |
+| design | warm/long | 1.940 | 3114 | 1 | pass |
+| clone | warm/short | 1.474 | 2939 | 1 | pass |
+| clone | warm/medium | 1.525 | 3234 | 1 | pass |
+| clone | warm/long | 1.526 | 3507 | 1 | pass |
 
 **Reading it:**
-- **RTF > 1 across the board** — generation is faster than realtime on device for every mode.
-- **physFoot 2.4–3.3 GB, flat** — well under the ~6 GB entitled per-app limit; **0 trims** means the
-  pressure band stayed healthy (the footprint band's 4.5 GB guarded threshold is never approached).
-  Clone is the heaviest (encoders resident) at ~3.3 GB and still comfortable.
-- **Context, not a hardware delta:** the macOS reference baseline (`641a541`, floor-8GB Mac) reported
-  RTF 0.20–0.89 at physFoot 5.8–8.7 GB — but that is the **non-streaming bench path** on a different
-  tier (and Quality 8-bit). It is the wrong yardstick for iOS (§3); the right comparison is
-  iOS-streaming-to-iOS-streaming over time in `benchmarks/HISTORY.md`.
+- **RTF > 1 in every canonical cell** — all three modes generated faster than realtime at this
+  pinned source. Clone was slower than Custom and Design, so “1.6–1.9 everywhere” was not accurate.
+- **Peak physical footprint was 2.54–3.51 GB** — under the ~6 GB implied entitled limit. Clone was
+  the heaviest because its encoders remain resident.
+- **Every take performed one policy soft trim.** The run is therefore `passedWithWarnings`, not a
+  zero-trim pass. It recorded no iOS memory warning, critical pressure, memory-limit exit, hard trim,
+  or full unload.
+- **Compare like with like:** use compatible iOS streaming records in
+  [`benchmarks/HISTORY.md`](../../benchmarks/HISTORY.md). Historical macOS non-streaming or Quality
+  baselines are not iPhone performance comparisons.
 
 `stepEval` dominates the decode breakdown (the fused per-frame `eval()`); `code2wav ≈ 0` because the
 audio decoder is `asyncEval`'d and overlaps the token loop — these are Swift-side wall-clock timers
@@ -272,11 +291,9 @@ listening is optional annotation and cannot clear a deterministic failure or war
   **pause budget** and flags only an *excess* (≥2 → fail, 1 → warn) or a single egregious ≥1200 ms gap.
   A sampling-side "fix" was rejected — it would suppress real prosody without repeatable
   fixed-seed, chunk, WAV, and ASR evidence of a defect.
-- **Open on-device lead:** the device pool shows `design` = `fail:dropout` (cold) / `warn:clicks`
-  (warm) and `custom` warm = `warn:dropout`, while `clone` passes. This is a **real on-device
-  output-quality lead** (the `clicks` flag on design is the more interesting one — distinct from the
-  natural-pause dropout story), and it routes to fixed-seed WAV/ASR diagnosis. It is not a memory or
-  in-process-migration regression. See §9.
+- **Latest canonical result:** all 29 takes in the clean schema-v2 iPhone UI record passed audioQC.
+  Earlier accumulated rows with Design dropout/click warnings remain historical diagnostic leads;
+  they are not the current acceptance verdict and cannot override the run-scoped canonical record.
 
 ---
 
@@ -299,17 +316,16 @@ The blow-by-blow is in git history; per-run perf is in `benchmarks/HISTORY.md`.
 
 ## 9. Roadmap (prioritized)
 
-**P1 — design-mode output-quality lead (§7).** Investigate the `design` `fail:dropout` / `warn:clicks`
-on device with a predeclared seed cohort, exact persisted-WAV analysis, chunk evidence, and
-locale-locked ASR consensus. Determine whether `clicks` is a repeatable chunk-boundary/decoder defect
-or a QC classification issue, and whether it is device-specific. Maps to
-`NativeStreamingSynthesisSession` (audioQC) + the decoder path; no engine change without repeatable
-machine evidence.
+**P1 — refresh clean canonical evidence after runtime changes.** The source-pinned schema-v2 record
+in §6 remains valid, but later runtime, facade, and cancellation changes require a new clean 29-take
+run before claiming current-source performance. Preserve the same exact matrix, audioQC, memory,
+crash, and telemetry gates so the result remains comparable.
 
 **P1 — 8 GB-device proof.** All on-device numbers are from the 12 GB iPhone 17 Pro. The 8 GB tier
-(entitled ≈ 5–5.5 GB) is where clone (~3.3 GB) + headroom is tightest. Run `ios_device.sh bench`
-custom + clone on a real 8 GB device and confirm RTF / 0-trims / clone-gate-on. Until then, 8 GB
-viability is inferred (streaming ~3 GB flat), not proven.
+(entitled ≈ 5–5.5 GB) is where Clone (up to 3.51 GB in the current canonical record) + headroom is
+tightest. Run `ios_device.sh bench` Custom + Clone on a real 8 GB device and confirm RTF, bounded
+soft-trim behavior, no memory warning/exit or hard trim, and clone-gate-on. Until then, 8 GB
+viability is inferred from the bounded streaming evidence, not proven.
 
 *Memory-profile diagnostic (2026-06-09, OPTIMIZATION.md §H P5):* the **iPhone 15 Pro profile** runs
 the full on-device matrix on the 17 Pro under the 8 GB tier's entitled budget —
@@ -321,8 +337,8 @@ custom/long RTF 1.89, physFoot 2,723 MB (margin 2,277 MB); clone RTF 1.62, physF
 (margin 1,668 MB); 0 trims, QC pass, clone gate ON (proven by execution) — profiled PASS on the
 memory dimension.** **The profile changes the memory budget only.** It cannot emulate compute:
 A17 Pro sustained GPU ≈ **0.60×** A19 Pro (band 0.55–0.65; LPDDR5 ~60 vs
-~68 GB/s; A17 throttles harder) ⇒ from the 17 Pro's measured RTF 1.6–1.9, the **analytic 15 Pro
-projection is RTF ≈ 0.9–1.2** — brushing realtime, which is exactly why the real-device gate above
+~68 GB/s; A17 throttles harder). The resulting **historical analytic 15 Pro projection was
+RTF ≈ 0.9–1.2** — brushing realtime, which is exactly why the real-device gate above
 stays open (streaming playback tolerance to sub-realtime decode is the question only hardware
 answers). A memory-profile row is labeled diagnostic evidence, never different-device proof.
 
@@ -343,18 +359,17 @@ without a new maintainer decision.
 2.30.6**. 0.31 changes the quantization API (`Quantizable.toQuantized` gains a `QuantizationMode`;
 quantize moves to a top-level fn), which lands on the 4-bit/8-bit model-load path, so it's not a free
 bump. Procedure (OPTIMIZATION.md §E, `.agents/backend-mlx.md` "SPM dependencies"): throwaway branch → bump all pin
-sites in lockstep (`project.yml` *and* vendored `third_party_patches/mlx-audio-swift/Package.swift`) →
+sites in lockstep (`project.yml` *and* owned `Packages/VocelloQwen3Core/Package.swift`) →
 `regenerate_project.sh` → both `build_foundation_targets.sh` → fixed-seed `vocello bench` vs the
 committed baseline + applicable automated language/prosody gates → keep only if RTF/quality/QC are
 unchanged.
 
-**P3 — thermal-state monitoring + automatic fallback.** Not implemented. Map to the `iPhonePro` case in
-`NativeMemoryPolicyResolver` + a `ProcessInfo.thermalState` observer; only worth it if sustained
-on-device generation shows thermal throttling (not yet observed in the short benches). Pairs naturally
-with a reduced-length/cooldown policy as the fallback (the 0.6B fallback target was ruled out
-2026-07-02 — Voice Design needs 1.7B). Update 2026-07-02: the observer + proactive-warm gate
-shipped (`TTSEngineStore.startThermalObservation`, serious/critical blocks prewarm/priming;
-`QVOICE_IOS_THERMAL_GATE=off` escape hatch).
+**P3 — thermal-state monitoring + proactive-warm gate: implemented.**
+`TTSEngineStore.startThermalObservation` observes `ProcessInfo.thermalState`; serious/critical state
+blocks prewarm and clone priming without silently changing models or cancelling user generation.
+`QVOICE_IOS_THERMAL_GATE=off` is a debug-gated diagnostic override. A reduced-length/cooldown product
+policy remains future work and requires separate on-device evidence; the 0.6B fallback remains ruled
+out because Voice Design needs 1.7B.
 
 **Research question — Quality (8-bit) on a 12 GB iPhone.** Currently iPhone is Speed-4bit-only by
 contract (`platforms: ["iOS","macOS"]` for Speed, `["macOS"]` for Quality). The 17 Pro's ~6 GB
@@ -371,8 +386,8 @@ memctx cosmetic cleanup (`72c95fc`).
 
 ## 10. Invariants / do-NOT (iOS-specific)
 
-- **`MLXTTSEngine.events` is `.bufferingNewest(64)` on iOS, `.unbounded` on macOS** — don't unify;
-  iOS needs the bound for memory, macOS must never drop playback chunks.
+- **`MLXTTSEngine.events` is `.bufferingNewest(96)` on iOS and `.bufferingNewest(256)` on macOS.**
+  Keep `GenerationEventDeliveryProbe` accounting and continuous consumers with both policies.
 - **No hard `Memory.memoryLimit` on any tier** (reverted in `b77c08e`) — it over-promised headroom
   and caused spurious downgrades. Gate on `os_proc_available_memory()` / the band instead.
 - **`Qwen3TTSMemoryCaches.clearAll()` runs on iPhone hard-trim/unload/failure only** — macOS preserves
@@ -385,7 +400,8 @@ memctx cosmetic cleanup (`72c95fc`).
   without a maintainer decision.
 - **The footprint-based aggregate band is live, not dead** — it's a distinct criterion from the
   headroom band even on the single in-process process (§2.3). Don't remove it as "redundant."
-- **Inline PCM preview is emitted by default on every platform** — `QWENVOICE_STREAMING_PREVIEW_DATA=off`
-  is the opt-out for memory-isolated benchmarks or debugging.
+- **Inline PCM preview is emitted by default on every platform** — the debug-gated
+  `QWENVOICE_STREAMING_PREVIEW_DATA=off` opt-out exists only for memory-isolated benchmarks or
+  debugging.
 - Carry the backend invariants from OPTIMIZATION.md (don't revert the decoder-drift fix `4fab110`,
   don't pipeline the 15-pass Code Predictor loop, don't quantize the TTS KV).

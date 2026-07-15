@@ -140,6 +140,26 @@ actor XPCNativeEngineCoordinator {
         let transport: any XPCNativeEngineTransporting
     }
 
+    private enum BestEffortDeduplicationIdentity: Hashable, Sendable {
+        case ensureModelLoaded(modelID: String)
+        case runtimePrewarm(GenerationSemantics.PrewarmIdentity)
+        case interactivePrefetch(
+            identity: GenerationSemantics.PrewarmIdentity,
+            customPrewarmDepth: String?
+        )
+
+        var diagnosticKey: String {
+            switch self {
+            case .ensureModelLoaded(let modelID):
+                "ensure-model-v1-\(modelID)"
+            case .runtimePrewarm(let identity):
+                "runtime-prewarm-\(identity.digest)"
+            case .interactivePrefetch(let identity, let customPrewarmDepth):
+                "interactive-prefetch-\(identity.digest)-\(customPrewarmDepth ?? "default")"
+            }
+        }
+    }
+
     private static let logger = Logger(
         subsystem: "com.qwenvoice.app",
         category: "XPCNativeEngineClient"
@@ -159,7 +179,7 @@ actor XPCNativeEngineCoordinator {
     private var initializedAppSupportDirectory: URL?
     private var batchProgressHandlers: [UUID: BatchProgressHandlerBox] = [:]
     private var pendingRequests: [UUID: PendingRequestBox] = [:]
-    private var inFlightBestEffortKeys: Set<String> = []
+    private var inFlightBestEffortKeys: Set<BestEffortDeduplicationIdentity> = []
     private var pendingFireAndForgetTasks: [UUID: Task<Void, Never>] = [:]
     private let reconnectDelays: [Duration]
     private var reconnectAttempt = 0
@@ -254,7 +274,7 @@ actor XPCNativeEngineCoordinator {
         if let deduplicationKey {
             guard inFlightBestEffortKeys.insert(deduplicationKey).inserted else {
                 Self.logger.debug(
-                    "Skipping duplicate best-effort command '\(command.transportName, privacy: .public)' with key \(deduplicationKey, privacy: .public)."
+                    "Skipping duplicate best-effort command '\(command.transportName, privacy: .public)' with key \(deduplicationKey.diagnosticKey, privacy: .public)."
                 )
                 return
             }
@@ -275,7 +295,7 @@ actor XPCNativeEngineCoordinator {
     private func performBestEffort(
         _ command: EngineCommand,
         taskID: UUID,
-        deduplicationKey: String?
+        deduplicationKey: BestEffortDeduplicationIdentity?
     ) async {
         defer {
             if let deduplicationKey {
@@ -711,10 +731,12 @@ actor XPCNativeEngineCoordinator {
         }
     }
 
-    private func bestEffortDeduplicationKey(for command: EngineCommand) -> String? {
+    private func bestEffortDeduplicationKey(
+        for command: EngineCommand
+    ) -> BestEffortDeduplicationIdentity? {
         switch command {
         case .ensureModelLoadedIfNeeded(let id):
-            "ensureModelLoadedIfNeeded|\(id)"
+            .ensureModelLoaded(modelID: id)
         case .prewarmModelIfNeeded(let request):
             // Use the runtime-aligned key. The runtime intentionally treats
             // `.custom` prewarm as model-level (see
@@ -723,9 +745,12 @@ actor XPCNativeEngineCoordinator {
             // request-form `prewarmIdentityKey(for:)` would dedupe at
             // speaker+instruction level, leaking one XPC round-trip per
             // draft edit that the runtime will just no-op on.
-            "prewarmModelIfNeeded|\(Self.runtimeAlignedPrewarmKey(for: request))"
+            .runtimePrewarm(Self.runtimeAlignedPrewarmIdentity(for: request))
         case .prefetchInteractiveReadinessIfNeeded(let request, let customPrewarmDepth):
-            "prefetchInteractiveReadinessIfNeeded|\(GenerationSemantics.prewarmIdentityKey(for: request))|depth=\(customPrewarmDepth ?? "default")"
+            .interactivePrefetch(
+                identity: GenerationSemantics.prewarmIdentity(for: request),
+                customPrewarmDepth: customPrewarmDepth
+            )
         default:
             nil
         }
@@ -737,20 +762,22 @@ actor XPCNativeEngineCoordinator {
     /// would dispatch one prewarm XPC call per speaker/instruction change
     /// for `.custom` requests; the runtime would treat the model as
     /// already-prewarmed and no-op on each one.
-    private static func runtimeAlignedPrewarmKey(for request: GenerationRequest) -> String {
+    private static func runtimeAlignedPrewarmIdentity(
+        for request: GenerationRequest
+    ) -> GenerationSemantics.PrewarmIdentity {
         switch request.payload {
         case .custom:
-            return GenerationSemantics.prewarmIdentityKey(
+            return GenerationSemantics.prewarmIdentity(
                 modelID: request.modelID,
                 mode: request.mode
             )
         case .design:
-            return GenerationSemantics.prewarmIdentityKey(
+            return GenerationSemantics.prewarmIdentity(
                 modelID: request.modelID,
                 mode: request.mode
             )
         case .clone(let reference):
-            return GenerationSemantics.prewarmIdentityKey(
+            return GenerationSemantics.prewarmIdentity(
                 modelID: request.modelID,
                 mode: request.mode,
                 refAudio: reference.audioPath,

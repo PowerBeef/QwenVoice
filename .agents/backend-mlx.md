@@ -1,6 +1,6 @@
 # Backend / MLX Engineer
 
-> Agent role for `QwenVoiceBackendCore`, `QwenVoiceCore`, the vendored `mlx-audio-swift`
+> Agent role for `QwenVoiceBackendCore`, `QwenVoiceCore`, the owned Qwen3 core package
 > stack, and everything related to model loading, prompt construction, synthesis,
 > memory policy, and audio QC.
 
@@ -9,10 +9,17 @@
 **Owns:**
 - `Sources/QwenVoiceBackendCore/`
 - `Sources/QwenVoiceCore/` (engine core, generation semantics, model registry, downloader, telemetry)
-- `third_party_patches/mlx-audio-swift/`
-- Typed telemetry semantics and the owned-runtime manifest, upstream baseline, semantic patch
-  ledger, performance contract, and clone-artifact specification
+- `Packages/VocelloQwen3Core/`
+- Typed telemetry semantics and the owned-runtime lineage, compatibility, ownership, capability,
+  performance, and clone-artifact contracts
+- The `VocelloQwen3Core` product facade and its typed product/runtime boundary. Product sources
+  must not import the compatibility-preserved `MLXAudio*` implementation modules directly.
 - `Sources/Resources/qwenvoice_contract.json`
+- `Sources/Resources/qwenvoice_production_model_catalog.json` and
+  `config/model-artifact-receipts.json` (complete fail-closed exact-artifact identities; never infer
+  a size or digest)
+- `config/runtime-debug-knobs.json` and `config/concurrency-safety.json` for backend-owned runtime
+  overrides and explicit concurrency-safety exceptions
 
 **Does NOT own:**
 - macOS SwiftUI / XPC client wiring (`.agents/macos-engineer.md`)
@@ -41,11 +48,11 @@ Before changing anything in this layer, read:
   Axiom Swift, concurrency, and performance skills for language, isolation, and profiling
   decisions. Read each selected skill before use.
 - Skills guide implementation and diagnosis; shell builds, tests, benchmarks, and their artifacts
-  remain authoritative. Where no skill applies, inspect vendored source and authoritative Apple,
+  remain authoritative. Where no skill applies, inspect the owned runtime source and authoritative Apple,
   package, or Hugging Face documentation.
 - Generated output must use `config/build-output-policy.json`. Backend work may consume the
-  canonical macOS/iOS caches and the dedicated vendored SwiftPM scratch path, but must not create
-  another DerivedData root or a `.build` directory below `third_party_patches/`. Route policy
+  canonical macOS/iOS caches and the dedicated owned-runtime SwiftPM scratch path, but must not create
+  another DerivedData root or a `.build` directory below `Packages/VocelloQwen3Core/`. Route policy
   changes through `.agents/release-qa-engineer.md`.
 - Browser inspection may support website work, but never replaces benchmarks, compile checks, or
   physical-device iOS gates.
@@ -88,14 +95,18 @@ warning.
   Never pair a throwing `try? await acquirePrewarmSlot()` with an unconditional
   `defer { releasePrewarmSlot() }` — on a throw the slot isn't held and the defer releases
   someone else's slot.
-- **Streaming buffer policy.** macOS uses `.unbounded`; iOS uses `.bufferingNewest(64)`.
-  Do not change this without a memory-tight review.
-- **Cancellation ownership.** iOS cancel is cooperative only. `MLXTTSEngine.generate`'s catch
-  must not rethrow `CancellationError` early (it would skip the `loadState` reset and strand
-  the engine in `.running`).
+- **Bounded event delivery.** macOS uses `.bufferingNewest(256)` and iOS uses
+  `.bufferingNewest(96)`. `GenerationEventDeliveryProbe` records accepted and dropped
+  chunk/progress/terminal yields. Do not change capacities or yield accounting without a
+  memory-and-playback review.
+- **Cancellation ownership.** `MLXTTSEngine` conforms to `ActiveGenerationCancellable` on every
+  platform. `ActiveGenerationCoordinator` owns one active generation, records the typed reason
+  (`user`, `memoryPressure`, `superseded`, or `shutdown`), and awaits task termination before trim,
+  unload, or ownership release. Cancellation emits `.cancelled`, not `.failed`, and no late result
+  may reach persistence. The generate catch must still restore `loadState` on every terminal path.
 - **Per-tier memory.** `NativeMemoryPolicyResolver` sets policy per device class. There is
   **no hard `Memory.memoryLimit` in production** and **no Quality→Speed OOM fallback**.
-- **Decoder drift.** The vendored `Qwen3TTSSpeechTokenizer` uses input-side overlap-and-discard.
+- **Decoder drift.** The owned `Qwen3TTSSpeechTokenizer` uses input-side overlap-and-discard.
   Do not "fix" drift by changing the output side.
 - **SPM pins move in lockstep.** `mlx-swift` and `mlx-swift-lm` are bumped together, never
   alone, and only after a benchmark-gated review on a throwaway branch.
@@ -103,6 +114,15 @@ warning.
 - **Telemetry semantics are typed.** Schema-v8 frontend latency stops at playback scheduling, not
   acoustic audibility; process memory belongs only to the process that measured it, and a macOS UI
   benchmark is authoritative only when app, XPC service, and engine layers are complete.
+- **Diagnostic overrides are fail closed.** Every production-affecting environment key must be in
+  `config/runtime-debug-knobs.json` and is inert without the `QWENVOICE_DEBUG` master gate. Every
+  owned unchecked/unsafe concurrency declaration must remain justified in
+  `config/concurrency-safety.json`; validate both with `scripts/runtime_security_contract.py`.
+- **Catalog activation is fail closed.** The generated production catalog is complete for all six
+  Speed/Quality artifacts, and macOS/CLI now use its exact `downloadFiles` descriptors. Never
+  reintroduce live repository enumeration, infer a digest, or accept a staged/missing identity.
+  `model_catalog_contract.py validate --require-complete` is deterministic contract proof; a fresh
+  isolated Mac/iPhone delivery run is separate explicit quality evidence after delivery changes.
 
 ## Common mistakes
 

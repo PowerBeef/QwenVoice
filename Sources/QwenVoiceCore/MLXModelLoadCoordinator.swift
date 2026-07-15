@@ -1,7 +1,6 @@
 import Foundation
 @preconcurrency import MLX
-@preconcurrency import MLXAudioCore
-@preconcurrency import MLXAudioTTS
+@preconcurrency import VocelloQwen3Core
 import CoreFoundation
 import CryptoKit
 
@@ -663,13 +662,14 @@ actor MLXModelLoadCoordinator: MLXModelCoordinating {
         preparedMetadata: PreparedModelMetadata,
         capabilityProfile: NativeLoadCapabilityProfile
     ) async throws -> UnsafeSpeechGenerationModel {
-        try UnsafeSpeechGenerationModel.qwen3Optimized(
-            base: try await TTS.loadModel(
-                fromPreparedDirectory: preparedMetadata.preparedDirectory,
-                modelRepo: descriptor.model.huggingFaceRepo,
-                modelType: preparedMetadata.modelType,
-                trustPreparedCheckpoint: preparedMetadata.trustedPreparedCheckpoint,
-                qwenPreparedLoadBehavior: MLXTTSEngine.qwenPreparedLoadBehavior(
+        UnsafeSpeechGenerationModel.qwen3Optimized(
+            model: try await VocelloQwen3Runtime.loadPreparedModel(
+                descriptor.vocelloQwen3PreparedBundle(
+                    directory: preparedMetadata.preparedDirectory,
+                    modelType: preparedMetadata.modelType,
+                    trustedPreparedCheckpoint: preparedMetadata.trustedPreparedCheckpoint
+                ),
+                loadBehavior: MLXTTSEngine.qwenPreparedLoadBehavior(
                     for: NativeQwenPreparedLoadProfile(capabilityProfile: capabilityProfile),
                     trustPreparedCheckpoint: preparedMetadata.trustedPreparedCheckpoint,
                     preparedDirectoryAlreadyValidated: true
@@ -827,9 +827,9 @@ actor MLXModelLoadCoordinator: MLXModelCoordinating {
         fileManager: FileManager
     ) throws {
         do {
-            try TTS.preparePreparedDirectory(
-                targetDirectory,
-                modelRepo: modelRepo,
+            try VocelloQwen3Runtime.prepareModelDirectory(
+                at: targetDirectory,
+                repositoryID: modelRepo,
                 modelType: modelType
             )
         } catch {

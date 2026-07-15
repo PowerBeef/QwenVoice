@@ -1,13 +1,14 @@
 import Foundation
 import GRDB
+import QwenVoiceCore
 
 /// Manages SQLite database for generation history.
 ///
 /// Intentionally not `@MainActor`-isolated. `DatabaseQueue` is GRDB's
 /// thread-safe queue primitive; all read/write operations route through
-/// it. The class state (`dbQueue` + `initError`) is set once during init
-/// and read-only thereafter, so the `@unchecked Sendable` conformance
-/// is sound. Non-isolation lets `GenerationPersistence` schedule writes
+/// it. A lock-protected coordinator owns the queue and allows only an explicit
+/// UI Retry to replace a failed initial open/migration with a fully opened
+/// queue. Non-isolation lets `GenerationPersistence` schedule writes
 /// via `Task.detached` so they don't block the UI's main run loop —
 /// previously the synchronous save on `@MainActor` introduced a 5-30ms
 /// hitch right after every generation completed.
@@ -16,30 +17,41 @@ import GRDB
 /// resolves its database file under the iOS App Group container via `AppPaths`,
 /// which is itself platform-specific.
 final class DatabaseService: @unchecked Sendable {
-    /// Process-wide singleton. The service manages thread-safety via
-    /// `DatabaseQueue`; the initializer is the only place state is mutated.
+    /// Process-wide singleton. GRDB serializes queue access and the coordinator
+    /// serializes the explicit reopen transition.
     static let shared = DatabaseService()
 
-    private let dbQueue: DatabaseQueue?
-    let initError: String?
+    private let store: RecoverableStoreCoordinator<DatabaseQueue, HistoryPersistenceError>
 
     private init() {
         let dbPath = AppPaths.appSupportDir.appendingPathComponent("history.sqlite").path
-        do {
-            let queue = try DatabaseQueue(path: dbPath)
-            try Self.makeMigrator().migrate(queue)
-            self.dbQueue = queue
-            self.initError = nil
-        } catch {
-            let message = "Database initialization failed: \(error.localizedDescription)"
-            self.dbQueue = nil
-            self.initError = message
-            print("[DatabaseService] \(message)")
-        }
+        self.store = RecoverableStoreCoordinator(
+            openStore: { try Self.openQueue(at: dbPath) },
+            classify: { HistoryPersistenceError.classify($0, operation: .initialize) }
+        )
     }
 
     static func makeMigrator() -> DatabaseMigrator {
         GenerationMigrations.makeMigrator()
+    }
+
+    private static func openQueue(at path: String) throws -> DatabaseQueue {
+        let queue: DatabaseQueue
+        do {
+            queue = try DatabaseQueue(path: path)
+        } catch {
+            throw HistoryPersistenceError.classify(error, operation: .initialize)
+        }
+        do {
+            try makeMigrator().migrate(queue)
+            return queue
+        } catch {
+            throw HistoryPersistenceError.classify(error, operation: .migrate)
+        }
+    }
+
+    func reopenIfNeeded() throws {
+        _ = try store.reopenIfNeeded()
     }
 
     // MARK: - CRUD
@@ -49,11 +61,13 @@ final class DatabaseService: @unchecked Sendable {
     /// contexts during init). New off-main callers should prefer
     /// `saveGenerationAsync(_:)` which uses GRDB's async write.
     func saveGeneration(_ generation: inout Generation) throws {
-        guard let dbQueue else {
-            throw DatabaseServiceError.notInitialized(initError ?? "Unknown database error")
-        }
-        try dbQueue.write { db in
-            try generation.save(db)
+        let dbQueue = try requireQueue(for: .write)
+        do {
+            try dbQueue.write { db in
+                try generation.save(db)
+            }
+        } catch {
+            throw HistoryPersistenceError.classify(error, operation: .write)
         }
     }
 
@@ -64,48 +78,58 @@ final class DatabaseService: @unchecked Sendable {
     /// auto-assigned `id` without an `inout` parameter (unsendable in
     /// async contexts).
     func saveGenerationAsync(_ generation: Generation) async throws -> Generation {
-        guard let dbQueue else {
-            throw DatabaseServiceError.notInitialized(initError ?? "Unknown database error")
-        }
-        return try await dbQueue.write { db in
-            var copy = generation
-            try copy.save(db)
-            return copy
+        let dbQueue = try requireQueue(for: .write)
+        do {
+            return try await dbQueue.write { db in
+                var copy = generation
+                try copy.save(db)
+                return copy
+            }
+        } catch {
+            throw HistoryPersistenceError.classify(error, operation: .write)
         }
     }
 
     func fetchAllGenerations() throws -> [Generation] {
-        if dbQueue == nil {
-            print("[DatabaseService] Warning: database not initialized, returning empty results")
-        }
-        guard let dbQueue else { return [] }
-        return try dbQueue.read { db in
-            try Generation.order(Generation.Columns.createdAt.desc).fetchAll(db)
+        let dbQueue = try requireQueue(for: .read)
+        do {
+            return try dbQueue.read { db in
+                try Generation.order(Generation.Columns.createdAt.desc).fetchAll(db)
+            }
+        } catch {
+            throw HistoryPersistenceError.classify(error, operation: .read)
         }
     }
 
     func deleteGeneration(id: Int64) throws {
-        guard let dbQueue else { return }
-        try dbQueue.write { db in
-            _ = try Generation.deleteOne(db, id: id)
+        let dbQueue = try requireQueue(for: .delete)
+        do {
+            try dbQueue.write { db in
+                _ = try Generation.deleteOne(db, id: id)
+            }
+        } catch {
+            throw HistoryPersistenceError.classify(error, operation: .delete)
         }
     }
 
     func deleteAllGenerations() throws {
-        guard let dbQueue else { return }
-        try dbQueue.write { db in
-            _ = try Generation.deleteAll(db)
+        let dbQueue = try requireQueue(for: .delete)
+        do {
+            try dbQueue.write { db in
+                _ = try Generation.deleteAll(db)
+            }
+        } catch {
+            throw HistoryPersistenceError.classify(error, operation: .delete)
         }
     }
-}
 
-enum DatabaseServiceError: LocalizedError {
-    case notInitialized(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .notInitialized(let reason):
-            return "Database unavailable: \(reason)"
+    private func requireQueue(
+        for operation: HistoryPersistenceOperation
+    ) throws -> DatabaseQueue {
+        do {
+            return try store.requireStore()
+        } catch {
+            throw HistoryPersistenceError.classify(error, operation: operation)
         }
     }
 }

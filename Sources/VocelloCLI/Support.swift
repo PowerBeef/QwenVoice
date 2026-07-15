@@ -1,4 +1,5 @@
 import Foundation
+import QwenVoiceCore
 #if canImport(Darwin)
 import Darwin
 #endif
@@ -63,7 +64,8 @@ enum CLIPaths {
     /// Resolve the runtime data directory the engine roots at (models/, cache/,
     /// outputs/, diagnostics/). Mirrors the app's AppPaths selection without
     /// depending on the app target: explicit --data-dir wins, else
-    /// QWENVOICE_APP_SUPPORT_DIR, else ~/Library/Application Support/QwenVoice
+    /// QWENVOICE_APP_SUPPORT_DIR in an explicit QWENVOICE_DEBUG session, else
+    /// ~/Library/Application Support/QwenVoice
     /// (or QwenVoice-Debug when QWENVOICE_DEBUG is truthy — matching the app so
     /// the CLI shares the debug-isolated models/diagnostics during benchmarks).
     static func dataDirectory(override: String?) -> URL {
@@ -71,11 +73,18 @@ enum CLIPaths {
             return URL(fileURLWithPath: (override as NSString).expandingTildeInPath, isDirectory: true)
         }
         let env = ProcessInfo.processInfo.environment
-        if let explicit = env["QWENVOICE_APP_SUPPORT_DIR"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !explicit.isEmpty {
+        let debug = RuntimeDebugGate.isEnabled(environment: env)
+        if debug,
+           let explicit = RuntimeDebugGate.value(
+               for: "QWENVOICE_APP_SUPPORT_DIR",
+               environment: env
+           )?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !explicit.isEmpty,
+           (explicit as NSString).isAbsolutePath {
             return URL(fileURLWithPath: explicit, isDirectory: true)
+                .standardizedFileURL
+                .resolvingSymlinksInPath()
         }
-        let debug = (env["QWENVOICE_DEBUG"]?.lowercased()).map { ["1", "true", "on", "yes"].contains($0) } ?? false
         let folder = debug ? "QwenVoice-Debug" : "QwenVoice"
         let base = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask).first

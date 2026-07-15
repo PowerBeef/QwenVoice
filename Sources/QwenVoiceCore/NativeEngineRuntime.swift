@@ -2,8 +2,7 @@ import CryptoKit
 import Foundation
 import MLX
 import MLXRandom
-@preconcurrency import MLXAudioCore
-@preconcurrency import MLXAudioTTS
+@preconcurrency import VocelloQwen3Core
 import OSLog
 
 enum NativeRuntimeStage: String, Codable, Sendable {
@@ -222,14 +221,14 @@ actor NativeEngineRuntime {
     private var normalizedCloneReferenceDirectory: URL?
     private var voicesDirectory: URL?
     private var activeModelID: String?
-    private var primedCloneReferenceKeys: Set<String> = []
-    private var clonePrimeTimingOverridesMS: [String: [String: Int]] = [:]
+    private var primedCloneReferenceKeys: Set<GenerationSemantics.CloneReferenceIdentity> = []
+    private var clonePrimeTimingOverridesMS: [GenerationSemantics.CloneReferenceIdentity: [String: Int]] = [:]
     private var activeClonePrimeToken: UUID?
-    private var activeDesignConditioningWarmKey: String?
+    private var activeDesignConditioningWarmIdentity: GenerationSemantics.DesignConditioningIdentity?
     private var activeDesignConditioningWarmSource: DesignConditioningWarmSource?
-    private var activeDesignStreamStepWarmKey: String?
+    private var activeDesignStreamStepWarmIdentity: GenerationSemantics.DesignConditioningIdentity?
     private var activeDesignStreamStepWarmSource: DesignConditioningWarmSource?
-    private var activeCloneConditioningKey: String?
+    private var activeCloneConditioningIdentity: GenerationSemantics.CloneReferenceIdentity?
     private var nextRequestID = 1
 
     /// Monitor-style gate that serializes Voice Design / Custom prewarm
@@ -375,11 +374,11 @@ actor NativeEngineRuntime {
         case .hardTrim:
             await preparedCloneConditioningCache.clear()
             await loadCoordinator.clearPrewarmState()
-            activeDesignConditioningWarmKey = nil
+            activeDesignConditioningWarmIdentity = nil
             activeDesignConditioningWarmSource = nil
-            activeDesignStreamStepWarmKey = nil
+            activeDesignStreamStepWarmIdentity = nil
             activeDesignStreamStepWarmSource = nil
-            activeCloneConditioningKey = nil
+            activeCloneConditioningIdentity = nil
             primedCloneReferenceKeys.removeAll()
             clonePrimeTimingOverridesMS.removeAll()
             Memory.clearCache()
@@ -395,13 +394,18 @@ actor NativeEngineRuntime {
         customPrewarmDepth: String? = nil
     ) async throws -> InteractivePrefetchDiagnostics {
         try GenerationSemantics.validateQwenPromptContract(for: request)
+        let descriptorCapabilities = try await loadCoordinator.qwen3Capabilities(for: request.modelID)
+        try Self.validateCloneConditioningCapability(
+            for: request,
+            capabilities: descriptorCapabilities
+        )
         let memoryPolicy = NativeMemoryPolicyResolver.policy(
             mode: request.mode,
             isBatch: false
         )
         NativeMemoryPolicyResolver.apply(memoryPolicy)
         let prefetchStartedAt = ContinuousClock.now
-        let identityKey = prewarmIdentityKey(for: request)
+        let identity = runtimePrewarmIdentity(for: request)
         let loadResult = try await loadModel(
             id: request.modelID,
             capabilityProfile: NativeLoadCapabilityProfile(for: request),
@@ -421,8 +425,8 @@ actor NativeEngineRuntime {
                 booleanFlags["custom_dedicated_prewarm_skipped"] = true
             } else {
                 let genericWarmReady: Bool
-                if let identityKey, activeModelID == request.modelID {
-                    genericWarmReady = await loadCoordinator.isPrewarmed(identityKey: identityKey)
+                if let identity, activeModelID == request.modelID {
+                    genericWarmReady = await loadCoordinator.isPrewarmed(identityKey: identity.cacheKey)
                 } else {
                     genericWarmReady = false
                 }
@@ -434,7 +438,7 @@ actor NativeEngineRuntime {
                     )
                     booleanFlags.merge(loadResult.model.latestPreparationBooleanFlags) { _, rhs in rhs }
                 }
-                requestKey = identityKey
+                requestKey = identity?.cacheKey
                 timingsMS.merge(loadResult.model.latestPreparationTimingsMS) { _, rhs in rhs }
             }
         case .design:
@@ -537,6 +541,10 @@ actor NativeEngineRuntime {
             )
         }
         let descriptorCapabilities = try await loadCoordinator.qwen3Capabilities(for: request.modelID)
+        try Self.validateCloneConditioningCapability(
+            for: request,
+            capabilities: descriptorCapabilities
+        )
         await recordDiagnosticEvent(
             "runtime-prepare-before-load-model",
             request: request,
@@ -607,24 +615,28 @@ actor NativeEngineRuntime {
             )
             cloneConditioning = conditioning
             mlxMemorySnapshots["after_clone_conditioning"] = NativeMemoryPolicyResolver.snapshot()
-            wasPrimed = primedCloneReferenceKeys.contains(conditioning.internalIdentityKey)
+            wasPrimed = primedCloneReferenceKeys.contains(conditioning.internalIdentity)
             timingOverridesMS.merge(conditioning.timingsMS) { current, _ in current }
             booleanFlags["clone_prompt_artifact_hit"] = conditioning.timingsMS["clone_prompt_artifact_load"] != nil
             booleanFlags["clone_prompt_memory_hit"] = conditioning.clonePromptCacheHit == true
                 && conditioning.timingsMS["clone_prompt_artifact_load"] == nil
             booleanFlags["clone_prompt_built"] = conditioning.timingsMS["clone_prompt_build"] != nil
-            booleanFlags["clone_transcript_backed"] = conditioning.resolvedTranscript != nil
+            booleanFlags["clone_transcript_backed"] = conditioning.conditioningMode.usesTranscript
+            booleanFlags["clone_x_vector_only"] = conditioning.conditioningMode.isXVectorOnly
             booleanFlags["clone_reference_was_primed"] = wasPrimed
             stringFlags["clone_transcript_mode"] = conditioning.transcriptMode.rawValue
+            stringFlags["clone_conditioning_mode"] = conditioning.conditioningMode.identifier
+            stringFlags["qwen3_supports_x_vector_only_clone"] = loadResult.qwen3Capabilities
+                .supportsXVectorOnlyClone ? "true" : "false"
             stringFlags["clone_prompt_artifact_scope"] = conditioning.preparedVoiceID == nil
                 ? "transient_reference"
                 : "saved_voice"
             let cloneConditioningReused = conditioning.cloneConditioningReused
-                || activeCloneConditioningKey == conditioning.internalIdentityKey
+                || activeCloneConditioningIdentity == conditioning.internalIdentity
             booleanFlags["clone_conditioning_reused"] = cloneConditioningReused
-            activeCloneConditioningKey = conditioning.internalIdentityKey
+            activeCloneConditioningIdentity = conditioning.internalIdentity
             if wasPrimed,
-               let primeTimings = clonePrimeTimingOverridesMS[conditioning.internalIdentityKey] {
+               let primeTimings = clonePrimeTimingOverridesMS[conditioning.internalIdentity] {
                 await telemetrySampler?.captureBoundary("prewarm_skipped")
                 timingOverridesMS.merge(primeTimings) { current, _ in current }
             } else {
@@ -806,6 +818,11 @@ actor NativeEngineRuntime {
         modelID: String,
         reference: CloneReference
     ) async throws -> NativeClonePrimeResult {
+        let capabilities = try await loadCoordinator.qwen3Capabilities(for: modelID)
+        try Self.validateCloneConditioningCapability(
+            reference: reference,
+            capabilities: capabilities
+        )
         let memoryPolicy = NativeMemoryPolicyResolver.policy(
             mode: .clone,
             isBatch: false
@@ -854,11 +871,11 @@ actor NativeEngineRuntime {
         )
         try ensureActiveClonePrimeToken(token)
 
-        if primedCloneReferenceKeys.contains(resolvedConditioning.internalIdentityKey) {
+        if primedCloneReferenceKeys.contains(resolvedConditioning.internalIdentity) {
             return NativeClonePrimeResult(uiIdentityKey: resolvedConditioning.uiIdentityKey)
         }
 
-        activeCloneConditioningKey = resolvedConditioning.internalIdentityKey
+        activeCloneConditioningIdentity = resolvedConditioning.internalIdentity
 
         var timingOverrides = loadResult.timingsMS
         timingOverrides.merge(resolvedConditioning.timingsMS) { _, rhs in rhs }
@@ -873,8 +890,8 @@ actor NativeEngineRuntime {
             token: token
         )
         timingOverrides.merge(primeTimings) { _, rhs in rhs }
-        clonePrimeTimingOverridesMS[resolvedConditioning.internalIdentityKey] = timingOverrides
-        primedCloneReferenceKeys.insert(resolvedConditioning.internalIdentityKey)
+        clonePrimeTimingOverridesMS[resolvedConditioning.internalIdentity] = timingOverrides
+        primedCloneReferenceKeys.insert(resolvedConditioning.internalIdentity)
         return NativeClonePrimeResult(uiIdentityKey: resolvedConditioning.uiIdentityKey)
     }
 
@@ -892,6 +909,11 @@ actor NativeEngineRuntime {
         }
 
         do {
+            let capabilities = try await loadCoordinator.qwen3Capabilities(for: modelID)
+            try Self.validateCloneConditioningCapability(
+                reference: reference,
+                capabilities: capabilities
+            )
             let loadResult = try await loadModel(
                 id: modelID,
                 capabilityProfile: .cloneOnly,
@@ -1079,16 +1101,16 @@ actor NativeEngineRuntime {
             )
         }
 
-        let identityKey: String
+        let identity: GenerationSemantics.PrewarmIdentity
         switch request.payload {
         case .custom, .design:
-            guard let requestIdentityKey = prewarmIdentityKey(for: request) else {
+            guard let requestIdentity = runtimePrewarmIdentity(for: request) else {
                 return [
                     "prewarm_slot_wait_ms": prewarmSlotWaitMS,
                     "native_explicit_prewarm_ms": explicitPrewarmStartedAt.elapsedMilliseconds,
                 ]
             }
-            identityKey = requestIdentityKey
+            identity = requestIdentity
         case .clone:
             guard let cloneConditioning else {
                 throw NativeRuntimeError(
@@ -1096,8 +1118,9 @@ actor NativeEngineRuntime {
                     message: "Clone generation needs resolved native clone conditioning."
                 )
             }
-            identityKey = cloneConditioning.internalIdentityKey
+            identity = .clone(cloneConditioning.internalIdentity)
         }
+        let identityKey = identity.cacheKey
 
         guard !(await loadCoordinator.isPrewarmed(identityKey: identityKey)) else {
             // Already prewarmed — record the hit so bench traces can
@@ -1311,6 +1334,36 @@ actor NativeEngineRuntime {
         }
     }
 
+    private static func validateCloneConditioningCapability(
+        for request: GenerationRequest,
+        capabilities: Qwen3TTSModelCapabilities
+    ) throws {
+        guard case .clone(let reference) = request.payload else { return }
+        try validateCloneConditioningCapability(
+            reference: reference,
+            capabilities: capabilities
+        )
+    }
+
+    private static func validateCloneConditioningCapability(
+        reference: CloneReference,
+        capabilities: Qwen3TTSModelCapabilities
+    ) throws {
+        guard capabilities.supportsVoiceClone else {
+            throw Qwen3TTSRuntimeProfileError.unsupportedCapability(
+                "The selected model does not declare Voice Cloning support."
+            )
+        }
+        let conditioningMode = NativePreparedCloneConditioningCache
+            .anticipatedConditioningMode(for: reference)
+        if conditioningMode.isXVectorOnly,
+           !capabilities.supportsXVectorOnlyClone {
+            throw Qwen3TTSRuntimeProfileError.unsupportedCapability(
+                "The selected model does not declare audio-only x-vector clone conditioning support."
+            )
+        }
+    }
+
     private func recordDiagnosticEvent(
         _ action: String,
         extra: [String: String]
@@ -1385,7 +1438,7 @@ actor NativeEngineRuntime {
     ) async throws -> [String: Int] {
         let startedAt = ContinuousClock.now
         var firstChunkMS: Int?
-        let stream: AsyncThrowingStream<AudioGeneration, Error>
+        let stream: AsyncThrowingStream<VocelloQwen3GenerationSignal, Error>
         guard let voiceClonePrompt = conditioning.voiceClonePrompt else {
             throw NativeRuntimeError(
                 stage: .clonePreparation,
@@ -1402,8 +1455,7 @@ actor NativeEngineRuntime {
         for try await event in stream {
             try ensureActiveClonePrimeToken(token)
             switch event {
-            case .audio(let samples):
-                let chunkSamples = samples.asArray(Float.self)
+            case .audio(let chunkSamples):
                 guard !chunkSamples.isEmpty else { continue }
                 if firstChunkMS == nil {
                     firstChunkMS = startedAt.elapsedMilliseconds
@@ -1460,7 +1512,7 @@ actor NativeEngineRuntime {
         // `prepareGeneration`) and without the slot they race on
         // MLX's KV cache during `model.prewarmVoiceDesign(...)`. After
         // we release, the second caller acquires and re-inspects
-        // `activeDesignConditioningWarmKey` — which we'll have set
+        // `activeDesignConditioningWarmIdentity` — which we'll have set
         // if we did real prewarm work — so the second caller takes
         // the cache-hit `reused` path instead of re-running prewarm.
         let prewarmSlotWaitMS = try await acquirePrewarmSlot()
@@ -1501,7 +1553,7 @@ actor NativeEngineRuntime {
             capabilities: capabilities
         )
         let language = prompt.language
-        guard let conditioningWarmKey = GenerationSemantics.designConditioningWarmKey(for: request) else {
+        guard let conditioningWarmIdentity = GenerationSemantics.designConditioningIdentity(for: request) else {
             return DesignConditioningWarmState(
                 bucket: warmBucket,
                 requestKey: "",
@@ -1513,7 +1565,7 @@ actor NativeEngineRuntime {
                 prewarmSlotWaitMS: prewarmSlotWaitMS
             )
         }
-        let reused = activeDesignConditioningWarmKey == conditioningWarmKey
+        let reused = activeDesignConditioningWarmIdentity == conditioningWarmIdentity
         if reused {
             // Cache hit — the active design conditioning matches what
             // this request needs. Emit a signpost so bench traces can
@@ -1529,16 +1581,16 @@ actor NativeEngineRuntime {
             )
             await markDesignWarmSatisfied(
                 for: request,
-                conditioningWarmKey: conditioningWarmKey
+                conditioningWarmIdentity: conditioningWarmIdentity
             )
             return DesignConditioningWarmState(
                 bucket: warmBucket,
-                requestKey: conditioningWarmKey,
+                requestKey: conditioningWarmIdentity.cacheKey,
                 reused: true,
                 prefetchHit: activeDesignConditioningWarmSource == .prefetch,
                 prewarmed: false,
                 streamStepPrewarmed: false,
-                streamStepPrefetchHit: activeDesignStreamStepWarmKey == conditioningWarmKey
+                streamStepPrefetchHit: activeDesignStreamStepWarmIdentity == conditioningWarmIdentity
                     && activeDesignStreamStepWarmSource == .prefetch,
                 prewarmSlotWaitMS: prewarmSlotWaitMS
             )
@@ -1553,10 +1605,10 @@ actor NativeEngineRuntime {
         // the runtime into pressure. The actual MLX free still happens
         // when `clearCacheAfterGeneration` fires post-generation, but
         // *also* doing it here narrows the high-water window.
-        if activeDesignConditioningWarmKey != nil {
-            activeDesignConditioningWarmKey = nil
+        if activeDesignConditioningWarmIdentity != nil {
+            activeDesignConditioningWarmIdentity = nil
             activeDesignConditioningWarmSource = nil
-            activeDesignStreamStepWarmKey = nil
+            activeDesignStreamStepWarmIdentity = nil
             activeDesignStreamStepWarmSource = nil
             Memory.clearCache()
         }
@@ -1573,23 +1625,23 @@ actor NativeEngineRuntime {
                 language: language,
                 voiceDescription: warmInstruction
             )
-            activeDesignConditioningWarmKey = conditioningWarmKey
+            activeDesignConditioningWarmIdentity = conditioningWarmIdentity
             activeDesignConditioningWarmSource = source
             let streamStepPrewarmed = model.latestPreparationBooleanFlags["design_stream_step_prewarmed"] == true
             if streamStepPrewarmed {
-                activeDesignStreamStepWarmKey = conditioningWarmKey
+                activeDesignStreamStepWarmIdentity = conditioningWarmIdentity
                 activeDesignStreamStepWarmSource = source
             } else {
-                activeDesignStreamStepWarmKey = nil
+                activeDesignStreamStepWarmIdentity = nil
                 activeDesignStreamStepWarmSource = nil
             }
             await markDesignWarmSatisfied(
                 for: request,
-                conditioningWarmKey: conditioningWarmKey
+                conditioningWarmIdentity: conditioningWarmIdentity
             )
             return DesignConditioningWarmState(
                 bucket: warmBucket,
-                requestKey: conditioningWarmKey,
+                requestKey: conditioningWarmIdentity.cacheKey,
                 reused: false,
                 prefetchHit: false,
                 prewarmed: true,
@@ -1612,23 +1664,25 @@ actor NativeEngineRuntime {
 
     private func markDesignWarmSatisfied(
         for request: GenerationRequest,
-        conditioningWarmKey: String
+        conditioningWarmIdentity: GenerationSemantics.DesignConditioningIdentity
     ) async {
-        await loadCoordinator.markPrewarmed(identityKey: conditioningWarmKey)
-        if let identityKey = prewarmIdentityKey(for: request) {
-            await loadCoordinator.markPrewarmed(identityKey: identityKey)
+        await loadCoordinator.markPrewarmed(identityKey: conditioningWarmIdentity.cacheKey)
+        if let identity = runtimePrewarmIdentity(for: request) {
+            await loadCoordinator.markPrewarmed(identityKey: identity.cacheKey)
         }
     }
 
-    private func prewarmIdentityKey(for request: GenerationRequest) -> String? {
+    private func runtimePrewarmIdentity(
+        for request: GenerationRequest
+    ) -> GenerationSemantics.PrewarmIdentity? {
         switch request.payload {
         case .custom:
-            return GenerationSemantics.prewarmIdentityKey(
+            return GenerationSemantics.prewarmIdentity(
                 modelID: request.modelID,
                 mode: request.mode
             )
         case .design:
-            return GenerationSemantics.prewarmIdentityKey(
+            return GenerationSemantics.prewarmIdentity(
                 modelID: request.modelID,
                 mode: request.mode
             )
@@ -1641,11 +1695,11 @@ actor NativeEngineRuntime {
         preserveActiveClonePrimeToken: Bool = false
     ) async {
         await preparedCloneConditioningCache.clear()
-        activeDesignConditioningWarmKey = nil
+        activeDesignConditioningWarmIdentity = nil
         activeDesignConditioningWarmSource = nil
-        activeDesignStreamStepWarmKey = nil
+        activeDesignStreamStepWarmIdentity = nil
         activeDesignStreamStepWarmSource = nil
-        activeCloneConditioningKey = nil
+        activeCloneConditioningIdentity = nil
         primedCloneReferenceKeys.removeAll()
         clonePrimeTimingOverridesMS.removeAll()
         if !preserveActiveClonePrimeToken {
@@ -1660,7 +1714,7 @@ actor NativeEngineRuntime {
         // the Jetsam ceiling. (The iOS-only model-switch path below the
         // `#if os(iOS)` guard clears explicitly and is unaffected by this.)
         guard NativeMemoryPolicyResolver.deviceClass() == .iPhonePro else { return }
-        await Qwen3TTSMemoryCaches.clearAll()
+        await VocelloQwen3Runtime.clearRuntimeCaches()
     }
 
     private func ensureActiveClonePrimeToken(_ token: UUID) throws {

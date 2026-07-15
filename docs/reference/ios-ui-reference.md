@@ -48,7 +48,10 @@ install state instead of Generate.
 Clone requires a reference clip from a saved voice, the physical-device recording flow, or an
 imported WAV, MP3, AIFF, or M4A file. Automated smoke and benchmark tests use a prepared non-PII
 saved reference. Recording, Files-picker import, and permission enrollment are separate explicit
-product-acceptance scenarios.
+product-acceptance scenarios. `voiceCloning_consentAcknowledgment` is a genuine visible control and
+Generate remains disabled until it is enabled. A transcript is optional: supplied text selects
+transcript-backed conditioning, while an empty transcript selects the distinct audio-only x-vector
+path.
 
 ## Voices and History
 
@@ -61,7 +64,9 @@ document from Files routes through the same sheet. A saved/imported voice hands 
 a built-in speaker hands off to Studio Custom.
 
 History supports search, mode filtering, sorting, playback, export, saving a take as a voice, and
-deletion. Destructive History actions are outside the minimal smoke and benchmark lanes.
+deletion. A typed database failure presents `historyRetryButton` rather than an empty list and keeps
+destructive actions disabled until a successful read. Destructive History actions are outside the
+minimal smoke and benchmark lanes.
 
 ## Settings
 

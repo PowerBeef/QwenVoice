@@ -1,0 +1,242 @@
+{
+  "schemaVersion": 2,
+  "componentID": "vocello-qwen3-core",
+  "component": "Vocello Qwen3 audio runtime",
+  "status": "active-semantic-delta-ledger",
+  "allowedStates": [
+    "active",
+    "diagnostic",
+    "dormant",
+    "rejected",
+    "shared",
+    "superseded",
+    "removed"
+  ],
+  "allowedUpstreamDispositions": [
+    "local-only",
+    "upstreamable",
+    "upstreamed",
+    "equivalent",
+    "blocked",
+    "obsolete",
+    "shared-upstream"
+  ],
+  "allowedEvidenceClasses": [
+    "static",
+    "benchmark",
+    "diagnostic",
+    "historical",
+    "unmeasured"
+  ],
+  "allowedBenchmarkEvidenceStatuses": [
+    "verified",
+    "diagnostic",
+    "unverified"
+  ],
+  "patches": [
+    {
+      "id": "PKG-001",
+      "title": "Qwen3-only package and deterministic product surface",
+      "category": "package",
+      "state": "active",
+      "files": [".gitignore", "Package.swift", "Examples/**"],
+      "tests": ["Tests/Qwen3RuntimeTests/**"],
+      "documentation": ["README.md", "UPSTREAM.md"],
+      "evidenceClass": "static",
+      "benchmarkRecordIDs": [],
+      "upstreamDisposition": "local-only",
+      "upstreamEquivalentCommit": null,
+      "removalCriteria": "Remove only if Vocello stops owning an in-tree Qwen3-specialized runtime."
+    },
+    {
+      "id": "CORE-001",
+      "title": "Product generation contracts and structured completion",
+      "category": "api",
+      "state": "active",
+      "files": [
+        "Sources/MLXAudioCore/AudioUtils.swift",
+        "Sources/MLXAudioCore/Generation/GenerationTypes.swift",
+        "Sources/MLXAudioTTS/Generation.swift",
+        "Sources/MLXAudioTTS/TTSModel.swift"
+      ],
+      "tests": ["Tests/Qwen3RuntimeTests/**"],
+      "documentation": ["PERFORMANCE.md"],
+      "evidenceClass": "static",
+      "benchmarkRecordIDs": [],
+      "upstreamDisposition": "upstreamable",
+      "upstreamEquivalentCommit": null,
+      "removalCriteria": "Remove after upstream exposes equivalent typed finish, cancellation, and mode contracts."
+    },
+    {
+      "id": "LOAD-001",
+      "title": "Revision-aware prepared loading and bounded component caches",
+      "category": "loading",
+      "state": "active",
+      "files": [
+        "Sources/MLXAudioCore/ModelUtils.swift",
+        "Sources/MLXAudioTTS/TTSModel.swift",
+        "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift"
+      ],
+      "tests": ["Tests/Qwen3RuntimeTests/**"],
+      "documentation": ["PERFORMANCE.md"],
+      "evidenceClass": "benchmark",
+      "benchmarkRecordIDs": ["macos-xcui-benchmark-20260713-185716-7f12cd35"],
+      "benchmarkEvidenceStatus": "diagnostic",
+      "benchmarkEvidenceReason": "The benchmark predates current loading and facade changes and is not verification of the present source inventory.",
+      "upstreamDisposition": "local-only",
+      "upstreamEquivalentCommit": null,
+      "removalCriteria": "Remove only when an upstream loader provides the same revision, capability, trust, and cache contracts."
+    },
+    {
+      "id": "SAMPLER-001",
+      "title": "Official talker and subtalker sampling with reusable hot-loop state",
+      "category": "sampling",
+      "state": "active",
+      "files": [
+        "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
+        "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSCodePredictor.swift",
+        "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSConfig.swift",
+        "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSTalker.swift"
+      ],
+      "tests": ["Tests/Qwen3RuntimeTests/**"],
+      "documentation": ["PERFORMANCE.md"],
+      "evidenceClass": "benchmark",
+      "benchmarkRecordIDs": ["macos-xcui-benchmark-20260713-185716-7f12cd35"],
+      "benchmarkEvidenceStatus": "diagnostic",
+      "benchmarkEvidenceReason": "The benchmark predates current sampling changes and is not verification of the present source inventory.",
+      "upstreamDisposition": "upstreamable",
+      "upstreamEquivalentCommit": null,
+      "removalCriteria": "Remove individual optimizations only after upstream parity and deterministic waveform tests."
+    },
+    {
+      "id": "STREAM-001",
+      "title": "Bounded production streaming and final-audio barrier",
+      "category": "streaming",
+      "state": "active",
+      "files": [
+        "Sources/MLXAudioTTS/Generation.swift",
+        "Sources/MLXAudioTTS/RuntimeDebugGate.swift",
+        "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3StreamingMemoryTuning.swift",
+        "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
+        "Tests/Qwen3RuntimeTests/Qwen3StreamingContractTests.swift"
+      ],
+      "tests": ["Tests/Qwen3RuntimeTests/Qwen3StreamingContractTests.swift"],
+      "documentation": ["PERFORMANCE.md"],
+      "evidenceClass": "benchmark",
+      "benchmarkRecordIDs": ["macos-xcui-benchmark-20260713-185716-7f12cd35"],
+      "benchmarkEvidenceStatus": "diagnostic",
+      "benchmarkEvidenceReason": "The benchmark predates current streaming, cancellation, and memory-tuning changes and is not verification of the present source inventory.",
+      "upstreamDisposition": "upstreamable",
+      "upstreamEquivalentCommit": null,
+      "removalCriteria": "Remove only after upstream proves bounded retention, cancellation, ordering, and final barrier parity."
+    },
+    {
+      "id": "CLONE-001",
+      "title": "Persistent verified clone-prompt artifacts",
+      "category": "clone-artifact",
+      "state": "active",
+      "files": [
+        "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
+        "Tests/Qwen3RuntimeTests/Qwen3CloneArtifactIntegrityTests.swift"
+      ],
+      "tests": ["Tests/Qwen3RuntimeTests/Qwen3CloneArtifactIntegrityTests.swift"],
+      "documentation": ["CLONE_ARTIFACT_FORMAT.md"],
+      "evidenceClass": "static",
+      "benchmarkRecordIDs": [],
+      "upstreamDisposition": "upstreamable",
+      "upstreamEquivalentCommit": null,
+      "removalCriteria": "Remove only after a compatible upstream format supports atomic persistence and strict integrity."
+    },
+    {
+      "id": "CONC-001",
+      "title": "Single-owner generation gate and cancellation transfer",
+      "category": "concurrency",
+      "state": "active",
+      "files": [
+        "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
+        "Tests/Qwen3RuntimeTests/Qwen3GenerationGateTests.swift"
+      ],
+      "tests": ["Tests/Qwen3RuntimeTests/Qwen3GenerationGateTests.swift"],
+      "documentation": ["PERFORMANCE.md"],
+      "evidenceClass": "static",
+      "benchmarkRecordIDs": [],
+      "upstreamDisposition": "upstreamable",
+      "upstreamEquivalentCommit": null,
+      "removalCriteria": "Remove after upstream has equivalent FIFO ownership and transfer-race coverage."
+    },
+    {
+      "id": "CODEC-001",
+      "title": "Partition-invariant Mimi decoder and reset isolation",
+      "category": "codec",
+      "state": "active",
+      "files": [
+        "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSSpeechTokenizer.swift",
+        "Tests/Qwen3RuntimeTests/Qwen3DecoderPartitionTests.swift"
+      ],
+      "tests": ["Tests/Qwen3RuntimeTests/Qwen3DecoderPartitionTests.swift"],
+      "documentation": ["PERFORMANCE.md"],
+      "evidenceClass": "static",
+      "benchmarkRecordIDs": [],
+      "upstreamDisposition": "upstreamable",
+      "upstreamEquivalentCommit": null,
+      "removalCriteria": "Remove only after exact partition, reset, and timing parity passes against an upstream replacement."
+    },
+    {
+      "id": "TEL-001",
+      "title": "Typed Qwen3 runtime diagnostics and signpost attribution",
+      "category": "telemetry",
+      "state": "active",
+      "files": [
+        "Sources/MLXAudioCore/Generation/GenerationTypes.swift",
+        "Sources/MLXAudioTTS/ModelDiagnostics.swift",
+        "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift"
+      ],
+      "tests": ["Tests/Qwen3RuntimeTests/**"],
+      "documentation": ["PERFORMANCE.md"],
+      "evidenceClass": "diagnostic",
+      "benchmarkRecordIDs": [],
+      "upstreamDisposition": "local-only",
+      "upstreamEquivalentCommit": null,
+      "removalCriteria": "Remove individual probes only after their validators and profile consumers are retired."
+    },
+    {
+      "id": "FACADE-001",
+      "title": "Vocello-owned typed runtime facade and generation session boundary",
+      "category": "architecture",
+      "state": "active",
+      "files": [
+        "Sources/VocelloQwen3Core/CompatibilityExports.swift",
+        "Sources/VocelloQwen3Core/Contracts.swift",
+        "Sources/VocelloQwen3Core/GenerationSession.swift",
+        "Sources/VocelloQwen3Core/LoadedModel.swift",
+        "Sources/VocelloQwen3Core/Runtime.swift",
+        "Tests/Qwen3RuntimeTests/VocelloQwen3FacadeTests.swift"
+      ],
+      "tests": ["Tests/Qwen3RuntimeTests/VocelloQwen3FacadeTests.swift"],
+      "documentation": ["README.md", "COMPATIBILITY.json", "OWNERSHIP.json"],
+      "evidenceClass": "static",
+      "benchmarkRecordIDs": [],
+      "upstreamDisposition": "local-only",
+      "upstreamEquivalentCommit": null,
+      "removalCriteria": "Retain as the stable product boundary even if compatibility implementation modules are later replaced."
+    },
+    {
+      "id": "COMPAT-001",
+      "title": "Checkpoint configuration and text-processing compatibility",
+      "category": "compatibility",
+      "state": "active",
+      "files": [
+        "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSConfig.swift",
+        "Sources/MLXAudioTTS/Models/Qwen3TTS/README.md",
+        "Sources/MLXAudioTTS/TextProcessor.swift"
+      ],
+      "tests": ["Tests/Qwen3RuntimeTests/**"],
+      "documentation": ["UPSTREAM.md"],
+      "evidenceClass": "static",
+      "benchmarkRecordIDs": [],
+      "upstreamDisposition": "blocked",
+      "upstreamEquivalentCommit": null,
+      "removalCriteria": "Remove only when all pinned model artifacts adopt one verified upstream representation."
+    }
+  ]
+}

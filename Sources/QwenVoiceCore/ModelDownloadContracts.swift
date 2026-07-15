@@ -1,5 +1,72 @@
 import Foundation
 
+/// HTTPS and host boundary applied to initial artifact requests and every
+/// URLSession redirect. Exact initial hosts come from the signed/bundled
+/// catalog configuration; redirect suffixes cover the content-distribution
+/// domains explicitly owned by that provider.
+public struct ModelArtifactURLPolicy: Equatable, Sendable {
+    public let allowedInitialHosts: Set<String>
+    public let allowedRedirectHostSuffixes: Set<String>
+
+    public init(
+        allowedInitialHosts: Set<String>,
+        allowedRedirectHostSuffixes: Set<String> = []
+    ) {
+        self.allowedInitialHosts = Set(allowedInitialHosts.map { $0.lowercased() })
+        self.allowedRedirectHostSuffixes = Set(allowedRedirectHostSuffixes.map { $0.lowercased() })
+    }
+
+    public func allowsInitialRequest(_ url: URL) -> Bool {
+        guard let host = secureHost(for: url) else { return false }
+        return allowedInitialHosts.contains(host)
+    }
+
+    public func allowsRedirect(from sourceURL: URL?, to destinationURL: URL) -> Bool {
+        guard let sourceURL,
+              let sourceHost = secureHost(for: sourceURL),
+              allowsArtifactHost(sourceHost),
+              let destinationHost = secureHost(for: destinationURL) else {
+            return false
+        }
+        return allowsArtifactHost(destinationHost)
+    }
+
+    private func allowsArtifactHost(_ host: String) -> Bool {
+        if allowedInitialHosts.contains(host) { return true }
+        return allowedRedirectHostSuffixes.contains { suffix in
+            host == suffix || host.hasSuffix(".\(suffix)")
+        }
+    }
+
+    private func secureHost(for url: URL) -> String? {
+        guard url.scheme?.lowercased() == "https",
+              url.user == nil,
+              url.password == nil,
+              url.port == nil || url.port == 443,
+              let host = url.host?.lowercased(),
+              !host.isEmpty,
+              host != "localhost",
+              !host.hasSuffix(".local"),
+              !Self.isIPAddress(host) else {
+            return nil
+        }
+        return host
+    }
+
+    private static func isIPAddress(_ host: String) -> Bool {
+        if host.contains(":"), host.unicodeScalars.allSatisfy({
+            CharacterSet(charactersIn: "0123456789abcdefABCDEF:").contains($0)
+        }) {
+            return true
+        }
+        let components = host.split(separator: ".", omittingEmptySubsequences: false)
+        return components.count == 4 && components.allSatisfy {
+            guard let value = Int($0) else { return false }
+            return (0...255).contains(value)
+        }
+    }
+}
+
 /// Stable identity encoded in `URLSessionTask.taskDescription`. It deliberately contains no URL
 /// or filesystem path so it is safe to persist and use when adopting background tasks.
 public struct ModelDownloadTaskIdentity: Codable, Equatable, Hashable, Sendable {
@@ -31,6 +98,7 @@ public struct ModelDownloadTaskIdentity: Codable, Equatable, Hashable, Sendable 
     }
 
     public var encodedTaskDescription: String? {
+        guard isValidProductionIdentity else { return nil }
         guard let data = try? JSONEncoder().encode(self) else { return nil }
         return data.base64EncodedString()
     }
@@ -39,10 +107,53 @@ public struct ModelDownloadTaskIdentity: Codable, Equatable, Hashable, Sendable 
         guard let taskDescription,
               let data = Data(base64Encoded: taskDescription),
               let identity = try? JSONDecoder().decode(Self.self, from: data),
-              identity.schemaVersion == currentSchemaVersion else {
+              identity.schemaVersion == currentSchemaVersion,
+              identity.isValidProductionIdentity else {
             return nil
         }
         return identity
+    }
+
+    /// Background adoption is a production trust boundary. A task without an
+    /// immutable artifact identity, exact size, safe path, and SHA-256 may
+    /// finish in its current process, but it can never be adopted after a
+    /// relaunch.
+    public var isValidProductionIdentity: Bool {
+        schemaVersion == Self.currentSchemaVersion
+            && isSafeIdentityComponent(logicalRequestID)
+            && isSafeIdentityComponent(modelID)
+            && isSafeIdentityComponent(artifactVersion)
+            && isSafeRelativeArtifactPath(relativePath)
+            && expectedSize > 0
+            && isLowercaseSHA256(expectedSHA256)
+    }
+}
+
+private func isSafeIdentityComponent(_ value: String) -> Bool {
+    !value.isEmpty
+        && value == value.trimmingCharacters(in: .whitespacesAndNewlines)
+        && !value.contains("/")
+        && !value.contains("\\")
+        && !value.contains("://")
+        && !value.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) })
+}
+
+private func isSafeRelativeArtifactPath(_ value: String) -> Bool {
+    guard !value.isEmpty,
+          value == value.trimmingCharacters(in: .whitespacesAndNewlines),
+          !value.hasPrefix("/"),
+          !value.contains("\\"),
+          value.removingPercentEncoding == value else {
+        return false
+    }
+    let components = value.split(separator: "/", omittingEmptySubsequences: false)
+    return !components.isEmpty && components.allSatisfy { !$0.isEmpty && $0 != "." && $0 != ".." }
+}
+
+private func isLowercaseSHA256(_ value: String?) -> Bool {
+    guard let value, value.count == 64 else { return false }
+    return value.unicodeScalars.allSatisfy {
+        CharacterSet(charactersIn: "0123456789abcdef").contains($0)
     }
 }
 
@@ -124,6 +235,7 @@ public enum ModelDownloadTaskReconciler {
 
         for task in existing.sorted(by: { $0.taskID < $1.taskID }) {
             guard let identity = task.identity,
+                  identity.isValidProductionIdentity,
                   expectedByPath[identity.relativePath] == identity,
                   adopted[identity.relativePath] == nil else {
                 cancelled.append(task.taskID)

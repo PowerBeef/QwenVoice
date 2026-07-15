@@ -21,6 +21,7 @@ Review when: release facts; workflow changes; platform support.
 - [`CONTRIBUTING.md`](../CONTRIBUTING.md)
 - [`PRODUCT.md`](../PRODUCT.md)
 - [`README.md`](../README.md)
+- [`SECURITY.md`](../SECURITY.md)
 - [`website/AGENTS.md`](../website/AGENTS.md)
 - [`website/DESIGN.md`](../website/DESIGN.md)
 - [`website/PRODUCT.md`](../website/PRODUCT.md)
@@ -37,11 +38,15 @@ Review when: target or scheme changes; runtime topology; telemetry schema; test 
 - [`Sources/Resources/voice-previews/README.md`](../Sources/Resources/voice-previews/README.md)
 - [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md)
 - [`docs/decisions/model-delivery-background-assets.md`](../docs/decisions/model-delivery-background-assets.md)
+- [`docs/decisions/owned-qwen3-runtime-monorepo.md`](../docs/decisions/owned-qwen3-runtime-monorepo.md)
+- [`docs/decisions/product-identity-compatibility.md`](../docs/decisions/product-identity-compatibility.md)
+- [`docs/decisions/runtime-hardening-and-trust-boundary.md`](../docs/decisions/runtime-hardening-and-trust-boundary.md)
 - [`docs/development-progress.md`](../docs/development-progress.md)
 - [`docs/project-map.html`](../docs/project-map.html)
 - [`docs/qwen_tone.md`](../docs/qwen_tone.md)
 - [`docs/reference/benchmarking-procedure.md`](../docs/reference/benchmarking-procedure.md)
 - [`docs/reference/cli.md`](../docs/reference/cli.md)
+- [`docs/reference/evidence-impact.md`](../docs/reference/evidence-impact.md)
 - [`docs/reference/ios-app-guide.md`](../docs/reference/ios-app-guide.md)
 - [`docs/reference/ios-appstore-submission.md`](../docs/reference/ios-appstore-submission.md)
 - [`docs/reference/ios-device-testing.md`](../docs/reference/ios-device-testing.md)
@@ -80,14 +85,16 @@ Review when: benchmark schema; telemetry schema; hardware profiles; publication 
 
 Status: **active** · Owner: **backend-mlx** · Audience: backend maintainers.
 
-Authority: vendor manifest, upstream baseline, and semantic patch ledger.
+Authority: owned runtime lineage, compatibility, ownership, and capability contracts.
 
-Review when: vendor source changes; dependency pins; upstream review; performance semantics.
+Review when: owned runtime source changes; dependency pins; upstream review; performance semantics.
 
-- [`third_party_patches/mlx-audio-swift/CLONE_ARTIFACT_FORMAT.md`](../third_party_patches/mlx-audio-swift/CLONE_ARTIFACT_FORMAT.md)
-- [`third_party_patches/mlx-audio-swift/PERFORMANCE.md`](../third_party_patches/mlx-audio-swift/PERFORMANCE.md)
-- [`third_party_patches/mlx-audio-swift/README.md`](../third_party_patches/mlx-audio-swift/README.md)
-- [`third_party_patches/mlx-audio-swift/UPSTREAM.md`](../third_party_patches/mlx-audio-swift/UPSTREAM.md)
+- [`Packages/VocelloQwen3Core/CLONE_ARTIFACT_FORMAT.md`](../Packages/VocelloQwen3Core/CLONE_ARTIFACT_FORMAT.md)
+- [`Packages/VocelloQwen3Core/NOTICES.md`](../Packages/VocelloQwen3Core/NOTICES.md)
+- [`Packages/VocelloQwen3Core/ORIGINS.md`](../Packages/VocelloQwen3Core/ORIGINS.md)
+- [`Packages/VocelloQwen3Core/PERFORMANCE.md`](../Packages/VocelloQwen3Core/PERFORMANCE.md)
+- [`Packages/VocelloQwen3Core/README.md`](../Packages/VocelloQwen3Core/README.md)
+- [`Packages/VocelloQwen3Core/UPSTREAM.md`](../Packages/VocelloQwen3Core/UPSTREAM.md)
 
 ## Generated indexes
 
@@ -98,6 +105,7 @@ Authority: generators.
 Review when: source manifest or benchmark record changes.
 
 - [`benchmarks/HISTORY.md`](../benchmarks/HISTORY.md)
+- [`docs/project-health.md`](../docs/project-health.md)
 
 ## Historical evidence
 

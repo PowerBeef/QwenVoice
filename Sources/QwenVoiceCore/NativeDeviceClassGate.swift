@@ -24,8 +24,9 @@ public enum NativeDeviceClassGate {
 
     /// The forced class as seen from the **app process**: parsed from the
     /// environment once per process. `nil` when unset/unrecognized.
-    public static let appProcessForcedClass: NativeDeviceMemoryClass? =
-        parse(ProcessInfo.processInfo.environment[environmentKey])
+    public static let appProcessForcedClass: NativeDeviceMemoryClass? = {
+        parse(RuntimeDebugGate.value(for: environmentKey))
+    }()
 
     /// Wire-friendly raw value the app ships over the handshake: the forced class
     /// rawValue, or `""` when unset.

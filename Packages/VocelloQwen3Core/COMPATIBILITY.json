@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "componentID": "vocello-qwen3-core",
+  "package": {
+    "name": "MLXAudio",
+    "swiftToolsVersion": "6.1",
+    "minimumPlatforms": {
+      "macOS": "14",
+      "iOS": "17"
+    },
+    "products": [
+      "VocelloQwen3Core",
+      "MLXAudioCore",
+      "MLXAudioCodecs",
+      "MLXAudioTTS"
+    ],
+    "targets": [
+      "VocelloQwen3Core",
+      "MLXAudioCore",
+      "MLXAudioCodecs",
+      "MLXAudioTTS",
+      "Qwen3RuntimeTests"
+    ],
+    "directDependencies": {
+      "mlx-swift": "0.30.6",
+      "mlx-swift-lm": "2.30.6",
+      "swift-huggingface": "0.9.0"
+    }
+  },
+  "sourceCompatibility": {
+    "preferredProduct": "VocelloQwen3Core",
+    "preferredImportModule": "VocelloQwen3Core",
+    "stableContracts": [
+      "VocelloQwen3PreparedModelBundle",
+      "VocelloQwen3SynthesisRequest",
+      "VocelloQwen3GenerationSession",
+      "VocelloQwen3GenerationEvent",
+      "VocelloQwen3TerminalOutcome",
+      "VocelloQwen3DiagnosticEvent"
+    ],
+    "preservedImportModules": [
+      "MLXAudioCore",
+      "MLXAudioCodecs",
+      "MLXAudioTTS"
+    ],
+    "policy": "Vocello product targets consume the owned facade. The MLXAudio package, products, targets, modules, and public APIs remain available as implementation compatibility surfaces."
+  },
+  "modelContract": "../../Sources/Resources/qwenvoice_contract.json",
+  "validation": [
+    "python3 scripts/vendor_runtime_contract.py validate",
+    "scripts/macos_test.sh test"
+  ]
+}

@@ -1,0 +1,11 @@
+# Repository owner remains the final reviewer for security, release, runtime, and public claims.
+* @PowerBeef
+
+/.github/ @PowerBeef
+/config/ @PowerBeef
+/scripts/ @PowerBeef
+/Sources/ @PowerBeef
+/Tests/ @PowerBeef
+/Packages/VocelloQwen3Core/ @PowerBeef
+/website/ @PowerBeef
+/SECURITY.md @PowerBeef

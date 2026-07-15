@@ -2,13 +2,13 @@ name: CI
 
 # Pre-merge CI for Vocello (QwenVoice).
 #
-# iOS: compile the app against the physical-device SDK. XCUITest is explicit local work and does
-# not consume ordinary CI time.
+# iOS: compile the app and standalone pure-logic XCTest bundle against the physical-device SDK.
+# Neither bundle executes in ordinary CI; XCUITest remains explicit local work.
 #
 # Ordinary CI remains UI-free: project inputs, macOS Core/XPC/runtime tests, and compile checks.
 #
-# Toolchain pinning mirrors release.yml: Xcode 26, XcodeGen + xcbeautify via Homebrew,
-# SPM versions inherited from the committed Package.resolved.
+# Toolchain identities are locked in config/toolchain.json. Homebrew installs are
+# accepted only when their observed versions match that manifest.
 
 on:
   push:
@@ -30,30 +30,29 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           # Project-input validation verifies historical evidence commits.
           fetch-depth: 0
 
-      - name: Select Xcode 26
+      - name: Select Xcode 26.6
         run: |
-          if [ -d /Applications/Xcode.app ]; then
-            sudo xcode-select -s /Applications/Xcode.app
-          else
-            sudo xcode-select -s /Applications/Xcode_26.0.app
-          fi
+          sudo xcode-select -s /Applications/Xcode.app
           xcodebuild -version
           swift --version
 
       - name: Install deterministic tooling
         run: |
-          brew install xcodegen xcbeautify ripgrep
+          brew install xcodegen xcbeautify ripgrep shellcheck gh
           xcodegen --version
           xcbeautify --version
           rg --version
+          shellcheck --version
+          gh --version
+          python3 scripts/supply_chain_contract.py --installed native
 
       - name: Cache SwiftPM dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
         with:
           path: build/cache/xcode/source-packages
           key: spm-ios-compile-${{ runner.os }}-xcode26-${{ hashFiles('QwenVoice.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
@@ -93,30 +92,47 @@ jobs:
             ONLY_ACTIVE_ARCH=YES \
             CODE_SIGNING_ALLOWED=NO | xcbeautify
 
+      - name: Compile iOS logic tests for the device SDK
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -project QwenVoice.xcodeproj \
+            -scheme VocelloiOSLogic \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/scratch/derived-data/ci/ios-compile \
+            -clonedSourcePackagesDirPath build/cache/xcode/source-packages \
+            -disableAutomaticPackageResolution \
+            -onlyUsePackageVersionsFromResolvedFile \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGNING_ALLOWED=NO | xcbeautify
+
   macos-deterministic-tests:
     name: macOS deterministic tests
     runs-on: macos-26
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
 
-      - name: Select Xcode 26
+      - name: Select Xcode 26.6
         run: |
-          if [ -d /Applications/Xcode.app ]; then
-            sudo xcode-select -s /Applications/Xcode.app
-          else
-            sudo xcode-select -s /Applications/Xcode_26.0.app
-          fi
+          sudo xcode-select -s /Applications/Xcode.app
+          xcodebuild -version
+          swift --version
 
       - name: Install deterministic tooling
         run: |
-          brew install xcodegen xcbeautify ripgrep
+          brew install xcodegen xcbeautify ripgrep shellcheck gh
           xcodegen --version
           xcbeautify --version
           rg --version
+          shellcheck --version
+          gh --version
+          python3 scripts/supply_chain_contract.py --installed native
 
       - name: Regenerate Xcode project
         run: ./scripts/regenerate_project.sh
@@ -129,9 +145,36 @@ jobs:
 
       - name: Upload xcresult on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: macos-deterministic-test-artifacts
           path: build/artifacts/macos/tests/
           if-no-files-found: warn
           retention-days: 14
+
+  website-deterministic:
+    name: Website deterministic checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Select pinned Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.15.0
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Select pinned npm
+        run: npm install --global npm@11.12.1
+
+      - name: Validate website toolchain
+        run: python3 scripts/supply_chain_contract.py --installed website
+
+      - name: Install locked dependencies
+        run: npm --prefix website ci
+
+      - name: Lint, test, and build website
+        run: npm --prefix website run check

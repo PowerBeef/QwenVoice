@@ -10,9 +10,20 @@ and UI automation are unsupported. XCUITest is the sole autonomous iOS app UI dr
 ./scripts/build_foundation_targets.sh ios
 ```
 
-The generic physical-device SDK compile requires no connected phone and is sufficient for routine
-commits, pushes, pull requests, ordinary merges, and ordinary CI. Missing models, a phone, or UI
-results must not block preserving and sharing development work.
+The generic physical-device SDK compile builds both the app and the standalone
+`VocelloiOSLogicTests` policy bundle without executing XCTest. It requires no connected phone and is
+sufficient for routine commits, pushes, pull requests, ordinary merges, and ordinary CI. Missing
+models, a phone, or UI results must not block preserving and sharing development work.
+
+Pure iOS platform logic can be executed explicitly when the paired phone is available:
+
+```sh
+scripts/ios_device.sh logic-test
+```
+
+That app-host-free bundle covers catalog and delivery-ledger validation, memory policy,
+cancellation semantics, app-support path gating, and privacy-safe diagnostics. It performs no model
+load or network request. Physical-device execution is explicit assurance, not a publishing gate.
 
 ## Device preparation
 

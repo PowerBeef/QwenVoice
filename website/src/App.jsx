@@ -1,4 +1,4 @@
-import React, { useLayoutEffect } from "react";
+import React, { useEffect } from "react";
 import { Nav } from "./sections/Nav.jsx";
 import { Hero } from "./sections/Hero.jsx";
 import { WorkflowBand } from "./sections/WorkflowBand.jsx";
@@ -17,7 +17,7 @@ import { WORKFLOWS } from "./data/workflows.js";
 // skipped under prefers-reduced-motion. Targets are selected by class so section
 // JSX stays untouched.
 const useScrollReveal = () => {
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (typeof window === "undefined") return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     if (!("IntersectionObserver" in window)) return;
@@ -51,20 +51,23 @@ const App = () => {
   useScrollReveal();
   return (
   <>
+    <a className="skip-link" href="#main-content">Skip to main content</a>
     <Nav />
-    <Hero />
-    <div id="workflows" className="workflows-anchor">
-      {WORKFLOWS.map((w, i) => (
-        <WorkflowBand key={w.id} workflow={w} index={i} />
-      ))}
-    </div>
-    <Listen />
-    <Capabilities />
-    <WhyCloud />
-    <TryIt />
-    <HowItRuns />
-    <Limitations />
-    <FinalCTA />
+    <main id="main-content">
+      <Hero />
+      <div id="workflows" className="workflows-anchor">
+        {WORKFLOWS.map((w, i) => (
+          <WorkflowBand key={w.id} workflow={w} index={i} />
+        ))}
+      </div>
+      <Listen />
+      <Capabilities />
+      <WhyCloud />
+      <TryIt />
+      <HowItRuns />
+      <Limitations />
+      <FinalCTA />
+    </main>
     <Footer />
   </>
   );

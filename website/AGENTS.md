@@ -10,16 +10,20 @@ A marketing site for **Vocello** (formerly QwenVoice), a local-first Mac TTS app
 
 ```sh
 npm --prefix website run dev      # from repo root: vite dev server on localhost:5173
+npm --prefix website run lint     # deterministic source/metadata/accessibility contract
+npm --prefix website test         # dependency-free Node contract fixtures
 npm --prefix website run build    # from repo root: production build -> website/dist/
+npm --prefix website run check    # lint + test + build
 npm --prefix website run preview  # from repo root: serve the production build
 ```
 
-When already inside `website/`, the equivalent commands are `npm run dev`, `npm run build`, and `npm run preview`.
+When already inside `website/`, omit `--prefix website` from the same commands.
 
-No website-specific tests or lint config. The parent repo has `.github/workflows/ci.yml`
-(generic iOS device-SDK build, no XCUITest) and `release.yml` (macOS DMG); this directory has no GitHub Actions workflow
-of its own. Behavioral verification is manual + browser-driven; Vercel owns deployment for
-this directory.
+The dependency-free Node contract checks metadata, public release identity, internal anchors,
+image alt text, safe external links, assets, visible punctuation, and unqualified performance
+claims. The parent `.github/workflows/ci.yml` runs those checks plus the Vite production build with
+the exact Node/npm identities from `config/toolchain.json`. Browser review remains useful for visual
+behavior; Vercel owns deployment for this directory.
 
 ## Tooling for this directory
 

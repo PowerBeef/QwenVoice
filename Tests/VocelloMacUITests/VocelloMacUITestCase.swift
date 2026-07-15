@@ -198,6 +198,11 @@ class VocelloMacUITestCase: XCTestCase {
             XCTAssertTrue(VocelloUIPrimaryAction.perform(on: useButton, timeout: 20))
             XCTAssertTrue(VocelloUIWait.exists(element("screen_voiceCloning"), timeout: 20))
             XCTAssertTrue(VocelloUIWait.exists(element("voiceCloning_activeReference"), timeout: 20))
+            let consent = element("voiceCloning_consentAcknowledgment")
+            XCTAssertTrue(VocelloUIWait.exists(consent, timeout: 20))
+            if toggleValue(consent) != true {
+                XCTAssertTrue(VocelloUIPrimaryAction.perform(on: consent, timeout: 20))
+            }
         }
     }
 

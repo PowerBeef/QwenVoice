@@ -5,8 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "lint": "node scripts/site-contract.mjs",
+    "test": "node --test tests/*.test.mjs && node scripts/rendered-contract.mjs",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check": "npm run lint && npm test && npm run build"
   },
   "dependencies": {
     "react": "^18.3.1",

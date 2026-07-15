@@ -186,7 +186,7 @@ Memory-reduction behavior already implemented:
 - `Sources/QwenVoiceCore/SemanticTypes.swift` defaults inline streaming preview PCM to `.emit` on every platform; `QWENVOICE_STREAMING_PREVIEW_DATA=off` is the explicit controlled-diagnostic opt-out.
 - `Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift` emits inline `previewAudio` under the default policy and emits `previewAudio: nil` only when the explicit opt-out is active.
 - `Sources/QwenVoiceCore/NativeEngineRuntime.swift` clears Qwen3 caches on iPhone unload/hard-trim/full-unload paths.
-- `third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift` exposes `Qwen3TTSMemoryCaches.clearAll()`.
+- `Packages/VocelloQwen3Core/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift` exposes `Qwen3TTSMemoryCaches.clearAll()`.
 
 ## Memory evidence
 

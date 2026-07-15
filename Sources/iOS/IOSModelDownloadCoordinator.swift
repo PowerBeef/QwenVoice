@@ -74,6 +74,18 @@ private struct IOSLegacyInFlightDownloadsDocument: Codable, Sendable {
 /// before any missing task is created.
 @MainActor
 final class IOSModelDownloadCoordinator {
+    private struct CancellationPersistenceError: LocalizedError {
+        static let privacySafeMessage = "Vocello couldn't save the cancellation state. The download and staged files were preserved. Retry Cancel after checking available storage."
+
+        var errorDescription: String? { Self.privacySafeMessage }
+    }
+
+    private struct CancellationInstallReconciliationError: LocalizedError {
+        static let privacySafeMessage = "Vocello couldn't reconcile a model that completed during cancellation. The installed files were preserved. Restart Vocello before retrying."
+
+        var errorDescription: String? { Self.privacySafeMessage }
+    }
+
     struct InFlightDownload {
         let modelID: String
         let logicalRequestID: String
@@ -82,6 +94,7 @@ final class IOSModelDownloadCoordinator {
         let stagingRoot: URL
         let totalBytes: Int64
         let operationGeneration: UInt64
+        let targetWasAvailableAtStart: Bool
     }
 
     typealias SnapshotSink = @MainActor (IOSModelDeliverySnapshot) -> Void
@@ -99,6 +112,9 @@ final class IOSModelDownloadCoordinator {
     private var cachedCatalog: IOSModelCatalogDocument?
     private var operationGeneration: UInt64 = 0
     private var lastLedgerProgressWrite: [String: TimeInterval] = [:]
+    /// Prevents already-enqueued progress callbacks from weakening a durable
+    /// cancellation while its URLSession task barrier is still draining.
+    private var cancellationBarriers: Set<String> = []
 
     private lazy var downloader: HuggingFaceDownloader = makeSharedDownloader()
 
@@ -152,22 +168,48 @@ final class IOSModelDownloadCoordinator {
             ledger.requests.append(makeLedgerRequest(model: model, entry: entry, totalBytes: totalBytes))
         }
         try ledgerStore.save(ledger)
+        cancellationBarriers.remove(model.id)
         pending.append(model)
         publishSnapshot(for: model, phase: .queued, downloadedBytes: ledgerRequest(model.id, in: ledger)?.receivedBytes ?? 0)
         await startPendingDownloads()
     }
 
-    func cancel(modelID: String) async {
+    /// Cancels only after the intent is durable. Returning `false` means the
+    /// coordinator deliberately preserved the task/staging rather than claim a
+    /// cancellation that a later launch could undo.
+    @discardableResult
+    func cancel(modelID: String) async -> Bool {
         if let pendingIndex = pending.firstIndex(where: { $0.id == modelID }) {
+            cancellationBarriers.insert(modelID)
+            guard persistCancellationStatus(modelID: modelID, status: .cancelRequested) else {
+                cancellationBarriers.remove(modelID)
+                publishCancellationPersistenceFailure(modelID: modelID)
+                return false
+            }
             pending.remove(at: pendingIndex)
-            markLedgerTerminal(modelID: modelID, status: .deleted)
+            guard persistCancellationStatus(modelID: modelID, status: .deleted) else {
+                publishCancellationPersistenceFailure(modelID: modelID)
+                return false
+            }
             discardStaging(modelID: modelID)
             publishTerminal(modelID: modelID, phase: .deleted)
-            return
+            cancellationBarriers.remove(modelID)
+            return true
         }
-        guard let active = inflight[modelID] else { return }
+        guard let active = inflight[modelID] else {
+            reconcileNoOpCancellation(modelID: modelID)
+            return true
+        }
 
-        updateLedger(modelID: modelID) { $0.status = .cancelRequested }
+        cancellationBarriers.insert(modelID)
+        guard persistCancellationStatus(modelID: modelID, status: .cancelRequested) else {
+            cancellationBarriers.remove(modelID)
+            publishCancellationPersistenceFailure(
+                modelID: modelID,
+                recoverableGeneration: active.operationGeneration
+            )
+            return false
+        }
         publishSnapshot(
             modelID: modelID,
             phase: .cancelling,
@@ -181,15 +223,28 @@ final class IOSModelDownloadCoordinator {
         active.task.cancel()
         await active.task.value
         inflight.removeValue(forKey: modelID)
+        guard rollbackRacedInstallationIfNeeded(active) else {
+            reconcileInstalledAfterCancellationCleanupFailure(active)
+            await startPendingDownloads()
+            return false
+        }
+        guard persistCancellationStatus(modelID: modelID, status: .deleted) else {
+            publishCancellationPersistenceFailure(modelID: modelID)
+            await startPendingDownloads()
+            return false
+        }
         try? fileManager.removeItem(at: active.stagingRoot)
-        markLedgerTerminal(modelID: modelID, status: .deleted)
         publishTerminal(modelID: modelID, phase: .deleted)
+        cancellationBarriers.remove(modelID)
         await startPendingDownloads()
+        return true
     }
 
     func delete(model: ModelDescriptor) async throws {
         if inflight[model.id] != nil || pending.contains(where: { $0.id == model.id }) {
-            await cancel(modelID: model.id)
+            guard await cancel(modelID: model.id) else {
+                throw CancellationPersistenceError()
+            }
         }
         let generation = beginOperation()
         publishSnapshot(
@@ -223,17 +278,17 @@ final class IOSModelDownloadCoordinator {
                     ledger.requests[index].status = .failed
                     continue
                 }
+                if request.status == .cancelRequested || request.status == .deleted {
+                    discardStaging(modelID: request.modelID)
+                    ledger.requests[index].status = .deleted
+                    continue
+                }
                 let installed = descriptor.isAvailable(
                     in: AppPaths.modelsDir,
                     fileManager: fileManager
                 )
                 if installed {
                     ledger.requests[index].status = .installed
-                    continue
-                }
-                if request.status == .cancelRequested || request.status == .deleted {
-                    discardStaging(modelID: request.modelID)
-                    ledger.requests[index].status = .deleted
                     continue
                 }
                 if request.status != .installed {
@@ -317,7 +372,11 @@ final class IOSModelDownloadCoordinator {
                 targetDir: targetDir,
                 stagingRoot: stagingRoot,
                 totalBytes: totalBytes,
-                operationGeneration: generation
+                operationGeneration: generation,
+                targetWasAvailableAtStart: model.isAvailable(
+                    in: AppPaths.modelsDir,
+                    fileManager: fileManager
+                )
             )
         } catch {
             markLedgerTerminal(modelID: model.id, status: .failed)
@@ -347,7 +406,8 @@ final class IOSModelDownloadCoordinator {
                 ),
                 stagingRoot: stagingRoot
             )
-            guard inflight[model.id]?.operationGeneration == generation else { return }
+            guard inflight[model.id]?.operationGeneration == generation,
+                  !cancellationBarriers.contains(model.id) else { return }
             inflight.removeValue(forKey: model.id)
             markLedgerTerminal(modelID: model.id, status: .installed, receivedBytes: totalBytes)
             diagnosticsStore.recordSuccess(expectedBytes: totalBytes)
@@ -363,13 +423,15 @@ final class IOSModelDownloadCoordinator {
             return
         } catch let error as HuggingFaceDownloader.DownloadError {
             if case .cancelled = error { return }
-            guard inflight[model.id]?.operationGeneration == generation else { return }
+            guard inflight[model.id]?.operationGeneration == generation,
+                  !cancellationBarriers.contains(model.id) else { return }
             inflight.removeValue(forKey: model.id)
             markLedgerTerminal(modelID: model.id, status: .failed)
             diagnosticsStore.recordFailure(classification: "transfer", message: error.localizedDescription)
             publishFailed(modelID: model.id, message: error.localizedDescription)
         } catch {
-            guard inflight[model.id]?.operationGeneration == generation else { return }
+            guard inflight[model.id]?.operationGeneration == generation,
+                  !cancellationBarriers.contains(model.id) else { return }
             inflight.removeValue(forKey: model.id)
             markLedgerTerminal(modelID: model.id, status: .failed)
             diagnosticsStore.recordFailure(classification: "filesystem", message: error.localizedDescription)
@@ -410,14 +472,19 @@ final class IOSModelDownloadCoordinator {
                 Task { @MainActor in
                     IOSModelDeliveryBackgroundEventRelay.complete(forSessionIdentifier: identifier)
                 }
-            }
+            },
+            artifactURLPolicy: ModelArtifactURLPolicy(
+                allowedInitialHosts: configuration.allowedHosts,
+                allowedRedirectHostSuffixes: configuration.allowedRedirectHostSuffixes
+            )
         )
     }
 
     private func handleProgress(_ progress: HuggingFaceDownloader.RepositoryProgress) {
         diagnosticsStore.record(progress: progress)
         guard let active = inflight.values.first,
-              let descriptor = modelAssetStore.descriptor(id: active.modelID)?.model else { return }
+              let descriptor = modelAssetStore.descriptor(id: active.modelID)?.model,
+              !cancellationBarriers.contains(active.modelID) else { return }
         let phase: IOSModelDeliverySnapshot.Phase
         let ledgerStatus: IOSModelDownloadLedger.Status
         switch progress.phase {
@@ -441,12 +508,12 @@ final class IOSModelDownloadCoordinator {
             persisted: ledgerReceivedBytes(modelID: active.modelID),
             total: active.totalBytes
         )
-        persistProgressIfNeeded(
+        guard persistProgressIfNeeded(
             modelID: active.modelID,
             status: ledgerStatus,
             bytes: visibleBytes,
             retryCount: progress.retryCount
-        )
+        ) else { return }
         publishSnapshot(
             modelID: active.modelID,
             phase: phase,
@@ -541,20 +608,37 @@ final class IOSModelDownloadCoordinator {
         try? fileManager.removeItem(at: stagingRoot(modelID: modelID))
     }
 
+    @discardableResult
     private func persistProgressIfNeeded(
         modelID: String,
         status: IOSModelDownloadLedger.Status,
         bytes: Int64,
         retryCount: Int
-    ) {
-        let now = ProcessInfo.processInfo.systemUptime
-        let last = lastLedgerProgressWrite[modelID] ?? 0
-        guard now - last >= 0.5 || status != .downloading else { return }
-        lastLedgerProgressWrite[modelID] = now
-        updateLedger(modelID: modelID) {
-            $0.status = status
-            $0.receivedBytes = max($0.receivedBytes, bytes)
-            $0.retryCount = max($0.retryCount, retryCount)
+    ) -> Bool {
+        guard !cancellationBarriers.contains(modelID) else { return false }
+        do {
+            var ledger = try ledgerStore.load()
+            guard let index = ledger.requests.firstIndex(where: { $0.modelID == modelID }) else {
+                return false
+            }
+            let durableStatus = ledger.requests[index].status
+            guard durableStatus != .cancelRequested, durableStatus != .deleted else {
+                cancellationBarriers.insert(modelID)
+                return false
+            }
+
+            let now = ProcessInfo.processInfo.systemUptime
+            let last = lastLedgerProgressWrite[modelID] ?? 0
+            guard now - last >= 0.5 || status != .downloading else { return true }
+            ledger.requests[index].status = status
+            ledger.requests[index].receivedBytes = max(ledger.requests[index].receivedBytes, bytes)
+            ledger.requests[index].retryCount = max(ledger.requests[index].retryCount, retryCount)
+            try ledgerStore.save(ledger)
+            lastLedgerProgressWrite[modelID] = now
+            return true
+        } catch {
+            diagnosticsStore.recordFailure(classification: "ledger-write", message: error.localizedDescription)
+            return false
         }
     }
 
@@ -576,12 +660,139 @@ final class IOSModelDownloadCoordinator {
         mutate: (inout IOSModelDownloadLedger.Request) -> Void
     ) {
         do {
-            var ledger = try ledgerStore.load()
-            updateRequest(modelID, in: &ledger, mutate: mutate)
-            try ledgerStore.save(ledger)
+            try persistLedgerUpdate(modelID: modelID, mutate: mutate)
         } catch {
             diagnosticsStore.recordFailure(classification: "ledger-write", message: error.localizedDescription)
         }
+    }
+
+    /// Critical cancellation transitions use this throwing path. Best-effort
+    /// ledger updates are acceptable for progress diagnostics, but never for a
+    /// state that authorizes task cancellation or destructive staging cleanup.
+    private func persistLedgerUpdate(
+        modelID: String,
+        mutate: (inout IOSModelDownloadLedger.Request) -> Void
+    ) throws {
+        var ledger = try ledgerStore.load()
+        guard ledger.requests.contains(where: { $0.modelID == modelID }) else {
+            throw IOSModelDownloadLedgerError.invalidDocument
+        }
+        updateRequest(modelID, in: &ledger, mutate: mutate)
+        try ledgerStore.save(ledger)
+    }
+
+    private func persistCancellationStatus(
+        modelID: String,
+        status: IOSModelDownloadLedger.Status
+    ) -> Bool {
+        do {
+            try persistLedgerUpdate(modelID: modelID) { $0.status = status }
+            return true
+        } catch {
+            diagnosticsStore.recordFailure(
+                classification: "cancellation-ledger-write",
+                message: error.localizedDescription
+            )
+            return false
+        }
+    }
+
+    private func publishCancellationPersistenceFailure(
+        modelID: String,
+        recoverableGeneration: UInt64? = nil
+    ) {
+        publishSnapshot(
+            modelID: modelID,
+            phase: .failed,
+            downloadedBytes: ledgerReceivedBytes(modelID: modelID),
+            totalBytes: inflight[modelID]?.totalBytes
+                ?? modelAssetStore.descriptor(id: modelID)?.model.estimatedDownloadBytes,
+            message: CancellationPersistenceError.privacySafeMessage,
+            generation: recoverableGeneration ?? beginOperation()
+        )
+    }
+
+    /// The transfer may cross its synchronous atomic-install boundary just as
+    /// cancellation arrives. Never tombstone that request while leaving a
+    /// newly installed target behind.
+    private func rollbackRacedInstallationIfNeeded(_ active: InFlightDownload) -> Bool {
+        guard !active.targetWasAvailableAtStart,
+              let model = modelAssetStore.descriptor(id: active.modelID)?.model,
+              model.isAvailable(in: AppPaths.modelsDir, fileManager: fileManager) else {
+            return true
+        }
+        do {
+            try fileManager.removeItem(at: active.targetDir)
+            return true
+        } catch {
+            diagnosticsStore.recordFailure(
+                classification: "cancellation-install-rollback",
+                message: error.localizedDescription
+            )
+            return false
+        }
+    }
+
+    /// If rollback cannot remove a target that completed during cancellation,
+    /// make the installed state durable before exposing it. A failed ledger
+    /// write must never produce a false terminal-success snapshot.
+    private func reconcileInstalledAfterCancellationCleanupFailure(_ active: InFlightDownload) {
+        do {
+            try persistLedgerUpdate(modelID: active.modelID) { request in
+                request.status = .installed
+                request.receivedBytes = max(request.receivedBytes, active.totalBytes)
+                request.totalBytes = max(request.totalBytes, active.totalBytes)
+            }
+            cancellationBarriers.remove(active.modelID)
+            publishSnapshot(
+                modelID: active.modelID,
+                phase: .installed,
+                downloadedBytes: active.totalBytes,
+                totalBytes: active.totalBytes,
+                message: nil,
+                generation: beginOperation()
+            )
+        } catch {
+            diagnosticsStore.recordFailure(
+                classification: "cancellation-install-reconcile",
+                message: error.localizedDescription
+            )
+            publishSnapshot(
+                modelID: active.modelID,
+                phase: .failed,
+                downloadedBytes: active.totalBytes,
+                totalBytes: active.totalBytes,
+                message: CancellationInstallReconciliationError.privacySafeMessage,
+                generation: beginOperation()
+            )
+        }
+    }
+
+    /// A completion can win the race with a user's Cancel tap. Re-publish the
+    /// durable/current outcome instead of leaving an optimistic UI state behind.
+    private func reconcileNoOpCancellation(modelID: String) {
+        let durableStatus = try? ledgerStore.load().requests
+            .first(where: { $0.modelID == modelID })?.status
+        if durableStatus == .cancelRequested || durableStatus == .deleted {
+            publishTerminal(modelID: modelID, phase: .deleted)
+            return
+        }
+        if let model = modelAssetStore.descriptor(id: modelID)?.model,
+           model.isAvailable(in: AppPaths.modelsDir, fileManager: fileManager) {
+            publishSnapshot(
+                modelID: modelID,
+                phase: .installed,
+                downloadedBytes: model.estimatedDownloadBytes ?? 0,
+                totalBytes: model.estimatedDownloadBytes,
+                message: nil,
+                generation: beginOperation()
+            )
+            return
+        }
+        publishFailed(
+            modelID: modelID,
+            message: "No active model download was found. Retry to start a new download."
+        )
     }
 
     private func updateRequest(

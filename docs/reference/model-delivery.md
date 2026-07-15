@@ -26,6 +26,36 @@ diagnostics/model-downloads/
 models/
 ```
 
+### Cross-platform production catalog
+
+`Sources/Resources/qwenvoice_production_model_catalog.json` is the reproducible, bundled catalog
+contract for future convergence of macOS, CLI, and iPhone delivery. Its versioned shape is declared
+by `config/model-catalog-schema-v1.json`; it is generated only from the shared model contract and
+checked-in exact file evidence:
+
+```sh
+python3 scripts/model_catalog_contract.py rebuild --check
+python3 scripts/model_catalog_contract.py validate
+```
+
+Every covered artifact has a 40-character immutable Hugging Face revision, an allowlisted HTTPS
+resolve URL, safe relative paths, positive exact byte counts, and a lowercase SHA-256 for every
+required file. Source digests make independent edits to the shared contract, iPhone catalog, or
+generated catalog fail validation.
+
+Initial artifact requests remain restricted to the catalog's exact host. URLSession redirects are
+also policy-checked: only HTTPS destinations without credentials or IP/local hosts are accepted,
+and the destination must remain on the configured host or the explicit Hugging Face distribution
+suffixes `huggingface.co` and `hf.co`. A rejected redirect is never adopted as background work.
+
+The catalog is `complete`: the bundled iPhone evidence supplies the three Speed variants and
+`config/model-artifact-receipts.json` supplies the three Quality variants. All six packages pin a
+revision plus the exact size and SHA-256 of every required file; no hash or size is inferred.
+macOS and CLI now resolve `ProductionModelCatalog` and call the same exact-file `downloadFiles`
+route rather than enumerating a live repository. `validate --require-complete` proves this static
+contract. It does not replace the isolated Mac/iPhone lifecycle proofs, which must be refreshed as
+explicit quality evidence after redirect, restoration, or delivery-routing changes.
+
 The iOS ledger is atomically written, versioned, and contains only privacy-safe identifiers and
 relative paths. It records the logical request, model and artifact version, expected and verified
 files, retries, monotonic received bytes, and terminal state. A one-time migration cancels the old
@@ -53,9 +83,12 @@ transfer. A separate no-progress message appears after 20 seconds of an actively
 waiting-for-connectivity comes from the URLSession delegate.
 
 Explicit **Cancel** is a discard operation. The coordinator first persists `cancelRequested`, stops
-new task registration, awaits all resume-data cancellation callbacks and terminal tasks, and only
-then removes staging. **Retry** preserves already verified files and reconstructs progress from the
-ledger, staged partials, and adopted task byte counts.
+new task registration, awaits all resume-data cancellation callbacks and terminal tasks, persists
+the final deleted tombstone, and only then removes staging or reports deletion. If either critical
+ledger write fails, cancellation fails closed: tasks or staging are preserved as applicable, the UI
+shows a privacy-safe storage error, and relaunch cannot silently reinterpret the request as queued.
+**Retry** preserves already verified files and reconstructs progress from the ledger, staged
+partials, and adopted task byte counts.
 
 Transient connection failures and HTTP 408, 429, and 5xx responses retry up to three times. A
 `Retry-After` value is honored up to five minutes. One integrity mismatch receives one clean retry.
@@ -96,6 +129,11 @@ background/relaunch/install/visible-delete lifecycle in
 81.6 seconds and reported HTTP/2 plus HTTP/1.1 with fair thermal state. This is lifecycle evidence,
 not a performance baseline, and did not change concurrency or range-chunking defaults.
 
+That proof predates redirect-policy enforcement. The next explicitly requested isolated iPhone
+delivery proof must therefore confirm that the provider's live redirect chain remains within the
+declared `huggingface.co`/`hf.co` boundary. This deferred live check does not block deterministic
+development publication, and it must not be represented as passed from the earlier artifact.
+
 ## Tuning policy
 
 One live transfer is a lifecycle proof, not a concurrency experiment. Connection counts or chunking
@@ -104,3 +142,7 @@ without more retries, duplicate bytes, thermal regression, or restoration failur
 
 Background Assets was evaluated and not adopted in this change. See
 [`../decisions/model-delivery-background-assets.md`](../decisions/model-delivery-background-assets.md).
+
+Changed-path evidence expectations are classified by
+[`evidence-impact.md`](evidence-impact.md). Live model downloads remain explicit quality evidence,
+not ordinary commit, merge, or release-packaging blockers.

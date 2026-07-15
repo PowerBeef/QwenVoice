@@ -17,6 +17,7 @@
 # Usage:
 #   scripts/ios_device.sh doctor                  # environment + device preflight
 #   scripts/ios_device.sh build                   # signed device build (-Onone)
+#   scripts/ios_device.sh logic-test              # pure iOS XCTest bundle on the paired phone
 #   scripts/ios_device.sh install                 # install the built app
 #   scripts/ios_device.sh launch [spec]           # launch (with device diagnostics if spec given)
 #   scripts/ios_device.sh console [spec] [--voice-id SAVED_VOICE_ID]
@@ -68,6 +69,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 . "$ROOT_DIR/scripts/lib/build_paths.sh"
+. "$ROOT_DIR/scripts/lib/required_steps.sh"
 
 SCHEME="VocelloiOS"
 CONFIG="Release"
@@ -532,6 +534,43 @@ cmd_build() {
 
   note "built $APP_PATH"
   warn_if_storage_bloated
+}
+
+cmd_logic_test() {
+  [[ $# -eq 0 ]] || die "logic-test takes no arguments"
+  require_team
+  ensure_project_regenerated
+  local team dev result_dir result_bundle
+  team="$(derive_team)"
+  dev="$(resolve_device)"
+  guard_device_state "$dev"
+  ensure_spm_resolved "$QVOICE_SCRATCH_PACKAGE_RESOLUTION" \
+    "$QVOICE_XCODE_SOURCE_PACKAGES" ios-device-logic VocelloiOSLogic Release \
+    "id=$dev"
+  result_dir="$QVOICE_ARTIFACTS_IOS/tests/logic-$(date -u +%Y%m%d-%H%M%S)"
+  result_bundle="$result_dir/VocelloiOSLogicTests.xcresult"
+  mkdir -p "$result_dir" "$DERIVED"
+  note "running pure iOS logic tests on the paired physical phone"
+  xcb_run \
+    -project "$PROJECT" \
+    -scheme VocelloiOSLogic \
+    -configuration "$CONFIG" \
+    -destination "id=$dev" \
+    -derivedDataPath "$DERIVED" \
+    -clonedSourcePackagesDirPath "$QVOICE_XCODE_SOURCE_PACKAGES" \
+    -disableAutomaticPackageResolution \
+    -onlyUsePackageVersionsFromResolvedFile \
+    -resultBundlePath "$result_bundle" \
+    -resultBundleVersion 3 \
+    -allowProvisioningUpdates \
+    DEVELOPMENT_TEAM="$team" \
+    CODE_SIGN_STYLE=Automatic \
+    ARCHS=arm64 \
+    ONLY_ACTIVE_ARCH=YES \
+    SWIFT_OPTIMIZATION_LEVEL=-Onone \
+    SWIFT_COMPILATION_MODE=incremental \
+    test
+  note "iOS logic tests PASS · $result_bundle"
 }
 
 cmd_install() {
@@ -1758,32 +1797,43 @@ cmd_gate() {
   local run_id="ios-gate-$(date +%Y%m%d-%H%M%S)"
   local gate_dir="$QVOICE_ARTIFACTS_IOS/gates/$run_id"
   local verdict="$gate_dir/verdict.txt"
+  local step_ledger="$gate_dir/required-steps.json"
+  local workflow="ios-gate"
+  [[ "${QVOICE_GATE_SKIP_GENERATION:-0}" != "1" ]] || workflow="ios-gate-without-generation"
   mkdir -p "$gate_dir"
+  required_steps_init "$step_ledger" "$workflow" "$run_id"
   note "iOS device gate: project inputs"
-  "$ROOT_DIR/scripts/check_project_inputs.sh" >"$gate_dir/inputs.log" 2>&1 \
+  required_step_run "$step_ledger" project-inputs \
+    "$ROOT_DIR/scripts/check_project_inputs.sh" >"$gate_dir/inputs.log" 2>&1 \
     || { echo "project-inputs: FAIL" | tee "$verdict"; return 1; }
   echo "project-inputs: PASS" | tee "$verdict"
   note "iOS device gate: physical-device preflight"
-  cmd_preflight >"$gate_dir/preflight.log" 2>&1 \
+  required_step_run "$step_ledger" device-preflight cmd_preflight \
+    >"$gate_dir/preflight.log" 2>&1 \
     || { echo "preflight: FAIL" | tee -a "$verdict"; return 1; }
   echo "preflight: PASS" | tee -a "$verdict"
   note "iOS device gate: headless generation"
   if [[ "${QVOICE_GATE_SKIP_GENERATION:-0}" == "1" ]]; then
     echo "generation: SKIPPED" | tee -a "$verdict"
-  elif _gate_generation_check "$gate_dir" >"$gate_dir/generation.log" 2>&1; then
+  elif required_step_run "$step_ledger" generation _gate_generation_check "$gate_dir" \
+      >"$gate_dir/generation.log" 2>&1; then
     echo "generation: PASS" | tee -a "$verdict"
   else
     echo "generation: FAIL" | tee -a "$verdict"; return 1
   fi
   note "iOS device gate: crashes"
-  cmd_crashes >"$gate_dir/crashes.log" 2>&1 \
+  required_step_run "$step_ledger" crash-delta cmd_crashes \
+    >"$gate_dir/crashes.log" 2>&1 \
     || { echo "crashes: FAIL" | tee -a "$verdict"; return 1; }
   echo "crashes: PASS" | tee -a "$verdict"
   if [[ "${QVOICE_GATE_SKIP_GENERATION:-0}" != "1" ]]; then
-    record_benchmark_history "$gate_dir/engine-benchmark" >/dev/null \
+    required_step_run "$step_ledger" history-publication \
+      record_benchmark_history "$gate_dir/engine-benchmark" >/dev/null \
       || { echo "history: FAIL" | tee -a "$verdict"; return 1; }
     echo "history: PASS" | tee -a "$verdict"
   fi
+  required_steps_finalize "$step_ledger" \
+    || { echo "GATE: FAIL (required-step ledger)" | tee -a "$verdict"; return 1; }
   echo "GATE: PASS" | tee -a "$verdict"
   note "iOS gate PASS · $gate_dir"
 }
@@ -1793,6 +1843,7 @@ main() {
   case "$sub" in
     doctor)  cmd_doctor "$@" ;;
     build)   cmd_build "$@" ;;
+    logic-test) cmd_logic_test "$@" ;;
     install) cmd_install "$@" ;;
     launch)  cmd_launch "$@" ;;
     console) cmd_console "$@" ;;
@@ -1811,7 +1862,7 @@ main() {
     gate)      cmd_gate "$@" ;;
     help|-h|--help)
       sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//' >&2 ;;
-    *) die "unknown subcommand '$sub' (try: doctor|build|install|launch|console|device-state|pull|bench|lang-bench|speech-assets|crashes|debug|logs|profile|memory|memory-field-report|preflight|gate|help)" ;;
+    *) die "unknown subcommand '$sub' (try: doctor|build|logic-test|install|launch|console|device-state|pull|bench|lang-bench|speech-assets|crashes|debug|logs|profile|memory|memory-field-report|preflight|gate|help)" ;;
   esac
 }
 

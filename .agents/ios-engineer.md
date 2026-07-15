@@ -27,13 +27,15 @@ Before changing iOS UI or behavior, read:
 1. `docs/reference/ios-app-guide.md` — app map + how to drive it in tests.
 2. `docs/reference/ios-device-testing.md` — deterministic compile and explicit on-device acceptance
    workflows plus burn-in safety.
-3. `docs/ARCHITECTURE.md` §6 — iOS request lifecycle, cooperative cancel, memory posture (batch was removed from iOS 2026-07-02).
+3. `docs/ARCHITECTURE.md` §6 — iOS request lifecycle, typed cancellation barrier, memory posture
+   (batch was removed from iOS 2026-07-02).
 4. `docs/reference/ios-engine-optimization.md` if the change affects generation performance or memory.
 
 ## Tools and skills (Codex)
 
 - **Shell scripts** are the only way to build/test/run real-engine iOS work on device:
   - `scripts/ios_device.sh preflight`
+  - `scripts/ios_device.sh logic-test` (standalone pure-policy XCTest on the paired phone)
   - `scripts/ios_device.sh build|install|launch`
   - `scripts/ios_device.sh bench|lang-bench`
   - `scripts/ios_device.sh speech-assets` (explicit DE/ES/JA/ZH DictationTranscriber install plus legacy Speech recheck)
@@ -63,8 +65,11 @@ Before changing iOS UI or behavior, read:
 ## Build / test commands
 
 ```sh
-# Ordinary development (compile only, no simulator launch or device/UI prerequisite)
+# Ordinary development (app + pure logic-test bundle compile only; no device/UI prerequisite)
 ./scripts/build_foundation_targets.sh ios
+
+# Explicit pure iOS policy execution on the paired physical phone (no models/network)
+scripts/ios_device.sh logic-test
 
 # Explicit frontend acceptance only. Never use Simulator.
 scripts/ios_device.sh preflight
@@ -78,9 +83,12 @@ scripts/ios_device.sh gate            # deterministic physical-device/runtime pr
 
 - **All iOS runtime work is on-device only.** The MLX engine runs in-process on Metal. XCUITest
   drives the paired physical iPhone; scripts handle the device and telemetry. The generic
-  physical-device SDK compile is the sole no-phone iOS development lane.
-- **Cooperative cancel.** iOS does not conform to `ActiveGenerationCancellable`. The generate
-  flow must discard the result on `Task.isCancelled` so cancelled takes never land in History.
+  physical-device SDK compile (app plus standalone policy-test bundle) is the sole no-phone iOS
+  development lane. The policy bundle executes only through the explicit paired-phone command.
+- **Typed cancellation barrier.** The in-process `MLXTTSEngine` conforms to
+  `ActiveGenerationCancellable`. iOS forwards user and memory-pressure reasons, awaits the active
+  task's terminal barrier before trim/unload or ownership release, and treats `.cancelled` as a
+  distinct terminal event. A cancelled take must never land in History.
 - **Use `IOSScrollView`.** iOS vertical scroll surfaces use `IOSScrollView`, not raw `ScrollView`.
 - **Mode color pairs with icon/label/position.** No color-only signal.
 - **Honor Reduce Motion / Reduce Transparency.** Animations route through `appAnimation` /
@@ -107,7 +115,8 @@ scripts/ios_device.sh gate            # deterministic physical-device/runtime pr
 - Running **runtime iOS work** on the Simulator. Real iOS tests and generation/download must run on
   a paired device; the generic physical-device SDK compile lane is the deterministic development
   check and does not require a connected phone.
-- Rethrowing `CancellationError` early inside `MLXTTSEngine.generate`.
+- Bypassing `cancelActiveGeneration(reason:)`, treating `.cancelled` as failure, or releasing
+  generation ownership before the active task reaches its terminal barrier.
 - Using raw `ScrollView` instead of `IOSScrollView`.
 - Making color the only indicator for mode or state.
 - Forgetting that the iOS app deliberately does **not** link the macOS XPC stack.

@@ -70,7 +70,8 @@ Tests assert these visible production surfaces directly.
 | Import | `voiceCloning_importButton` |
 | Record | `voiceCloning_recordReferenceButton` |
 | Active reference | `voiceCloning_activeReference` / `voiceCloning_referenceWarning` |
-| Transcript | `voiceCloning_transcriptInput` |
+| Transcript (optional) | `voiceCloning_transcriptInput`; blank selects genuine audio-only x-vector conditioning |
+| Consent | `voiceCloning_consentAcknowledgment`; Generate remains disabled until acknowledged |
 | Record clip sheet | `recordClip_record` / `_stop` / `_retake` / `_use` / `_cancel` / `_timer` |
 | Script + CTAs | `textInput_*` (shared) |
 
@@ -82,6 +83,11 @@ Tests assert these visible production surfaces directly.
 | Sort | `history_sortPicker` (menu) |
 | Clear | `history_clearMenu` → `history_clearKeepFiles` / `history_clearDeleteFiles` |
 | Row | `historyRow_<genID>` / `historyRow_play_<genID>` / `historyRow_saveAs_<genID>` / `historyRow_delete_<genID>` |
+| Degraded database state | `history_errorState`; destructive actions stay disabled until a later reload/read succeeds |
+
+Database failures are typed and fail closed: an unavailable store is not shown as empty History.
+macOS retries when the surface reloads or is re-entered; it does not currently expose a dedicated
+Retry button.
 
 ### Saved Voices (`sidebar_voices` → `screen_voices`)
 

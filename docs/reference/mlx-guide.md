@@ -8,7 +8,7 @@
 
 ## 1. Why MLX?
 
-Vocello synthesizes speech entirely on-device using **Qwen3-TTS** models. The runtime is Apple's **[MLX](https://github.com/ml-explore/mlx)** framework, accessed through the Swift packages [`mlx-swift`](https://github.com/ml-explore/mlx-swift) and [`mlx-swift-lm`](https://github.com/ml-explore/mlx-swift-lm). The lower-level audio/TTS model port is vendored from [`mlx-audio-swift`](https://github.com/Blaizzy/mlx-audio-swift) under `third_party_patches/mlx-audio-swift/`.
+Vocello synthesizes speech entirely on-device using **Qwen3-TTS** models. The runtime is Apple's **[MLX](https://github.com/ml-explore/mlx)** framework, accessed through the Swift packages [`mlx-swift`](https://github.com/ml-explore/mlx-swift) and [`mlx-swift-lm`](https://github.com/ml-explore/mlx-swift-lm). The lower-level audio/TTS model implementation is the owned [`VocelloQwen3Core`](../../Packages/VocelloQwen3Core/README.md) package, derived from [`mlx-audio-swift`](https://github.com/Blaizzy/mlx-audio-swift).
 
 MLX was chosen because it is designed for Apple Silicon:
 
@@ -126,11 +126,11 @@ let mode: QuantizationMode
 - `quantize(model:groupSize:bits:)` moved to a top-level function with a `mode:` argument.
 - The `biases` result from `quantized()` became optional.
 
-Vocello's vendored `mlx-audio-swift` port was written against the 0.30.x API, and the project has no exhaustive proof for every subtle numeric shift from a core-MLX bump. For that reason the project **remains pinned at 0.30.6 / 2.30.6**. A future upgrade must be done on a throwaway branch, in lockstep across `project.yml` and `third_party_patches/mlx-audio-swift/Package.swift`, and validated with fixed-seed `vocello bench`, clean audioQC, and the applicable automated language/prosody gates.
+Vocello Qwen3 Core was written against the 0.30.x API, and the project has no exhaustive proof for every subtle numeric shift from a core-MLX bump. For that reason the project **remains pinned at 0.30.6 / 2.30.6**. A future upgrade must be done on a throwaway branch, in lockstep across `project.yml` and `Packages/VocelloQwen3Core/Package.swift`, and validated with fixed-seed `vocello bench`, clean audioQC, and the applicable automated language/prosody gates.
 
 ### 3.4 Loading weights
 
-Models are downloaded from the Hugging Face `mlx-community` repos listed in `Sources/Resources/qwenvoice_contract.json`. Weights are stored as `.safetensors` and loaded into the vendored Qwen3-TTS model. The load path:
+Models are downloaded from the Hugging Face `mlx-community` repos listed in `Sources/Resources/qwenvoice_contract.json`. Weights are stored as `.safetensors` and loaded into the owned Qwen3-TTS model. The load path:
 
 1. Resolve the model ID from the contract.
 2. Download / verify the package via `SwiftHuggingFace`.
@@ -142,7 +142,7 @@ Models are downloaded from the Hugging Face `mlx-community` repos listed in `Sou
 
 ## 4. Qwen3-TTS decode loop anatomy
 
-Understanding the per-frame loop is essential for optimization work. The vendored Qwen3-TTS model in `third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/` has three main stages.
+Understanding the per-frame loop is essential for optimization work. The owned Qwen3-TTS model in `Packages/VocelloQwen3Core/Sources/MLXAudioTTS/Models/Qwen3TTS/` has three main stages.
 
 ### 4.1 Talker (language model)
 
@@ -269,14 +269,17 @@ Measured on the same ~70 s custom/Speed input (`benchmarks/OPTIMIZATION.md` §F.
 
 The streaming peak is **flat with length** — short, medium, and long inputs all peak around 3 GB. This is why iPhone generation is viable despite the lower device RAM.
 
-### 6.1 macOS keeps `events` unbounded; iOS bounds it
+### 6.1 Both event streams are bounded and measured
 
 `MLXTTSEngine.events` is the `AsyncStream` that delivers chunks to the UI:
 
-- **macOS**: `.unbounded`. The chunk transport must never drop a chunk.
-- **iOS**: `.bufferingNewest(64)`. Bounded to keep memory under the shared-process budget.
+- **macOS**: `.bufferingNewest(256)`.
+- **iOS**: `.bufferingNewest(96)` to keep memory bounded under the shared-process budget.
 
-Do not unify these.
+`GenerationEventDeliveryProbe` records accepted and dropped chunk, progress, terminal, and
+termination yields. Consumers must drain continuously, and validators must treat a dropped yield as
+evidence rather than assuming bounded delivery was lossless. Do not change either capacity or the
+probe contract without a memory-and-playback review.
 
 ---
 
@@ -341,7 +344,7 @@ a new maintainer decision. iPhone speed work targets the 1.7B variants only
 
 ### 8.1 `os_signpost` and `xctrace`
 
-The vendored Qwen3-TTS decode loop emits `os_signpost` intervals:
+The owned Qwen3-TTS decode loop emits `os_signpost` intervals:
 
 - "Talker Forward"
 - "Code Predictor Loop" / "Code Predictor Step"
@@ -392,7 +395,7 @@ See [`telemetry-and-benchmarking.md`](telemetry-and-benchmarking.md) for the ful
 ### 9.1 Current pins
 
 - `mlx-swift`: exact **0.30.6** in `project.yml`
-- `mlx-swift-lm`: exact **2.30.6** in `third_party_patches/mlx-audio-swift/Package.swift`
+- `mlx-swift-lm`: exact **2.30.6** in `Packages/VocelloQwen3Core/Package.swift`
 
 Move both in lockstep. Do not float one without the other.
 
@@ -409,7 +412,7 @@ Only upgrade when:
 1. Create a throwaway branch from `main`.
 2. Update both pin sites simultaneously:
    - `project.yml` → `mlx-swift` pin
-   - `third_party_patches/mlx-audio-swift/Package.swift` → `mlx-swift-lm` and `mlx-swift` pins
+   - `Packages/VocelloQwen3Core/Package.swift` → `mlx-swift-lm` and `mlx-swift` pins
 3. Run `./scripts/regenerate_project.sh`.
 4. Build both foundation targets:
    ```sh
@@ -442,8 +445,11 @@ Do not regress these without a maintainer decision:
 - **No output-side silence gating.** Suppressing natural pauses masks real defects.
 - **Do not revert the input-side decoder-drift fix (`4fab110`).**
 - **Do not pipeline the 15-pass Code Predictor loop.** It is autoregressive; pipelining would change sampling semantics.
-- **macOS `MLXTTSEngine.events` stays `.unbounded`; iOS stays `.bufferingNewest(64)`.**
-- **Streaming-first on iOS and on the macOS CLI (`vocello generate` / `vocello bench`).** The macOS *app* quality path remains full-result-first. Do not force the macOS app onto the streaming path for quality generation.
+- **macOS `MLXTTSEngine.events` stays `.bufferingNewest(256)`; iOS stays
+  `.bufferingNewest(96)`.** Keep the delivery probe and continuous drains with them.
+- **Streaming-first on iOS, the macOS app, and the macOS CLI** (`vocello generate` /
+  `vocello bench`). The three macOS app coordinators set `shouldStream: true`; `--no-stream` is an
+  explicit CLI diagnostic, not the app quality path.
 
 ---
 
@@ -468,6 +474,10 @@ Do not regress these without a maintainer decision:
 | `Memory.snapshot()` | `MLX` | Read active/cache/peak memory. |
 
 ### Environment variables
+
+`config/runtime-debug-knobs.json` is authoritative. Every production-affecting override below is
+read through `RuntimeDebugGate` and is inert unless `QWENVOICE_DEBUG=1`; bounded observability keys
+such as telemetry selection are classified separately and do not change synthesis policy.
 
 | Variable | Effect |
 |---|---|

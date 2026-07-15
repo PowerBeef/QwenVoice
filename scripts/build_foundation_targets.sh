@@ -51,6 +51,7 @@ summary = {
     "result_bundles": {
         "macos": "qwenvoice-macos-build.xcresult",
         "ios": "vocello-ios-generic-build.xcresult",
+        "iosLogic": "vocello-ios-logic-generic-build.xcresult",
     },
 }
 summary_path.write_text(json.dumps(summary, indent=2) + "\n")
@@ -93,10 +94,11 @@ build_macos() {
 build_ios() {
   local derived_data_path="$FOUNDATION_DERIVED_ROOT/ios"
   local result_bundle_path="$FOUNDATION_BUILD_ROOT/vocello-ios-generic-build.xcresult"
+  local logic_result_bundle_path="$FOUNDATION_BUILD_ROOT/vocello-ios-logic-generic-build.xcresult"
 
   ensure_spm_resolved "$QVOICE_SCRATCH_PACKAGE_RESOLUTION" "$SOURCE_PACKAGES_DIR" \
     foundation-ios VocelloiOS Release 'generic/platform=iOS'
-  rm -rf "$derived_data_path" "$result_bundle_path"
+  rm -rf "$derived_data_path" "$result_bundle_path" "$logic_result_bundle_path"
 
   xcb_run \
     -project "$PROJECT_FILE" \
@@ -115,8 +117,32 @@ build_ios() {
     SWIFT_OPTIMIZATION_LEVEL="-Onone" \
     SWIFT_COMPILATION_MODE="incremental" \
     build
+
+  # Compile the standalone iOS policy-test bundle for the physical-device SDK.
+  # `build` deliberately does not execute XCTest and does not require a phone.
+  xcb_run \
+    -project "$PROJECT_FILE" \
+    -scheme VocelloiOSLogic \
+    -configuration Release \
+    -destination 'generic/platform=iOS' \
+    -derivedDataPath "$derived_data_path" \
+    -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
+    -disableAutomaticPackageResolution \
+    -onlyUsePackageVersionsFromResolvedFile \
+    -resultBundlePath "$logic_result_bundle_path" \
+    -resultBundleVersion 3 \
+    CODE_SIGNING_ALLOWED=NO \
+    ARCHS=arm64 \
+    ONLY_ACTIVE_ARCH=YES \
+    SWIFT_OPTIMIZATION_LEVEL="-Onone" \
+    SWIFT_COMPILATION_MODE="incremental" \
+    build
   write_build_provenance "$FOUNDATION_BUILD_ROOT/last-build.json" \
     "scripts/build_foundation_targets.sh ios" VocelloiOS Release \
+    "generic/platform=iOS" arm64 Onone disabled \
+    "$derived_data_path" "$SOURCE_PACKAGES_DIR"
+  write_build_provenance "$FOUNDATION_BUILD_ROOT/ios-logic-last-build.json" \
+    "scripts/build_foundation_targets.sh ios logic" VocelloiOSLogic Release \
     "generic/platform=iOS" arm64 Onone disabled \
     "$derived_data_path" "$SOURCE_PACKAGES_DIR"
 }

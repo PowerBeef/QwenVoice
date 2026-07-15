@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "owner": "backend-runtime",
+  "masterGate": "QWENVOICE_DEBUG",
+  "sourceRoots": [
+    "Sources",
+    "Packages/VocelloQwen3Core/Sources"
+  ],
+  "groups": [
+    {
+      "id": "production-affecting-debug",
+      "gateRequired": true,
+      "releaseBehavior": "ignored-unless-master-gate-enabled",
+      "purpose": "Isolated storage, catalog, sampler, streaming, lifecycle, and memory-policy diagnostics.",
+      "keys": [
+        "QVOICE_APP_SUPPORT_DIR",
+        "QVOICE_IOS_DISABLE_PROACTIVE_PREFETCH",
+        "QVOICE_IOS_MEMORY_GUARD_FORCE_BAND",
+        "QVOICE_IOS_MEMORY_GUARD_FORCE_CRITICAL_ONCE",
+        "QVOICE_IOS_MEMORY_PROFILE",
+        "QVOICE_IOS_MLX_CACHE_LIMIT_MB",
+        "QVOICE_IOS_MLX_MEMORY_LIMIT_MB",
+        "QVOICE_IOS_MODEL_ALLOWED_HOSTS",
+        "QVOICE_IOS_MODEL_CATALOG_URL",
+        "QVOICE_IOS_SIMULATED_PROCESS_LIMIT_MB",
+        "QVOICE_IOS_THERMAL_GATE",
+        "QVOICE_TALKER_KV_QUANT",
+        "QVOICE_TALKER_KV_WINDOW",
+        "QWENVOICE_APP_SUPPORT_DIR",
+        "QWENVOICE_BENCH_FORCE_COLD",
+        "QWENVOICE_ENGINE_RETIRE_DWELL_SECONDS",
+        "QWENVOICE_ENGLISH_DICTION_REINFORCEMENT",
+        "QWENVOICE_FORCE_MEMORY_CLASS",
+        "QWENVOICE_LIVE_PREVIEW_DIAGNOSTICS",
+        "QWENVOICE_LIVE_PREVIEW_PREBUFFER_CHUNKS",
+        "QWENVOICE_LIVE_PREVIEW_PREBUFFER_SECONDS",
+        "QWENVOICE_MAC_WARM_GATE",
+        "QWENVOICE_SAMPLER_COMPILE",
+        "QWENVOICE_STREAMING_OUTPUT_POLICY",
+        "QWENVOICE_STREAMING_PREVIEW_DATA",
+        "QWENVOICE_SUBTALKER_TEMP",
+        "QWENVOICE_SUBTALKER_TOPK",
+        "QWENVOICE_SUBTALKER_TOPP",
+        "QWENVOICE_SUPPRESS_WARMUP",
+        "QWENVOICE_TALKER_MINP",
+        "QWENVOICE_TALKER_TEMP",
+        "QWENVOICE_TALKER_TOPK",
+        "QWENVOICE_TALKER_TOPP"
+      ]
+    },
+    {
+      "id": "bounded-observability",
+      "gateRequired": false,
+      "releaseBehavior": "diagnostic-only-no-product-policy-change",
+      "purpose": "Bounded telemetry selection and benchmark correlation; never changes model correctness or public storage roots.",
+      "keys": [
+        "QVOICE_MAC_BENCH_CELL",
+        "QVOICE_MAC_BENCH_RUN_ID",
+        "QVOICE_MAC_BENCH_TAKE_INDEX",
+        "QVOICE_MAC_BENCH_WARM_STATE",
+        "QWENVOICE_BENCH_DELIVERY",
+        "QWENVOICE_DIAGNOSTICS_MAX_MB",
+        "QWENVOICE_NATIVE_TELEMETRY_MODE"
+      ]
+    },
+    {
+      "id": "device-diagnostics-harness",
+      "gateRequired": false,
+      "compileCondition": "QVOICE_DEVICE_DIAGNOSTICS",
+      "releaseBehavior": "unavailable-without-diagnostics-compilation-condition",
+      "purpose": "Physical-device, model, memory, language, and Speech-asset diagnostic specifications owned by repository scripts.",
+      "keys": [
+        "QVOICE_IOS_DEVICE_DIAGNOSTICS_CLONE_VOICE_ID",
+        "QVOICE_IOS_DEVICE_DIAGNOSTICS_CRASH_TEST",
+        "QVOICE_IOS_DEVICE_DIAGNOSTICS_CUSTOM_SPEAKER",
+        "QVOICE_IOS_DEVICE_DIAGNOSTICS_DESIGN_INSTRUCTION",
+        "QVOICE_IOS_DEVICE_DIAGNOSTICS_LANGUAGE",
+        "QVOICE_IOS_DEVICE_DIAGNOSTICS_SEED",
+        "QVOICE_IOS_DEVICE_DIAGNOSTICS_SPEC",
+        "QVOICE_IOS_DEVICE_DIAGNOSTICS_VARIATION",
+        "QVOICE_IOS_DEVICE_DIAGNOSTICS_VERIFY_OUTPUT",
+        "QVOICE_IOS_DEVICE_MEMORY_QUALIFICATION_SPEC",
+        "QVOICE_IOS_DEVICE_RUN_ID",
+        "QVOICE_IOS_SPEECH_ASSET_LOCALES"
+      ]
+    },
+    {
+      "id": "master-gate",
+      "gateRequired": false,
+      "releaseBehavior": "explicit-opt-in",
+      "purpose": "Enables runtime diagnostic overrides in a Release-only build topology.",
+      "keys": ["QWENVOICE_DEBUG"]
+    }
+  ]
+}

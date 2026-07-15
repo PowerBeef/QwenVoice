@@ -250,12 +250,12 @@ def _validate_policy_document(document: Any) -> tuple[tuple[dict[str, Any], ...]
             )
         source_allowed = _is_same_or_descendant(source, build_root) or (
             len(source.parts) >= 3
-            and source.parts[0] == "third_party_patches"
+            and source.parts[0] in {"third_party_patches", "Packages"}
             and source.parts[-1] == ".build"
         )
         if not source_allowed:
             raise PolicyError(
-                f"{label}.source must be a legacy build root or vendored .build: {source}"
+                f"{label}.source must be a legacy build root or owned-package .build: {source}"
             )
         if not any(
             _is_same_or_descendant(destination, entry_path) for _, entry_path in paths

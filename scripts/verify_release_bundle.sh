@@ -160,6 +160,7 @@ pkill -x "$APP_EXECUTABLE_NAME" 2>/dev/null || true
 HOME="$TMP_UI_HOME" \
 USER="${USER:-$(id -un)}" \
 LOGNAME="${LOGNAME:-${USER:-$(id -un)}}" \
+QWENVOICE_DEBUG=1 \
 QWENVOICE_APP_SUPPORT_DIR="$TMP_UI_FIXTURE" \
 /usr/bin/open -n "$APP_PATH" \
 >"$TMP_UI_STDOUT" 2>"$TMP_UI_STDERR"

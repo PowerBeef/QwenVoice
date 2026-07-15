@@ -18,7 +18,10 @@ Use `.agents/website-engineer.md` (or directly `website/AGENTS.md`) when the tas
 
 ```sh
 npm --prefix website run dev      # localhost:5173
+npm --prefix website run lint     # source, metadata, link, asset, and public-fact contract
+npm --prefix website test         # dependency-free Node contract fixtures
 npm --prefix website run build    # production build → website/dist/
+npm --prefix website run check    # lint + test + production build
 npm --prefix website run preview  # serve the production build
 ```
 
@@ -30,7 +33,7 @@ npm --prefix website run preview  # serve the production build
 - For React, Vite, or library API questions, use authoritative current documentation and a
   relevant installed Codex skill/plugin when available.
 - When browser inspection cannot reach a required state, record the limitation and use an attended
-  manual check; the production build remains the verification baseline.
+  manual check. Deterministic lint, Node tests, and the production build remain the CI baseline.
 
 ## Boundaries
 

@@ -709,6 +709,7 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
     private let backgroundSessionCompletionHandler: (@Sendable (String) -> Void)?
     private let transferMetricsHandler: TransferMetricsHandlerBox?
     private let verifiedArtifactHandler: VerifiedArtifactHandlerBox?
+    private let artifactURLPolicy: ModelArtifactURLPolicy?
 
     static func validatedRelativeRepoPath(_ path: String) throws -> String {
         let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -868,7 +869,8 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
         durableTemporaryDirectory: URL? = nil,
         transferMetricsHandler: (@Sendable (TransferMetrics) -> Void)? = nil,
         verifiedArtifactHandler: (@Sendable (VerifiedArtifactReceipt) async -> Void)? = nil,
-        backgroundSessionCompletionHandler: (@Sendable (String) -> Void)? = nil
+        backgroundSessionCompletionHandler: (@Sendable (String) -> Void)? = nil,
+        artifactURLPolicy: ModelArtifactURLPolicy? = nil
     ) {
         let progressBox = progressHandler.map(RepositoryProgressHandlerBox.init)
         state = DownloadStateRegistry(repositoryProgressHandler: progressBox)
@@ -879,6 +881,7 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
         self.backgroundSessionCompletionHandler = backgroundSessionCompletionHandler
         self.transferMetricsHandler = transferMetricsHandler.map(TransferMetricsHandlerBox.init)
         self.verifiedArtifactHandler = verifiedArtifactHandler.map(VerifiedArtifactHandlerBox.init)
+        self.artifactURLPolicy = artifactURLPolicy
         self.isBackgroundSession = sessionConfiguration.identifier != nil
         self.durableTemporaryDirectory = durableTemporaryDirectory ?? fileManager.temporaryDirectory
         super.init()
@@ -1022,12 +1025,15 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
                 partialRoot: partialRoot,
                 resumeRoot: resumeRoot
             )
+            try await throwIfCancellationRequested()
             await state.setPhase(.verifying)
+            try await throwIfCancellationRequested()
             try await verifyDownloadedFilesUsingReceipts(
                 files,
                 artifactVersion: requestIdentity?.artifactVersion ?? revision,
                 in: filesRoot
             )
+            try await throwIfCancellationRequested()
             try persistInstalledIntegrityManifest(
                 repo: repo,
                 revision: revision,
@@ -1035,8 +1041,14 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
                 files: files,
                 filesRoot: filesRoot
             )
+            try await throwIfCancellationRequested()
             await state.setPhase(.installing)
+            try await throwIfCancellationRequested()
             try installStagedRepository(filesRoot: filesRoot, targetDir: targetDir)
+            // Installation is synchronous, so check once more before publishing
+            // success. The iOS coordinator rolls back a target created by this
+            // narrow race before it durably records deletion.
+            try await throwIfCancellationRequested()
             Self.markExcludedFromBackup(targetDir)
             try? fileManager.removeItem(at: stagingRoot)
             await state.finishRepositoryDownload()
@@ -1057,6 +1069,15 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
     /// don't race against a removed directory.
     public func cancel() async {
         await state.requestCancellation()
+    }
+
+    private func throwIfCancellationRequested() async throws {
+        if Task.isCancelled {
+            throw DownloadError.cancelled
+        }
+        if await state.cancellationRequested() {
+            throw DownloadError.cancelled
+        }
     }
 
     /// Remove orphan or stale tasks when no durable request is eligible for adoption.
@@ -1265,6 +1286,9 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
             revision: revision,
             relativePath: relativePath
         )
+        if let artifactURLPolicy, !artifactURLPolicy.allowsInitialRequest(downloadURL) {
+            throw DownloadError.apiError("Rejected untrusted artifact URL for \(relativePath)")
+        }
 
         try await downloadFile(
             from: downloadURL,
@@ -1964,6 +1988,26 @@ public final class HuggingFaceDownloader: NSObject, URLSessionDownloadDelegate {
         taskIsWaitingForConnectivity task: URLSessionTask
     ) {
         Task { await state.setWaitingForConnectivity(true) }
+    }
+
+    public func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        guard let artifactURLPolicy else {
+            completionHandler(request)
+            return
+        }
+        let sourceURL = response.url ?? task.currentRequest?.url ?? task.originalRequest?.url
+        guard let destinationURL = request.url,
+              artifactURLPolicy.allowsRedirect(from: sourceURL, to: destinationURL) else {
+            completionHandler(nil)
+            return
+        }
+        completionHandler(request)
     }
 
     public func urlSession(

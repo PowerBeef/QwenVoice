@@ -1128,6 +1128,7 @@ struct IOSVoiceDesignView: View {
 }
 
 struct IOSVoiceCloningView: View {
+    @AppStorage("vocello.voiceCloningConsent.v1") private var cloneConsentAcknowledged = false
     @EnvironmentObject private var ttsEngine: TTSEngineStore
     @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
     @EnvironmentObject private var modelManager: ModelManagerViewModel
@@ -1258,24 +1259,24 @@ struct IOSVoiceCloningView: View {
 
     private var canGenerate: Bool {
         ttsEngine.isReady
+            && cloneConsentAcknowledged
             && allowsExecution
             && isModelAvailable
             && draft.referenceAudioPath != nil
-            && !draft.referenceTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !scriptLimitState.trimmedIsEmpty
             && !scriptLimitState.isOverLimit
             && !ttsEngine.hasActiveGeneration
     }
 
     private var setupMessage: String? {
+        if !cloneConsentAcknowledged {
+            return "Confirm that you own this voice or have permission to clone it."
+        }
         if !isModelAvailable, let cloneModel {
             return "Install \(cloneModel.name) in Settings."
         }
         if draft.referenceAudioPath == nil {
             return "Choose a saved voice or record a reference clip on this iPhone."
-        }
-        if draft.referenceTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "Reference transcript is required. Wait a moment after recording, or pick a saved voice with a transcript."
         }
         if let cloneContextStatus {
             switch cloneContextStatus {
@@ -1371,6 +1372,14 @@ struct IOSVoiceCloningView: View {
     @ViewBuilder
     private var pageContent: some View {
         VStack(alignment: .leading, spacing: 14) {
+            Toggle(
+                "I own this voice or have permission to clone it",
+                isOn: $cloneConsentAcknowledged
+            )
+            .font(.footnote.weight(.semibold))
+            .tint(IOSBrandTheme.clone)
+            .accessibilityIdentifier("voiceCloning_consentAcknowledgment")
+
             IOSStudioCanvas(
                 mode: .clone,
                 script: promptTextBinding,
@@ -1563,6 +1572,10 @@ struct IOSVoiceCloningView: View {
 
     private func generate() {
         guard !scriptLimitState.trimmedIsEmpty, ttsEngine.isReady, !ttsEngine.hasActiveGeneration else { return }
+        guard cloneConsentAcknowledged else {
+            coordinator.fail("Confirm that you own this voice or have permission to clone it before generating.")
+            return
+        }
         guard !scriptLimitState.isOverLimit else {
             coordinator.fail(scriptLimitState.warningMessage)
             return
@@ -1572,13 +1585,6 @@ struct IOSVoiceCloningView: View {
             coordinator.fail("Install \(model.name) in Settings to generate audio.")
             return
         }
-        guard !draft.referenceTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            coordinator.fail(
-                "Reference transcript is required for voice cloning. Wait for auto-transcription after recording, or pick a saved voice with a transcript."
-            )
-            return
-        }
-
         // Same seed for the live + final card so the decorative waveform doesn't change shape.
         let seed = IOSStableVisualHash.int(promptText)
         coordinator.start(live: IOSStudioLivePreviewItem(

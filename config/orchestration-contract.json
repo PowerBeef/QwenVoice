@@ -1,0 +1,244 @@
+{
+  "schemaVersion": 1,
+  "faultInjection": {
+    "enableEnvironmentVariable": "QWENVOICE_TEST_ORCHESTRATION_FAULTS",
+    "stepEnvironmentVariable": "QWENVOICE_TEST_FAIL_REQUIRED_STEP"
+  },
+  "workflows": {
+    "ios-gate": {
+      "producer": "scripts/ios_device.sh",
+      "requiredSteps": [
+        "project-inputs",
+        "device-preflight",
+        "generation",
+        "crash-delta",
+        "history-publication"
+      ]
+    },
+    "ios-gate-without-generation": {
+      "producer": "scripts/ios_device.sh",
+      "requiredSteps": [
+        "project-inputs",
+        "device-preflight",
+        "crash-delta"
+      ]
+    },
+    "macos-gate": {
+      "producer": "scripts/macos_test.sh",
+      "requiredSteps": [
+        "project-inputs",
+        "foundation-build",
+        "core-tests",
+        "deterministic-tests",
+        "crash-delta"
+      ]
+    },
+    "macos-gate-with-benchmark": {
+      "producer": "scripts/macos_test.sh",
+      "requiredSteps": [
+        "project-inputs",
+        "foundation-build",
+        "core-tests",
+        "deterministic-tests",
+        "crash-delta",
+        "benchmark-validation",
+        "history-publication"
+      ]
+    },
+    "macos-release-readiness": {
+      "producer": "scripts/macos_test.sh",
+      "requiredSteps": [
+        "project-inputs",
+        "app-build",
+        "deterministic-tests",
+        "crash-delta"
+      ]
+    },
+    "release-ios-candidate": {
+      "producer": ".github/workflows/release.yml",
+      "sourceIdentityRequired": true,
+      "requiredSteps": [
+        "platform-readiness",
+        "archive",
+        "archive-verification",
+        "ipa-export",
+        "ipa-verification"
+      ],
+      "commandTemplates": {
+        "platform-readiness": [
+          {
+            "id": "ios-platform-readiness-v1",
+            "argv": [
+              "bash",
+              "-euo",
+              "pipefail",
+              "-c",
+              {
+                "normalized": "scripts/macos_test.sh gate && ./scripts/build_foundation_targets.sh ios"
+              }
+            ]
+          }
+        ],
+        "archive": [
+          {
+            "id": "ios-archive-v1",
+            "argv": [
+              "bash",
+              "-euo",
+              "pipefail",
+              "-c",
+              {
+                "normalized": "xcodebuild archive -project QwenVoice.xcodeproj -scheme VocelloiOS -configuration Release -destination 'generic/platform=iOS' -derivedDataPath build/scratch/derived-data/ci/ios-archive -clonedSourcePackagesDirPath build/cache/xcode/source-packages -disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile -archivePath build/dist/ios/Vocello.xcarchive -authenticationKeyPath \"$RUNNER_TEMP/asc/AuthKey_${ASC_API_KEY_ID}.p8\" -authenticationKeyID \"$ASC_API_KEY_ID\" -authenticationKeyIssuerID \"$ASC_API_ISSUER_ID\" -allowProvisioningUpdates ARCHS=arm64 ONLY_ACTIVE_ARCH=YES DEVELOPMENT_TEAM=\"$QWENVOICE_DEVELOPMENT_TEAM\" CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=\"Apple Distribution\" PROVISIONING_PROFILE_SPECIFIER=\"$IOS_PROFILE_UUID\" QVOICE_IOS_APP_ENTITLEMENTS=\"$QVOICE_IOS_APP_ENTITLEMENTS\" | xcbeautify"
+              }
+            ]
+          }
+        ],
+        "archive-verification": [
+          {
+            "id": "ios-archive-verification-v1",
+            "argv": [
+              "bash",
+              "-euo",
+              "pipefail",
+              "-c",
+              {
+                "normalized": "./scripts/check_ios_catalog.sh APP=$(find build/dist/ios/Vocello.xcarchive/Products/Applications -maxdepth 1 -name \"*.app\" -type d | head -1) codesign -d --entitlements :- \"$APP\" 2>/dev/null | grep -q \"com.apple.developer.kernel.increased-memory-limit\" && echo \"increased-memory-limit entitlement present\" || { echo \"::error::archived app missing increased-memory-limit entitlement\"; exit 1; }"
+              }
+            ]
+          }
+        ],
+        "ipa-export": [
+          {
+            "id": "ios-ipa-export-v1",
+            "argv": [
+              "bash",
+              "-euo",
+              "pipefail",
+              "-c",
+              {
+                "normalized": "xcodebuild -exportArchive -archivePath build/dist/ios/Vocello.xcarchive -exportOptionsPlist \"$IOS_EXPORT_OPTIONS_PLIST\" -exportPath build/dist/ios/export -authenticationKeyPath \"$RUNNER_TEMP/asc/AuthKey_${ASC_API_KEY_ID}.p8\" -authenticationKeyID \"$ASC_API_KEY_ID\" -authenticationKeyIssuerID \"$ASC_API_ISSUER_ID\" -allowProvisioningUpdates | xcbeautify"
+              }
+            ]
+          }
+        ],
+        "ipa-verification": [
+          {
+            "id": "ios-ipa-verification-v1",
+            "argv": [
+              "python3",
+              "scripts/verify_ios_release_artifacts.py",
+              "--archive",
+              "build/dist/ios/Vocello.xcarchive",
+              "--export-dir",
+              "build/dist/ios/export",
+              "--expected-team-id-env",
+              "QWENVOICE_DEVELOPMENT_TEAM",
+              "--output",
+              "build/dist/ios/ios-release-artifact-verification.json"
+            ],
+            "outputs": [
+              "build/dist/ios/ios-release-artifact-verification.json"
+            ]
+          }
+        ]
+      }
+    },
+    "release-macos-candidate": {
+      "producer": ".github/workflows/release.yml",
+      "sourceIdentityRequired": true,
+      "requiredSteps": [
+        "release-build",
+        "artifact-verification"
+      ],
+      "commandTemplates": {
+        "release-build": [
+          {
+            "id": "macos-release-build-default-v1",
+            "argv": [
+              "./scripts/release.sh",
+              "--preflight",
+              "none"
+            ]
+          },
+          {
+            "id": "macos-release-build-named-v1",
+            "argv": [
+              "./scripts/release.sh",
+              "--preflight",
+              "none",
+              "--output-name",
+              {
+                "pattern": "[A-Za-z0-9][A-Za-z0-9 ._-]{0,159}"
+              }
+            ]
+          }
+        ],
+        "artifact-verification": [
+          {
+            "id": "macos-artifact-verification-v1",
+            "argv": [
+              "./scripts/verify_packaged_dmg.sh",
+              {
+                "pattern": "build/dist/macos/[A-Za-z0-9][A-Za-z0-9 ._-]{0,159}\\.dmg"
+              },
+              "build/dist/macos/release-metadata.txt"
+            ]
+          }
+        ]
+      }
+    },
+    "ui-ios-benchmark": {
+      "producer": "scripts/ui_test.sh",
+      "requiredSteps": [
+        "source-provenance",
+        "crash-baseline",
+        "xcuitest",
+        "crash-delta",
+        "benchmark-validation",
+        "history-publication"
+      ],
+      "optionalSteps": ["result-retention"]
+    },
+    "ui-ios-model-download": {
+      "producer": "scripts/ui_test.sh",
+      "requiredSteps": [
+        "source-provenance",
+        "crash-baseline",
+        "xcuitest",
+        "model-download-diagnostics",
+        "crash-delta"
+      ],
+      "optionalSteps": ["result-retention"]
+    },
+    "ui-ios-smoke": {
+      "producer": "scripts/ui_test.sh",
+      "requiredSteps": [
+        "source-provenance",
+        "crash-baseline",
+        "xcuitest",
+        "crash-delta"
+      ],
+      "optionalSteps": ["result-retention"]
+    },
+    "ui-macos-benchmark": {
+      "producer": "scripts/ui_test.sh",
+      "requiredSteps": [
+        "source-provenance",
+        "xcuitest",
+        "crash-delta",
+        "benchmark-validation",
+        "history-publication"
+      ],
+      "optionalSteps": ["result-retention"]
+    },
+    "ui-macos-smoke": {
+      "producer": "scripts/ui_test.sh",
+      "requiredSteps": [
+        "source-provenance",
+        "xcuitest",
+        "crash-delta"
+      ],
+      "optionalSteps": ["result-retention"]
+    }
+  }
+}

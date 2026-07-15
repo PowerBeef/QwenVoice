@@ -69,8 +69,19 @@ public struct EngineServiceTransportAccumulator: Sendable {
             }
             resetGeneration()
             return record
+        case .cancelled(let summary):
+            let notes = telemetryEnabled
+                ? ["cancellation_reason": summary.reason.rawValue]
+                : [:]
+            let record = makeRecord(finishReason: .cancelled, usedStreaming: true, notes: notes)
+            if record != nil {
+                terminalCount += 1
+                lastFinishReason = .cancelled
+            }
+            resetGeneration()
+            return record
         case .failed(let message):
-            let reason: GenerationTerminalReason = message.localizedCaseInsensitiveContains("cancel") ? .cancelled : .failed
+            let reason: GenerationTerminalReason = .failed
             let notes = telemetryEnabled
                 ? GenerationTelemetryPrivacy.failureNotes(message: message)
                 : [:]

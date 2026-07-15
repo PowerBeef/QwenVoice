@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "owner": "release-qa",
+  "publicationPolicy": "draft-build-verify-attest-publish",
+  "sourceIdentity": [
+    "gitCommit",
+    "treeDirty",
+    "requiredInputsDigest",
+    "toolchainDigest",
+    "projectInputsDigest",
+    "projectDigest",
+    "runtimeCapabilitiesDigest",
+    "compatibilityDigest",
+    "modelCatalogDigest",
+    "evidenceImpactDigest",
+    "orchestrationContractDigest",
+    "releaseContractDigest"
+  ],
+  "sourceIdentityInputs": {
+    "requiredInputsDigest": [
+      "project.yml",
+      "QwenVoice.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved",
+      "Packages/VocelloQwen3Core/Package.resolved",
+      "website/package-lock.json",
+      "Sources/Resources/qwenvoice_contract.json",
+      "Sources/Resources/qwenvoice_production_model_catalog.json",
+      "config/toolchain.json",
+      "config/evidence-impact.json",
+      "config/orchestration-contract.json"
+    ],
+    "toolchainDigest": ["config/toolchain.json"],
+    "projectInputsDigest": [
+      "project.yml",
+      "QwenVoice.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved",
+      "Packages/VocelloQwen3Core/Package.resolved",
+      "website/package-lock.json"
+    ],
+    "projectDigest": ["project.yml"],
+    "runtimeCapabilitiesDigest": ["Packages/VocelloQwen3Core/RUNTIME_CAPABILITIES.json"],
+    "compatibilityDigest": ["Packages/VocelloQwen3Core/COMPATIBILITY.json"],
+    "modelCatalogDigest": [
+      "Sources/Resources/qwenvoice_contract.json",
+      "Sources/Resources/qwenvoice_production_model_catalog.json"
+    ],
+    "evidenceImpactDigest": ["config/evidence-impact.json"],
+    "orchestrationContractDigest": ["config/orchestration-contract.json"],
+    "releaseContractDigest": ["config/release-evidence-contract.json"]
+  },
+  "verificationFreshnessSeconds": 21600,
+  "platformVerification": {
+    "macos": {
+      "workflow": "release-macos-candidate",
+      "requiredSteps": ["release-build", "artifact-verification"]
+    },
+    "ios": {
+      "workflow": "release-ios-candidate",
+      "requiredSteps": [
+        "platform-readiness",
+        "archive",
+        "archive-verification",
+        "ipa-export",
+        "ipa-verification"
+      ]
+    }
+  },
+  "qualityEvidencePolicy": "Path-classified UI, device, model, and benchmark evidence is recorded with freshness and exceptions but never blocks ordinary source publication or packaging.",
+  "artifacts": [
+    "notarizedDMG",
+    "sha256Checksums",
+    "cycloneDXSBOM",
+    "releaseMetadata",
+    "iosArtifactVerificationSummary",
+    "artifactAttestation"
+  ]
+}

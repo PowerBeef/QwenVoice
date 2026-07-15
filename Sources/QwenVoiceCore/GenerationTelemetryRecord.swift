@@ -1,6 +1,6 @@
 import CryptoKit
 import Foundation
-@preconcurrency import MLXAudioCore
+@preconcurrency import VocelloQwen3Core
 
 public enum GenerationTerminalReason: String, Hashable, Codable, Sendable {
     case eos
@@ -1116,7 +1116,7 @@ public struct AudioQCChunkReport: Hashable, Codable, Sendable {
 }
 
 /// Per-chunk decode substage timing for one streaming audio chunk — a Codable,
-/// persistence-safe mirror of the vendored `ChunkSubstageTimings` plus the chunk
+/// persistence-safe mirror of the owned Qwen3 chunk timings plus the chunk
 /// index and wall-clock arrival (ms since the generation's telemetry start clock).
 /// All substage values are millisecond deltas since the previous chunk boundary.
 public struct GenerationChunkTelemetry: Hashable, Codable, Sendable {
@@ -1136,9 +1136,9 @@ public struct GenerationChunkTelemetry: Hashable, Codable, Sendable {
     public let streamStepEOSReadMS: Double
     public let audioChunkEvalMS: Double
     /// Phase 2a KV-cache diagnostic snapshot at this chunk boundary.
-    public let kvCacheDiagnostics: KVCacheDiagnostics?
+    public let kvCacheDiagnostics: VocelloQwen3KVCacheDiagnostics?
     /// Phase 4 per-frame Mimi decoder step breakdown for this chunk.
-    public let mimiDecoderBreakdownMS: MimiDecoderStepTimings?
+    public let mimiDecoderBreakdownMS: VocelloQwen3MimiDecoderTimings?
 
     public init(
         chunkIndex: Int,
@@ -1152,8 +1152,8 @@ public struct GenerationChunkTelemetry: Hashable, Codable, Sendable {
         streamStepEvalWaitMS: Double,
         streamStepEOSReadMS: Double,
         audioChunkEvalMS: Double,
-        kvCacheDiagnostics: KVCacheDiagnostics? = nil,
-        mimiDecoderBreakdownMS: MimiDecoderStepTimings? = nil
+        kvCacheDiagnostics: VocelloQwen3KVCacheDiagnostics? = nil,
+        mimiDecoderBreakdownMS: VocelloQwen3MimiDecoderTimings? = nil
     ) {
         self.chunkIndex = chunkIndex
         self.arrivalMS = arrivalMS
@@ -1187,8 +1187,14 @@ public struct GenerationChunkTelemetry: Hashable, Codable, Sendable {
         self.streamStepEvalWaitMS = try container.decodeIfPresent(Double.self, forKey: .streamStepEvalWaitMS) ?? 0
         self.streamStepEOSReadMS = try container.decode(Double.self, forKey: .streamStepEOSReadMS)
         self.audioChunkEvalMS = try container.decode(Double.self, forKey: .audioChunkEvalMS)
-        self.kvCacheDiagnostics = try container.decodeIfPresent(KVCacheDiagnostics.self, forKey: .kvCacheDiagnostics)
-        self.mimiDecoderBreakdownMS = try container.decodeIfPresent(MimiDecoderStepTimings.self, forKey: .mimiDecoderBreakdownMS)
+        self.kvCacheDiagnostics = try container.decodeIfPresent(
+            VocelloQwen3KVCacheDiagnostics.self,
+            forKey: .kvCacheDiagnostics
+        )
+        self.mimiDecoderBreakdownMS = try container.decodeIfPresent(
+            VocelloQwen3MimiDecoderTimings.self,
+            forKey: .mimiDecoderBreakdownMS
+        )
     }
 }
 

@@ -187,6 +187,7 @@ enum TTSContract {
             mode: mode,
             huggingFaceRepo: descriptor.huggingFaceRepo,
             huggingFaceRevision: descriptor.huggingFaceRevision,
+            artifactVersion: descriptor.artifactVersion,
             outputSubfolder: descriptor.outputSubfolder,
             requiredRelativePaths: descriptor.requiredRelativePaths,
             baseModelID: baseModelID,
@@ -305,6 +306,48 @@ enum TTSContract {
             summary: "Could not locate bundled qwenvoice_contract.json",
             details: "Searched bundles:\n\(searchedBundles)",
             manifestPath: nil
+        )
+    }
+
+    /// Resolve exact production download evidence for a macOS model variant. This intentionally
+    /// reloads the small bundled document for each requested model so a catalog read failure is
+    /// surfaced at the action boundary rather than cached as a process-global fallback.
+    static func productionDownloadPlan(
+        for model: TTSModel
+    ) throws -> (catalog: ProductionModelCatalog, artifact: ProductionModelCatalog.Artifact) {
+        guard let variantID = model.variantID else {
+            throw ProductionModelCatalog.Error.descriptorMismatch(
+                identity: model.id,
+                reason: "variant identity is missing"
+            )
+        }
+        let catalog = try ProductionModelCatalog(contentsOf: locateProductionCatalogURL())
+        let artifact = try catalog.artifact(
+            modelID: model.baseModelID,
+            variantID: variantID,
+            folder: model.folder,
+            repo: model.huggingFaceRepo,
+            revision: model.huggingFaceRevision,
+            artifactVersion: model.artifactVersion,
+            estimatedDownloadBytes: model.estimatedDownloadBytes,
+            requiredRelativePaths: model.requiredRelativePaths
+        )
+        return (catalog, artifact)
+    }
+
+    private static func locateProductionCatalogURL() throws -> URL {
+        let bundles = [Bundle.main, Bundle(for: TTSContractBundleLocator.self)]
+            + Bundle.allBundles + Bundle.allFrameworks
+        for bundle in bundles {
+            if let url = bundle.url(
+                forResource: "qwenvoice_production_model_catalog",
+                withExtension: "json"
+            ) {
+                return url
+            }
+        }
+        throw ProductionModelCatalog.Error.unreadable(
+            "Could not locate bundled qwenvoice_production_model_catalog.json"
         )
     }
 

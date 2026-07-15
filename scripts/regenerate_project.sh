@@ -33,10 +33,11 @@ cp "$ENTITLEMENTS" "$BACKUP"
 echo "==> Running xcodegen..."
 xcodegen generate
 
-# XcodeGen 2.45.4 traps when it directly generates a scheme for the CLI's
-# `tool` product. Render that one shared scheme from the generated target ID so
+# XcodeGen 2.45.4 cannot directly generate schemes for the CLI tool or the
+# app-host-free iOS unit-test product. Render both shared schemes from generated target IDs so
 # every Xcode invocation can still use an explicit managed DerivedData path.
 python3 "$SCRIPT_DIR/generate_cli_scheme.py"
+python3 "$SCRIPT_DIR/generate_ios_logic_scheme.py"
 
 bash "$SCRIPT_DIR/check_project_inputs.sh"
 

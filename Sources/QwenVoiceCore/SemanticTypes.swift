@@ -339,6 +339,7 @@ public struct Qwen3TTSModelCapabilities: Hashable, Codable, Sendable {
     public let familyType: Qwen3TTSFamilyType
     public let supportsInstructionControl: Bool
     public let supportsVoiceClone: Bool
+    public let supportsXVectorOnlyClone: Bool
     public let requiresSpeakerEncoder: Bool
     public let tokenizerProfile: Qwen3TTSTokenizerProfile
     public let generationDefaults: Qwen3TTSGenerationDefaultsProfile
@@ -349,6 +350,7 @@ public struct Qwen3TTSModelCapabilities: Hashable, Codable, Sendable {
         familyType: Qwen3TTSFamilyType,
         supportsInstructionControl: Bool,
         supportsVoiceClone: Bool,
+        supportsXVectorOnlyClone: Bool,
         requiresSpeakerEncoder: Bool,
         tokenizerProfile: Qwen3TTSTokenizerProfile,
         generationDefaults: Qwen3TTSGenerationDefaultsProfile,
@@ -358,6 +360,7 @@ public struct Qwen3TTSModelCapabilities: Hashable, Codable, Sendable {
         self.familyType = familyType
         self.supportsInstructionControl = supportsInstructionControl
         self.supportsVoiceClone = supportsVoiceClone
+        self.supportsXVectorOnlyClone = supportsXVectorOnlyClone
         self.requiresSpeakerEncoder = requiresSpeakerEncoder
         self.tokenizerProfile = tokenizerProfile
         self.generationDefaults = generationDefaults
@@ -542,19 +545,166 @@ public struct ModelDescriptor: Identifiable, Hashable, Sendable, Codable {
     }
 }
 
+public enum CloneConditioningMode: Hashable, Codable, Sendable {
+    case transcriptBacked(String)
+    case xVectorOnly
+
+    private enum CodingKeys: String, CodingKey {
+        case kind
+        case transcript
+    }
+
+    private enum Kind: String, Codable {
+        case transcriptBacked = "transcript_backed"
+        case xVectorOnly = "x_vector_only"
+    }
+
+    public init(transcript: String?) {
+        let normalized = transcript?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let normalized, !normalized.isEmpty {
+            self = .transcriptBacked(normalized)
+        } else {
+            self = .xVectorOnly
+        }
+    }
+
+    public var transcript: String? {
+        switch self {
+        case .transcriptBacked(let transcript):
+            let normalized = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            return normalized.isEmpty ? nil : normalized
+        case .xVectorOnly:
+            return nil
+        }
+    }
+
+    public var identifier: String {
+        switch normalized {
+        case .transcriptBacked:
+            return Kind.transcriptBacked.rawValue
+        case .xVectorOnly:
+            return Kind.xVectorOnly.rawValue
+        }
+    }
+
+    public var usesTranscript: Bool {
+        transcript != nil
+    }
+
+    public var isXVectorOnly: Bool {
+        !usesTranscript
+    }
+
+    public var normalized: CloneConditioningMode {
+        switch self {
+        case .transcriptBacked(let transcript):
+            return CloneConditioningMode(transcript: transcript)
+        case .xVectorOnly:
+            return .xVectorOnly
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        switch try container.decode(Kind.self, forKey: .kind) {
+        case .transcriptBacked:
+            let transcript = try container.decode(String.self, forKey: .transcript)
+            let normalized = CloneConditioningMode(transcript: transcript)
+            guard normalized.usesTranscript else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .transcript,
+                    in: container,
+                    debugDescription: "Transcript-backed clone conditioning requires non-empty text."
+                )
+            }
+            self = normalized
+        case .xVectorOnly:
+            self = .xVectorOnly
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch normalized {
+        case .transcriptBacked(let transcript):
+            try container.encode(Kind.transcriptBacked, forKey: .kind)
+            try container.encode(transcript, forKey: .transcript)
+        case .xVectorOnly:
+            try container.encode(Kind.xVectorOnly, forKey: .kind)
+        }
+    }
+}
+
 public struct CloneReference: Hashable, Codable, Sendable {
     public let audioPath: String
-    public let transcript: String?
+    public let conditioningMode: CloneConditioningMode
     public let preparedVoiceID: String?
 
     public init(audioPath: String, transcript: String? = nil, preparedVoiceID: String? = nil) {
         self.audioPath = audioPath
-        self.transcript = transcript
+        self.conditioningMode = CloneConditioningMode(transcript: transcript)
         self.preparedVoiceID = preparedVoiceID
+    }
+
+    public init(
+        audioPath: String,
+        conditioningMode: CloneConditioningMode,
+        preparedVoiceID: String? = nil
+    ) {
+        self.audioPath = audioPath
+        self.conditioningMode = conditioningMode.normalized
+        self.preparedVoiceID = preparedVoiceID
+    }
+
+    public var transcript: String? {
+        conditioningMode.transcript
     }
 
     public var audioURL: URL {
         URL(fileURLWithPath: audioPath)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case audioPath
+        case transcript
+        case conditioningMode
+        case preparedVoiceID
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        audioPath = try container.decode(String.self, forKey: .audioPath)
+        preparedVoiceID = try container.decodeIfPresent(String.self, forKey: .preparedVoiceID)
+
+        if let decodedMode = try container.decodeIfPresent(
+            CloneConditioningMode.self,
+            forKey: .conditioningMode
+        ) {
+            let normalizedMode = decodedMode.normalized
+            if container.contains(.transcript) {
+                let legacyTranscript = try container.decodeIfPresent(String.self, forKey: .transcript)
+                guard CloneConditioningMode(transcript: legacyTranscript) == normalizedMode else {
+                    throw DecodingError.dataCorruptedError(
+                        forKey: .conditioningMode,
+                        in: container,
+                        debugDescription: "Clone conditioning mode disagrees with the legacy transcript field."
+                    )
+                }
+            }
+            conditioningMode = normalizedMode
+        } else {
+            conditioningMode = CloneConditioningMode(
+                transcript: try container.decodeIfPresent(String.self, forKey: .transcript)
+            )
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(audioPath, forKey: .audioPath)
+        try container.encode(conditioningMode.normalized, forKey: .conditioningMode)
+        try container.encodeIfPresent(transcript, forKey: .transcript)
+        try container.encodeIfPresent(preparedVoiceID, forKey: .preparedVoiceID)
     }
 }
 
@@ -841,7 +991,10 @@ public enum NativeStreamingOutputPolicy: String, Hashable, Codable, Sendable {
     case pcmPreviewAndFileArtifacts = "pcm_preview_and_file_artifacts"
 
     public static func current(environment: [String: String] = ProcessInfo.processInfo.environment) -> NativeStreamingOutputPolicy {
-        switch environment["QWENVOICE_STREAMING_OUTPUT_POLICY"]?.lowercased() {
+        switch RuntimeDebugGate.value(
+            for: "QWENVOICE_STREAMING_OUTPUT_POLICY",
+            environment: environment
+        )?.lowercased() {
         case "file", "files", "pcm_and_files", "pcm_preview_and_file_artifacts":
             return .pcmPreviewAndFileArtifacts
         default:
@@ -863,7 +1016,10 @@ public enum NativeStreamingPreviewDataPolicy: String, Hashable, Codable, Sendabl
     case skip
 
     public static func current(environment: [String: String] = ProcessInfo.processInfo.environment) -> NativeStreamingPreviewDataPolicy {
-        switch environment["QWENVOICE_STREAMING_PREVIEW_DATA"]?.lowercased() {
+        switch RuntimeDebugGate.value(
+            for: "QWENVOICE_STREAMING_PREVIEW_DATA",
+            environment: environment
+        )?.lowercased() {
         case "on", "emit", "true", "1", "yes":
             return .emit
         case "off", "skip", "false", "0", "no":
@@ -932,6 +1088,29 @@ public enum GenerationFinishReason: String, Hashable, Codable, Sendable {
     case maxTokens = "max_tokens"
     case cancelled
     case failed
+}
+
+/// Why an in-flight generation was asked to stop. This is deliberately
+/// separate from failure classification: cancellation is a successful,
+/// terminal lifecycle outcome, not an error string that callers must parse.
+public enum GenerationCancellationReason: String, Hashable, Codable, Sendable {
+    case user
+    case memoryPressure = "memory_pressure"
+    case superseded
+    case shutdown
+}
+
+public struct GenerationCancellationSummary: Hashable, Codable, Sendable {
+    public let generationID: UUID?
+    public let reason: GenerationCancellationReason
+
+    public init(
+        generationID: UUID?,
+        reason: GenerationCancellationReason
+    ) {
+        self.generationID = generationID
+        self.reason = reason
+    }
 }
 
 public struct GenerationResult: Hashable, Codable, Sendable {
@@ -1286,6 +1465,25 @@ public struct GenerationRequest: Hashable, Codable, Sendable {
     public var engineActivityLabel: String {
         EngineActivityLabels.generating(mode: mode)
     }
+
+    public func withGenerationID(_ generationID: UUID) -> GenerationRequest {
+        GenerationRequest(
+            mode: mode,
+            modelID: modelID,
+            text: text,
+            outputPath: outputPath,
+            shouldStream: shouldStream,
+            streamingInterval: streamingInterval,
+            batchIndex: batchIndex,
+            batchTotal: batchTotal,
+            streamingTitle: streamingTitle,
+            languageHint: languageHint,
+            payload: payload,
+            generationID: generationID,
+            seed: seed,
+            variation: variation
+        )
+    }
 }
 
 public struct GenerationProgress: Hashable, Codable, Sendable {
@@ -1398,12 +1596,14 @@ public enum GenerationEvent: Hashable, Codable, Sendable {
         case streamChunk
         case progress
         case completed
+        case cancelled
         case failed
     }
 
     case progress(GenerationProgress)
     case chunk(GenerationChunk)
     case completed(GenerationResult)
+    case cancelled(GenerationCancellationSummary)
     case failed(String)
 
     public init(
@@ -1444,6 +1644,8 @@ public enum GenerationEvent: Hashable, Codable, Sendable {
             return .streamChunk
         case .completed:
             return .completed
+        case .cancelled:
+            return .cancelled
         case .failed:
             return .failed
         }
@@ -1503,7 +1705,7 @@ public enum GenerationEvent: Hashable, Codable, Sendable {
         switch self {
         case .chunk(let chunk):
             return .chunk(chunk.withoutPreviewAudioPayload())
-        case .progress, .completed, .failed:
+        case .progress, .completed, .cancelled, .failed:
             return self
         }
     }

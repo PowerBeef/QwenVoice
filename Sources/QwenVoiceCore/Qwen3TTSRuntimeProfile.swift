@@ -117,6 +117,7 @@ struct Qwen3TTSRuntimeProfile: Hashable, Codable, Sendable {
     let generationDefaults: Qwen3TTSGenerationDefaults
     let modelSize: Qwen3TTSModelSize?
     let supportsInstructionControl: Bool
+    let supportsXVectorOnlyClone: Bool
     let validationSignature: String
 
     static func load(
@@ -196,6 +197,8 @@ struct Qwen3TTSRuntimeProfile: Hashable, Codable, Sendable {
         let derivedSupportsInstructionControl =
             modelFamily == .voiceDesign
             || (modelFamily == .customVoice && modelSize != .compact0b6)
+        let supportsXVectorOnlyClone = descriptor.model.qwen3Capabilities?
+            .supportsXVectorOnlyClone ?? false
         let signatureParts = [
             modelType,
             modelFamily.rawValue,
@@ -206,6 +209,7 @@ struct Qwen3TTSRuntimeProfile: Hashable, Codable, Sendable {
             speakers.joined(separator: ","),
             modelSize?.rawValue ?? "unknown",
             derivedSupportsInstructionControl ? "instruction" : "no_instruction",
+            supportsXVectorOnlyClone ? "x_vector_only_clone" : "no_x_vector_only_clone",
         ]
 
         return Qwen3TTSRuntimeProfile(
@@ -222,6 +226,7 @@ struct Qwen3TTSRuntimeProfile: Hashable, Codable, Sendable {
             generationDefaults: generationDefaults,
             modelSize: modelSize,
             supportsInstructionControl: derivedSupportsInstructionControl,
+            supportsXVectorOnlyClone: supportsXVectorOnlyClone,
             validationSignature: signatureParts.joined(separator: "|")
         )
     }
@@ -277,6 +282,7 @@ struct Qwen3TTSRuntimeProfile: Hashable, Codable, Sendable {
             "qwen3_mode_capability": modeCapability.rawValue,
             "qwen3_model_size": modelSize?.rawValue ?? "unknown",
             "qwen3_supports_instruction_control": supportsInstructionControl ? "true" : "false",
+            "qwen3_supports_x_vector_only_clone": supportsXVectorOnlyClone ? "true" : "false",
             "qwen3_runtime_profile_signature": validationSignature,
             "qwen3_sample_rate": String(sampleRate),
             "qwen3_supported_speaker_count": String(supportedSpeakers.count),
@@ -320,6 +326,11 @@ struct Qwen3TTSRuntimeProfile: Hashable, Codable, Sendable {
             guard capabilities.supportsVoiceClone == (modelFamily == .baseClone) else {
                 throw Qwen3TTSRuntimeProfileError.invalidMetadata(
                     "Model '\(descriptor.id)' declares supportsVoiceClone=\(capabilities.supportsVoiceClone) but runtime family \(modelFamily.rawValue) expects \((modelFamily == .baseClone))."
+                )
+            }
+            guard capabilities.supportsXVectorOnlyClone == (modelFamily == .baseClone) else {
+                throw Qwen3TTSRuntimeProfileError.invalidMetadata(
+                    "Model '\(descriptor.id)' declares supportsXVectorOnlyClone=\(capabilities.supportsXVectorOnlyClone) but runtime family \(modelFamily.rawValue) expects \((modelFamily == .baseClone))."
                 )
             }
             guard capabilities.requiresSpeakerEncoder == (modelFamily == .baseClone) else {

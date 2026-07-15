@@ -98,6 +98,10 @@ QWENVOICE_DEBUG=1 QWENVOICE_NATIVE_TELEMETRY_MODE=verbose ./scripts/build.sh run
 
 ### Related benchmark knobs (also propagated over the handshake)
 
+`config/runtime-debug-knobs.json` owns this inventory. Production-affecting knobs are read through
+`RuntimeDebugGate` and remain inert unless `QWENVOICE_DEBUG=1`; bounded observability and
+test-target-only keys are separately classified. Never add an undocumented environment reader.
+
 | Env | Effect |
 |---|---|
 | `QWENVOICE_SUPPRESS_WARMUP=1` | Skips proactive prewarm/clone‑priming so the first generation records its own **cold** load (`MacGenerationWarmupCoordinator`). App‑process only. |
@@ -122,7 +126,7 @@ QWENVOICE_DEBUG=1 QWENVOICE_NATIVE_TELEMETRY_MODE=verbose ./scripts/build.sh run
  │   submit→firstChunk→       │ ◄──────   │ NativeStreamingSynthesisSession            │
  │   playbackScheduled→done  │  chunks   │   decode loop + shared sampler/session      │
  │ AppGenerationTimeline      │           │   reads MLX timings, per‑chunk substages   │
- │ GenerationTelemetryMerger  │           │ Qwen3TTS (vendored) emits timings/counters │
+ │ GenerationTelemetryMerger  │           │ Qwen3TTS (owned) emits timings/counters │
  └───────────────────────────┘           └──────────────────────────────────────────┘
         │  writes app row                          │  writes engine + engine-service rows
         └──────────────► diagnostics/*/generations.jsonl ◄───────┘
@@ -270,7 +274,7 @@ and how much loop time is `unattributed` (candidate for new sub‑probes).
 ### 6.3 Per‑chunk timeline (`chunkTimeline`, streaming only)
 
 One entry per emitted audio chunk — the decode substage deltas that produced it, plus its
-wall‑clock arrival. Mirrors the vendored `ChunkSubstageTimings`:
+wall‑clock arrival. Mirrors the owned runtime's `ChunkSubstageTimings`:
 `talkerForwardMS`, `codePredictorMS`, `audioDecoderMS`, `streamStepEvalMS`,
 `streamStepEOSReadMS`, `audioChunkEvalMS`, plus `chunkIndex`, `arrivalMS`, and in v5
 `arrivalNS` (nanosecond resolution from `NativeTelemetryClock`). In v5 verbose mode,
@@ -427,7 +431,8 @@ Designed so the numbers you optimize against are trustworthy.
   every tick). A sample is a few `task_info`/mach calls + one cached‑device GPU read.
 - **No hot‑path additions.** Writes happen at generation boundaries; the per‑chunk timeline
   is an in‑memory append, persisted once at the end; the engine‑service transport row is
-  flushed off the publish loop. The unbounded macOS chunk stream is never blocked.
+  flushed off the publish loop. The bounded macOS chunk stream is drained continuously and never
+  blocked by file I/O; `GenerationEventDeliveryProbe` reports any dropped yield.
 - **The backend timing reads do not add GPU syncs.** The `eval`/EOS‑read syncs that
   `qwen_stream_step_*` measure are required by generation itself — telemetry times existing
   work. Signposts are near‑zero when Instruments isn't attached.
@@ -609,7 +614,7 @@ committed bounded quality summaries and baselines remain permitted.
 ## 12. Extending the telemetry
 
 - **New backend substage timing:** add a `ContinuousClock` accumulator in the Qwen3TTS
-  decode loop (`third_party_patches/mlx-audio-swift/.../Qwen3TTS.swift`) and store it into
+  decode loop (`Packages/VocelloQwen3Core/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift`) and store it into
   the model's preparation‑timings dict — see [`mlx-audio-swift-patching.md`](mlx-audio-swift-patching.md)
   for the patch + validation gates. It will surface automatically in the engine row's
   `timingsMS` (the session re‑reads the model post‑loop). Avoid adding `eval()`/`.item()`
@@ -632,6 +637,6 @@ committed bounded quality summaries and baselines remain permitted.
 
 ## 13. See also
 
-- [`mlx-audio-swift-patching.md`](mlx-audio-swift-patching.md) — vendored backend patch procedure + validation gates.
+- [`mlx-audio-swift-patching.md`](mlx-audio-swift-patching.md) — owned core runtime procedure and validation gates.
 - [`privacy-storage.md`](privacy-storage.md) — where diagnostics live; deletion paths.
-- [`.agents/backend-mlx.md`](../../.agents/backend-mlx.md) — telemetry summary + engine invariants (unbounded macOS `events`, prewarm reentrancy, per‑tier memory).
+- [`.agents/backend-mlx.md`](../../.agents/backend-mlx.md) — telemetry summary + engine invariants (bounded measured event delivery, typed cancellation, prewarm reentrancy, per-tier memory).

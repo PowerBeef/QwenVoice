@@ -16,7 +16,8 @@ Debug builds use a separate persistent development root so models, saved voices,
 ~/Library/Application Support/QwenVoice-Debug/
 ```
 
-The macOS app also honors:
+With the `QWENVOICE_DEBUG` master gate enabled, the macOS app also honors this hermetic diagnostic
+override; shipped production behavior ignores it:
 
 ```sh
 QWENVOICE_APP_SUPPORT_DIR=/path/to/custom/app-support
@@ -30,7 +31,10 @@ Maintained macOS subtrees and preferences:
 - `outputs/CustomVoice/`, `outputs/VoiceDesign/`, and `outputs/Clones/` store generated audio unless the user chooses a different output directory. If a user-chosen directory becomes missing or unwritable, new audio falls back to these default folders and Settings shows a warning — a generation is never lost to a vanished folder.
 - `voices/` stores saved voice reference assets (the reference WAV plus an optional `.txt` transcript sidecar).
 - Reference-clip **recording** (macOS, 2026-06) uses two short-lived directories under the system temporary directory: `voice-clone-references/` holds the in-progress capture and `voice-enroll/` holds a stable copy during enrollment. Both are deleted as part of enrollment/cancel; the kept copy is the one in `voices/`.
-- `history.sqlite` stores local generation history.
+- `history.sqlite` stores local generation history. Database initialization, migration, read,
+  write, or delete failures are typed and fail closed: the UI shows a degraded state and disables
+  destructive history actions instead of presenting an unavailable database as empty. macOS retries
+  on reload or re-entry; it does not currently expose a dedicated Retry button.
 - Active macOS model-quality choices are stored in app preferences, keyed per generation mode. `DebugMode` isolates preferences to `com.qwenvoice.app.debug`; Release builds use `UserDefaults.standard`.
 
 Delete local macOS app data by quitting the app and removing the app support root or the specific subtree above. Deleting `models/` removes installed model files and requires downloading them again; it does not by itself clear normal app preferences such as the active model-quality choice.
@@ -47,7 +51,8 @@ Its shared container is rooted under the app-owned `Vocello` subtree and is mana
 
 The May 2026 iOS identity rename moved pre-release storage from the old QVoice App Group to this Vocello App Group without migration, so device builds after the rename start with fresh iPhone data.
 
-The iPhone app also honors:
+With the `QWENVOICE_DEBUG` master gate enabled, the iPhone app also honors this hermetic diagnostic
+override; shipped production behavior ignores it:
 
 ```sh
 QVOICE_APP_SUPPORT_DIR=/path/to/custom/app-support
@@ -67,7 +72,10 @@ Maintained iPhone subtrees:
   selected or opened through Files, plus an adjacent `.txt` sidecar when supplied. Enrollment copies
   the kept reference into `voices/`.
 - Other `cache/` subtrees store required runtime cache data.
-- `history.sqlite` stores local generation history.
+- `history.sqlite` stores local generation history. Database initialization, migration, read,
+  write, or delete failures are typed and fail closed: the UI shows a degraded state with a visible
+  Retry action and disables destructive history actions instead of presenting an unavailable database
+  as empty.
 
 The iPhone app intentionally keeps shared state constrained to the App Group app-support subtree. It does not use a parallel shared-user-defaults channel for model or voice state.
 
@@ -78,6 +86,12 @@ native Files picker/document-open route. Only clone voices you own or have permi
 Reference clips, transcripts, and saved voices are local files, but the user remains responsible for
 rights and consent before recording, importing, or reusing them.
 
+Both apps expose the genuine `voiceCloning_consentAcknowledgment` control and keep Generate disabled
+until it is enabled. The choice is stored locally as `vocello.voiceCloningConsent.v1`; it is not
+telemetry or an upload. A transcript is optional: transcript-backed conditioning uses the supplied
+text, while a clip without text uses the distinct audio-only x-vector path. Those modes have
+separate cache/artifact identities.
+
 ## Microphone And On-Device Transcription
 
 Recording a reference clip uses the **Microphone** permission; transcript auto-fill uses **Speech Recognition**. Both are requested on first use, and recognition always runs with `requiresOnDeviceRecognition` — the audio is never sent to Apple or any server, on macOS or iPhone. Transcripts are stored only as the local `.txt` sidecar next to the voice's WAV. On macOS, transcription additionally requires Siri to be enabled (an OS gate — the system silently refuses speech-recognition authorization otherwise); the app detects this and links the relevant System Settings panes. Full permission model: [`macos-permissions.md`](macos-permissions.md).
@@ -85,6 +99,13 @@ Recording a reference clip uses the **Microphone** permission; transcript auto-f
 ## Diagnostics
 
 Diagnostics should be user-initiated. The app may write local logs or exportable diagnostic files for model download, generation, playback, XPC, and model-admission failures, but it should not report those details over the network automatically.
+
+When runtime telemetry is explicitly enabled, `generation-failures.jsonl` is a privacy-reduced
+schema-v2 support log capped at 200 entries and 256 KiB. It stores only an allowlisted error code
+and classification, known lifecycle stage and model identifier, generation mode, text length,
+streaming flag, and timestamp. It never stores prompts, transcripts, voice descriptions, paths,
+URLs, reflected/localized errors, stack symbols, credentials, email addresses, or arbitrary
+metadata. The logger exposes a local clear operation; it never uploads the file.
 
 Repository-local build and QA state lives under the ignored `build/` tree. Its machine-readable
 contract is `config/build-output-policy.json`; `scripts/build_output_policy.py validate` rejects an
@@ -100,7 +121,7 @@ block byte-for-byte, so a manifest change cannot silently leave documentation st
 | `build/cache/xcode/macos/` | macOS build and XCUITest lanes | `cache` | `aggressive` | Persistent incremental macOS Xcode cache |
 | `build/cache/xcode/ios-device/` | Physical-device iOS build and XCUITest lanes | `cache` | `aggressive` | Persistent incremental physical-device Xcode cache |
 | `build/cache/xcode/source-packages/` | Serialized Xcode SwiftPM resolver | `cache` | `aggressive` | Shared pinned Xcode package checkout and artifact store |
-| `build/cache/swiftpm/mlx-audio-runtime/` | Vendored MLX Audio runtime SwiftPM commands | `cache` | `aggressive` | Persistent package-specific SwiftPM scratch cache |
+| `build/cache/swiftpm/mlx-audio-runtime/` | Owned Vocello Qwen3 Core SwiftPM commands | `cache` | `aggressive` | Persistent package-specific SwiftPM scratch cache |
 | `build/scratch/derived-data/foundation/` | Foundation target compile-safety lane | `scratch` | `routine` | Delete after successful invocation and during routine cleanup |
 | `build/scratch/derived-data/package-resolution/` | Serialized Xcode SwiftPM resolver | `scratch` | `routine` | Ephemeral resolver intermediates; the shared checkout lives under build/cache |
 | `build/scratch/transient/` | One-off repository tooling and migration-only diagnostic probes | `scratch` | `routine` | Invocation-local helpers and obsolete untracked probes; routine cleanup removes them |
@@ -113,6 +134,7 @@ block byte-for-byte, so a manifest change cannot silently leave documentation st
 | `build/artifacts/ios/` | Physical-device iOS diagnostics, benchmarks, and profiles | `artifact` | `governed` | Retain compact summaries and publication-repair evidence; prune raw evidence only after validation |
 | `build/artifacts/ui-tests/` | Unified macOS and physical-device XCUITest runner | `artifact` | `prune-ui-results` | Keep policy-selected passing and failure result bundles |
 | `build/artifacts/diagnostics/` | Cross-platform logs, crash deltas, and local diagnostics | `artifact` | `governed` | Validator-owned; preserve unresolved failure and publication-repair evidence |
+| `build/artifacts/project-health/` | Generated project-health inventory and release-readiness diagnostics | `artifact` | `routine` | Local detailed reports are disposable; the compact reproducible snapshot is tracked under docs |
 | `build/artifacts/symbols/macos/` | macOS build and release identity checks | `artifact` | `preserve` | Keep only symbols whose UUIDs match the current macOS app and XPC products |
 | `build/artifacts/symbols/ios/` | Physical-device iOS build and archive identity checks | `artifact` | `preserve` | Keep only symbols whose UUIDs match the current iOS app product |
 | `build/artifacts/foundation/` | Foundation compile-safety result bundles and logs | `artifact` | `routine` | Retain the latest useful compile-safety result; older output is disposable |
@@ -128,13 +150,13 @@ are arm64-only. XcodeBuildMCP uses its own managed scratch DerivedData and never
 persistent cache. Xcode GUI DerivedData outside the repository is report-only; cleanup touches it
 only through `--external-xcode --yes` after exact project matching.
 
-`project.yml` remains the source of truth for the CLI target. XcodeGen 2.45.4 traps when it directly
-emits a shared scheme for a `tool` product, so `scripts/regenerate_project.sh` follows XcodeGen with
-the narrow `scripts/generate_cli_scheme.py` renderer. That renderer substitutes the generated
-`VocelloCLI` target identifier into `config/xcode-schemes/VocelloCLI.xcscheme.template`; project-input
-validation rejects a missing or stale result. The supported CLI build therefore uses `-scheme
-VocelloCLI` and the canonical managed macOS DerivedData rather than leaking state through a
-scheme-less `-target` invocation.
+`project.yml` remains the source of truth for the CLI and app-host-free iOS logic-test targets.
+XcodeGen 2.45.4 cannot directly emit their shared schemes, so `scripts/regenerate_project.sh`
+follows XcodeGen with two narrow renderers: `scripts/generate_cli_scheme.py` and
+`scripts/generate_ios_logic_scheme.py`. They substitute generated target identifiers into the
+checked-in `VocelloCLI` and `VocelloiOSLogic` templates; project-input validation rejects a missing
+or stale result. Supported commands therefore use explicit schemes and managed DerivedData rather
+than leaking state through scheme-less `-target` invocations.
 
 Exact-PID Allocations traces can grow by multiple gigabytes during one cold model run, so successful
 profiles publish compact evidence and discard the raw trace unless `--keep-trace` is explicit. Use

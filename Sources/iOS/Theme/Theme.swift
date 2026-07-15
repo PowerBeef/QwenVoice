@@ -189,6 +189,5 @@ enum Theme {
     enum Branding {
         static let productName = "Vocello"
         static let headerMarkAssetName = "VocelloHeaderMark"
-        static let version = "Version 2.0.0"
     }
 }

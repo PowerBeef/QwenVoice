@@ -1,4 +1,5 @@
 import Foundation
+import QwenVoiceCore
 
 /// iOS filesystem paths — the iOS counterpart to `Sources/Services/AppPaths.swift`.
 ///
@@ -7,7 +8,8 @@ import Foundation
 /// so models, history, and saved voices live in a stable shared location. The
 /// engine runs in-process (`MLXTTSEngine`); the App Group container is retained
 /// so a future companion surface (widget, share extension) can read the same
-/// data without migration. `QVOICE_APP_SUPPORT_DIR` overrides the root.
+/// data without migration. `QVOICE_APP_SUPPORT_DIR` may override the root only
+/// when the explicit `QWENVOICE_DEBUG` runtime gate is enabled.
 enum AppPaths {
     static let appSupportOverrideEnvironmentKey = "QVOICE_APP_SUPPORT_DIR"
     private static let defaultSharedAppGroupIdentifier = "group.com.patricedery.vocello.shared"
@@ -51,13 +53,15 @@ enum AppPaths {
     }
 
     static func resolvedAppSupportDir(environment: [String: String]) -> URL {
-        if let overridePath = environment[appSupportOverrideEnvironmentKey]?
+        if let overridePath = RuntimeDebugGate.value(
+            for: appSupportOverrideEnvironmentKey,
+            environment: environment
+        )?
             .trimmingCharacters(in: .whitespacesAndNewlines),
-           !overridePath.isEmpty {
-            if NSString(string: overridePath).isAbsolutePath {
-                return URL(fileURLWithPath: overridePath, isDirectory: true)
-            }
-            return managedAppSupportDir.appendingPathComponent(overridePath, isDirectory: true)
+           !overridePath.isEmpty,
+           NSString(string: overridePath).isAbsolutePath {
+            return URL(fileURLWithPath: overridePath, isDirectory: true)
+                .standardizedFileURL
         }
 
         return sharedContainerDir ?? managedAppSupportDir

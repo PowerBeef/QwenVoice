@@ -129,9 +129,10 @@ public protocol TTSEngine: ObservableObject {
 /// preview PCM payload **intact** (the `latestEvent` snapshot strips it, and coalescing
 /// drops intermediate chunks). In-process transport consumers (the iOS app) drain this to
 /// play streamed audio live during generation. Out-of-process (macOS XPC) consumes the same
-/// stream inside the engine service.
+/// stream inside the engine service. A subscribed generation always closes with exactly one
+/// `.completed`, `.cancelled`, or `.failed` event, including preflight/admission failures.
 public protocol TTSEngineEventStreaming: AnyObject {
-    var events: AsyncStream<GenerationEvent> { get }
+    func events(for generationID: UUID) -> AsyncStream<GenerationEvent>
 }
 
 @MainActor
@@ -157,5 +158,11 @@ public protocol NativeMemoryReporting: AnyObject {
 
 @MainActor
 public protocol ActiveGenerationCancellable: AnyObject {
-    func cancelActiveGeneration() async throws
+    func cancelActiveGeneration(reason: GenerationCancellationReason) async throws
+}
+
+public extension ActiveGenerationCancellable {
+    func cancelActiveGeneration() async throws {
+        try await cancelActiveGeneration(reason: .user)
+    }
 }

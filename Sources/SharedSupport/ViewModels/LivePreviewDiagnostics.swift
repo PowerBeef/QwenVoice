@@ -1,4 +1,5 @@
 import Foundation
+import QwenVoiceCore
 
 /// Diagnostic logging for the live-preview chunk-decode pipeline.
 ///
@@ -18,7 +19,7 @@ enum LivePreviewDiagnostics {
     private static let environmentKey = "QWENVOICE_LIVE_PREVIEW_DIAGNOSTICS"
 
     static var isEnabled: Bool {
-        let value = ProcessInfo.processInfo.environment[environmentKey]?
+        let value = RuntimeDebugGate.value(for: environmentKey)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
         switch value {

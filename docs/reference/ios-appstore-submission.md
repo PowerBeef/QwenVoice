@@ -8,12 +8,13 @@ This runbook is release-only. Commits, pushes, pull requests, merges, CI, archiv
 packaging use deterministic verification and do not require a phone, models, or XCUITest evidence.
 Physical-device UI results are optional explicit frontend QA artifacts.
 
-**Verified on device (2026-06-13, iPhone 17 Pro):** the development build signs, installs, and runs
+**Historical device checkpoint (2026-06-13, iPhone 17 Pro):** the development build signed, installed, and ran
 end-to-end. `scripts/ios_device.sh` now **auto-derives the signing team** from the keychain's Apple
 Development certificate (no `QWENVOICE_DEVELOPMENT_TEAM` needed for local dev builds; it also falls back to
 offline manual signing if no Apple ID is in Xcode). The development provisioning profile already carries
-`increased-memory-limit`, and on-device generation is healthy — RTF ~1.8 warm, ~2.7 GB peak (well within the
-8 GB-class iPhone budget), 0 memory trims, and audio-QC pass. Physical-device XCUITest can be run
+`increased-memory-limit`, and that dated run passed its generation and audio-QC checks. Current performance
+and memory truth comes from the schema-v2 records in `benchmarks/HISTORY.md`, not these historical figures.
+Physical-device XCUITest can be run
 independently when explicit frontend acceptance is requested; ordinary GitHub CI and archive
 packaging are deterministic-only — see
 [`testing-runbook.md`](testing-runbook.md); and the UI
@@ -84,11 +85,24 @@ Add these repo **Secrets** (Settings → Secrets and variables → Actions):
 | `QWENVOICE_DEVELOPMENT_TEAM` | the 10-char Apple team id |
 | `ASC_API_KEY_ID` / `ASC_API_ISSUER_ID` / `ASC_API_KEY_P8` | App Store Connect API key (id, issuer, base64 of `.p8`) |
 
-Then run the **Release** workflow from the Actions tab with `archive_ios = true` (and `upload_to_testflight = true`
-to push straight to TestFlight). This job is gated to manual dispatch only, so it never affects the macOS DMG
-release. The workflow archives `VocelloiOS`, asserts the
-`increased-memory-limit` entitlement + the bundled catalog, exports via
-`ExportOptions-appstore.plist`, uploads the IPA artifact, and (optionally) uploads to TestFlight.
+Then run the **Release** workflow from the Actions tab with the exact existing version `tag`,
+`archive_ios = true`, and optionally `upload_to_testflight = true` to push straight to TestFlight.
+This job is gated to manual dispatch only, so it never affects the macOS DMG release. The workflow
+first executes `scripts/macos_test.sh gate` plus the generic iOS device-SDK compile as one
+contract-bound `platform-readiness` subprocess. Only then does it archive `VocelloiOS`, assert the
+bundled catalog, export via `ExportOptions-appstore.plist`, and run the release-blocking
+`verify_ios_release_artifacts.py` contract. That verifier checks the
+archive and IPA bundle/version/build identities, arm64 Mach-O UUID plus signature-normalized code
+continuity, the root privacy manifest, App Group and memory entitlements, configured-team and App ID
+prefix consistency, and signing-certificate membership in each provisioning profile. The archive
+may be validly development- or distribution-signed; only the exported IPA must use App Store
+provisioning, Apple Distribution signing, and no `get-task-allow`. CI deliberately signs the archive
+with the imported Distribution certificate/profile UUID. Both signing chains must also pass a local
+Apple code-signing trust and validity evaluation. The standalone verifier still accepts Xcode's
+normal two-phase local archive/export route. The schema-v2 compact summary omits the team and App ID
+prefix. It and the IPA are both hashed into the release evidence before SPDX/CycloneDX
+inventories, checksums, provenance attestation, candidate upload, or the optional TestFlight upload
+can proceed.
 
 ### B. Local (Xcode-logged-in maintainer)
 
@@ -113,11 +127,26 @@ xcodebuild -exportArchive -archivePath build/dist/ios/Vocello.xcarchive \
   -allowProvisioningUpdates
 ```
 
-Then verify (the full, metadata-driven check — author a `release_metadata.txt` capturing your on-device
-validation per `scripts/verify_ios_release_archive.sh`'s usage):
+Then run the mandatory non-device artifact check:
 
 ```sh
 ./scripts/check_ios_catalog.sh
+python3 scripts/verify_ios_release_artifacts.py \
+  --archive build/dist/ios/Vocello.xcarchive \
+  --export-dir build/dist/ios/export \
+  --expected-team-id-env QWENVOICE_DEVELOPMENT_TEAM \
+  --output build/dist/ios/ios-release-artifact-verification.json
+```
+
+This local route may produce a development-signed archive that Xcode re-signs during export. That is
+valid: the verifier requires a trusted Apple signing/profile relationship on the archive, then applies
+the final App Store distribution rules to the exported IPA and compares signature-normalized code.
+
+When a separate physical-device release-validation session was explicitly performed, its local
+metadata can additionally be checked with the older device-context verifier. That optional evidence
+does not replace the mandatory archive/IPA contract above and does not gate packaging:
+
+```sh
 ./scripts/verify_ios_release_archive.sh build/dist/ios/Vocello.xcarchive build/dist/ios/export release_metadata.txt
 ```
 

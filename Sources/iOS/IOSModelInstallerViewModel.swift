@@ -134,7 +134,6 @@ final class IOSModelInstallerViewModel: ObservableObject {
     }
 
     func cancel(_ model: TTSModel) {
-        states[model.id] = .cancelling
         guard let coordinator else { return }
         Task {
             await coordinator.cancel(modelID: model.id)

@@ -903,7 +903,7 @@ def gpu_peak_by_stage(mlx_by_stage):
 # Top-level decode-loop stages (timingsMS keys) in pipeline order. The engine
 # attributes the wall clock of the hot token loop to exactly these stages plus an
 # audio-chunk-eval / unattributed remainder (see qwenTokenLoopUnattributedMS in the
-# vendored Qwen3TTS.swift), so named stages + "other" sum to qwen_token_loop_total.
+# owned Qwen3TTS.swift), so named stages + "other" sum to qwen_token_loop_total.
 # This decomposition answers WHERE decode time goes: the Talker forward, the
 # autoregressive 15× Code Predictor loop, the Code2Wav audio decoder, or the
 # frame-boundary eval flush.

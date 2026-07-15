@@ -591,6 +591,21 @@ final class ModelManagerViewModel {
     /// Start one model's download after it has claimed a concurrency slot.
     private func beginModelDownload(_ model: TTSModel) {
         let modelID = model.id
+        let downloadPlan: (
+            catalog: ProductionModelCatalog,
+            artifact: ProductionModelCatalog.Artifact
+        )
+        do {
+            downloadPlan = try TTSContract.productionDownloadPlan(for: model)
+        } catch {
+            lastFailureMessages[modelID] = error.localizedDescription
+            statuses[modelID] = status(
+                for: localModelInfo(for: model),
+                failureMessage: error.localizedDescription
+            )
+            startPendingDownloads()
+            return
+        }
         let epoch = beginEpoch(for: modelID)
         inflightModelDownloads.insert(modelID)
 
@@ -622,7 +637,8 @@ final class ModelManagerViewModel {
                     )
                 }
             },
-            transferMetricsHandler: { diagnostics.record(metrics: $0) }
+            transferMetricsHandler: { diagnostics.record(metrics: $0) },
+            artifactURLPolicy: downloadPlan.catalog.downloadURLPolicy
         )
         downloaders[modelID] = downloader
 
@@ -637,7 +653,8 @@ final class ModelManagerViewModel {
                 epoch: epoch,
                 downloader: downloader,
                 targetDir: targetDir,
-                diagnostics: diagnostics
+                diagnostics: diagnostics,
+                artifact: downloadPlan.artifact
             )
         }
         downloadTasks[modelID] = task
@@ -650,12 +667,14 @@ final class ModelManagerViewModel {
         epoch: Int,
         downloader: HuggingFaceDownloader,
         targetDir: URL,
-        diagnostics: ModelDownloadDiagnosticsStore
+        diagnostics: ModelDownloadDiagnosticsStore,
+        artifact: ProductionModelCatalog.Artifact
     ) async {
         do {
-            try await downloader.downloadRepo(
-                repo: model.huggingFaceRepo,
-                revision: model.huggingFaceRevision ?? "main",
+            try await downloader.downloadFiles(
+                artifact.downloadFiles,
+                repo: artifact.repo,
+                revision: artifact.revision,
                 to: targetDir
             )
             guard isCurrentEpoch(epoch, for: model.id) else { return }
@@ -871,7 +890,7 @@ final class ModelManagerViewModel {
                 mode: coreMode,
                 huggingFaceRepo: model.huggingFaceRepo,
                 huggingFaceRevision: model.huggingFaceRevision,
-                artifactVersion: model.huggingFaceRevision ?? "local",
+                artifactVersion: model.artifactVersion,
                 iosDownloadEligible: false,
                 estimatedDownloadBytes: model.estimatedDownloadBytes,
                 outputSubfolder: model.outputSubfolder,

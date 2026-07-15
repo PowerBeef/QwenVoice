@@ -305,7 +305,7 @@ class MacOSLanguageBenchContractTests(unittest.TestCase):
         ios = (REPO / "scripts" / "ios_device.sh").read_text(encoding="utf-8")
         ios_gate = shell_function(ios, "cmd_gate")
         self.assertLess(
-            ios_gate.index('cmd_crashes >"$gate_dir/crashes.log"'),
+            ios_gate.index('required_step_run "$step_ledger" crash-delta cmd_crashes'),
             ios_gate.index("record_benchmark_history"),
         )
 

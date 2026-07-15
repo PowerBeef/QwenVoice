@@ -47,13 +47,6 @@ struct SettingsView: View {
     /// (AudioService falls back to the default outputs folder).
     @State private var outputDirectoryIssue: String?
 
-    // Hidden "secret debug toggle": tap the version label 7× to flip the
-    // persisted DebugMode flag (telemetry/probing + isolated QwenVoice-Debug
-    // data). Applies on next launch. The QWENVOICE_DEBUG env var is the
-    // equivalent dev/script path.
-    @State private var showDebugToggledAlert = false
-    @State private var debugModeNowEnabled = false
-
     init(highlightedMode: Binding<GenerationMode?>, showsNavigationTitle: Bool = true) {
         _highlightedMode = highlightedMode
         self.showsNavigationTitle = showsNavigationTitle
@@ -170,18 +163,6 @@ struct SettingsView: View {
                             Text(appVersion)
                                 .font(.caption.monospacedDigit())
                                 .foregroundStyle(.tertiary)
-                                .onTapGesture(count: 7) {
-                                    debugModeNowEnabled = DebugMode.togglePersistedFlag()
-                                    showDebugToggledAlert = true
-                                }
-                                .alert(
-                                    debugModeNowEnabled ? "Debug mode enabled" : "Debug mode disabled",
-                                    isPresented: $showDebugToggledAlert
-                                ) {
-                                    Button("OK", role: .cancel) {}
-                                } message: {
-                                    Text("Relaunch Vocello to apply. While on, debug mode isolates data in the QwenVoice-Debug folder and (soon) enables telemetry and probing.")
-                                }
                             Button("Reveal in Finder") {
                                 NSWorkspace.shared.open(QwenVoiceApp.appSupportDir)
                             }

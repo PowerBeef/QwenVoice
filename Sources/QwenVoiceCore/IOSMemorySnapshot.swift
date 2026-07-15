@@ -123,11 +123,17 @@ public struct IOSMemorySnapshot: Hashable, Codable, Sendable {
     /// docs/reference/ios-engine-optimization.md §9).
     public static let simulatedProcessLimitBytes: UInt64? = {
         let environment = ProcessInfo.processInfo.environment
-        if let raw = environment["QVOICE_IOS_SIMULATED_PROCESS_LIMIT_MB"],
+        if let raw = RuntimeDebugGate.value(
+            for: "QVOICE_IOS_SIMULATED_PROCESS_LIMIT_MB",
+            environment: environment
+        ),
            let megabytes = UInt64(raw), megabytes > 0 {
             return megabytes * 1_048_576
         }
-        switch environment["QVOICE_IOS_MEMORY_PROFILE"]?.lowercased() {
+        switch RuntimeDebugGate.value(
+            for: "QVOICE_IOS_MEMORY_PROFILE",
+            environment: environment
+        )?.lowercased() {
         case "iphone15pro":
             // Bottom of the community-measured 5.0–5.5 GB entitled band on
             // 8 GB iPhones — conservative: passing here implies passing on

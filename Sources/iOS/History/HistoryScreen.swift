@@ -143,6 +143,7 @@ private struct IOSHistoryLibrarySection: View {
     @State private var filteredItemCount = 0
     @State private var reloadTask: Task<Void, Never>?
     @State private var clearConfirmation: IOSHistoryClearConfirmation?
+    @State private var databaseUnavailable = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -165,7 +166,7 @@ private struct IOSHistoryLibrarySection: View {
                         .foregroundStyle(items.isEmpty ? IOSAppTheme.textTertiary : IOSAppTheme.textSecondary)
                         .frame(width: 34, height: 34)
                 }
-                .disabled(items.isEmpty)
+                .disabled(items.isEmpty || databaseUnavailable)
                 .accessibilityLabel("Clear history")
                 .accessibilityIdentifier("historyClearMenu")
             }
@@ -186,7 +187,9 @@ private struct IOSHistoryLibrarySection: View {
                         )
                         .padding(.horizontal, 20)
                         .padding(.top, 16)
-                        Button("Retry", action: reload)
+                        Button("Retry") {
+                            reload(reopenFailedStore: true)
+                        }
                             .iosAdaptiveUtilityButtonStyle(tint: IOSBrandTheme.library)
                             .padding(.horizontal, 20)
                             .accessibilityIdentifier("historyRetryButton")
@@ -214,6 +217,7 @@ private struct IOSHistoryLibrarySection: View {
                             ForEach(group.items) { item in
                                 IOSHistoryItemCard(
                                     item: item,
+                                    allowsDeletion: !databaseUnavailable,
                                     onDelete: { delete(item) }
                                 )
                                 .accessibilityElement(children: .contain)
@@ -225,7 +229,7 @@ private struct IOSHistoryLibrarySection: View {
                 .padding(.bottom, 8)
             }
         }
-        .onAppear(perform: reload)
+        .onAppear { reload() }
         .onReceive(NotificationCenter.default.publisher(for: .generationSaved)) { _ in
             reload()
         }
@@ -287,20 +291,27 @@ private struct IOSHistoryLibrarySection: View {
                 await MainActor.run { reload() }
             } catch {
                 let message = error.localizedDescription
-                await MainActor.run { errorMessage = message }
+                await MainActor.run {
+                    databaseUnavailable = true
+                    errorMessage = message
+                }
             }
         }
     }
 
-    private func reload() {
+    private func reload(reopenFailedStore: Bool = false) {
         reloadTask?.cancel()
         reloadTask = Task {
             do {
                 let loadedItems = try await Task.detached(priority: .userInitiated) {
-                    try DatabaseService.shared.fetchAllGenerations()
+                    if reopenFailedStore {
+                        try DatabaseService.shared.reopenIfNeeded()
+                    }
+                    return try DatabaseService.shared.fetchAllGenerations()
                 }.value
                 guard !Task.isCancelled else { return }
                 items = loadedItems
+                databaseUnavailable = false
                 errorMessage = nil
                 recomputePresentation()
             } catch {
@@ -308,6 +319,7 @@ private struct IOSHistoryLibrarySection: View {
                 items = []
                 groupedItems = []
                 filteredItemCount = 0
+                databaseUnavailable = true
                 errorMessage = error.localizedDescription
             }
             reloadTask = nil
@@ -362,6 +374,7 @@ private struct IOSHistoryLibrarySection: View {
             }
             reload()
         } catch {
+            databaseUnavailable = true
             errorMessage = error.localizedDescription
         }
     }
@@ -369,6 +382,7 @@ private struct IOSHistoryLibrarySection: View {
 
 private struct IOSHistoryItemCard: View {
     let item: Generation
+    let allowsDeletion: Bool
     let onDelete: () -> Void
 
     @State private var isConfirmingDelete = false
@@ -482,6 +496,7 @@ private struct IOSHistoryItemCard: View {
                 Button("Delete", role: .destructive) {
                     isConfirmingDelete = true
                 }
+                .disabled(!allowsDeletion)
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 16, weight: .semibold))
@@ -517,9 +532,11 @@ private struct IOSHistoryItemCard: View {
             titleVisibility: .visible
         ) {
             Button("Delete", role: .destructive) {
+                guard allowsDeletion else { return }
                 IOSHaptics.warning()
                 onDelete()
             }
+            .disabled(!allowsDeletion)
             .accessibilityIdentifier("historyRowDeleteConfirm_\(item.historyAccessibilityID)")
             Button("Cancel", role: .cancel) {}
         } message: {

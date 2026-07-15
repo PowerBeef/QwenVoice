@@ -8,8 +8,8 @@ options:
   generateEmptyDirectories: true
 
 # Single shippable config. There is no separate Debug config / DEBUG symbol —
-# debug capabilities are gated at runtime via DebugMode (env QWENVOICE_DEBUG or
-# the hidden version-tap toggle). scripts/build.sh builds this config -Onone for
+# debug capabilities are gated at runtime via the explicit QWENVOICE_DEBUG
+# process environment gate. scripts/build.sh builds this config -Onone for
 # a fast local loop; scripts/release.sh builds it optimized for the DMG.
 configs:
   Release: release
@@ -19,7 +19,7 @@ packages:
     url: https://github.com/groue/GRDB.swift
     exactVersion: "7.10.0"
   MLXAudio:
-    path: third_party_patches/mlx-audio-swift
+    path: Packages/VocelloQwen3Core
   MLXSwift:
     url: https://github.com/ml-explore/mlx-swift.git
     exactVersion: "0.30.6"
@@ -174,9 +174,7 @@ targets:
       - target: QwenVoiceEngineSupport
       - target: QwenVoiceNative
       - package: MLXAudio
-        product: MLXAudioCore
-      - package: MLXAudio
-        product: MLXAudioTTS
+        product: VocelloQwen3Core
       - package: MLXSwift
         product: MLX
       - package: SwiftHuggingFace
@@ -198,6 +196,8 @@ targets:
       # a non-app `tool` product.
       - path: Sources/Resources/qwenvoice_contract.json
         buildPhase: resources
+      - path: Sources/Resources/qwenvoice_production_model_catalog.json
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.qwenvoice.cli
@@ -212,9 +212,7 @@ targets:
       - target: QwenVoiceCore
       - target: QwenVoiceEngineSupport
       - package: MLXAudio
-        product: MLXAudioCore
-      - package: MLXAudio
-        product: MLXAudioTTS
+        product: VocelloQwen3Core
       - package: MLXSwift
         product: MLX
       - package: SwiftHuggingFace
@@ -237,9 +235,7 @@ targets:
       - target: QwenVoiceCore
       - target: QwenVoiceEngineSupport
       - package: MLXAudio
-        product: MLXAudioCore
-      - package: MLXAudio
-        product: MLXAudioTTS
+        product: VocelloQwen3Core
       - package: MLXSwift
         product: MLX
       - package: SwiftHuggingFace
@@ -261,9 +257,7 @@ targets:
     dependencies:
       - target: QwenVoiceCore
       - package: MLXAudio
-        product: MLXAudioCore
-      - package: MLXAudio
-        product: MLXAudioTTS
+        product: VocelloQwen3Core
       - package: MLXSwift
         product: MLX
       - package: SwiftHuggingFace
@@ -287,9 +281,7 @@ targets:
     dependencies:
       - target: QwenVoiceBackendCore
       - package: MLXAudio
-        product: MLXAudioCore
-      - package: MLXAudio
-        product: MLXAudioTTS
+        product: VocelloQwen3Core
       - package: MLXSwift
         product: MLX
       # Deterministic-sampling seed (GenerationRequest.seed → MLXRandom.seed
@@ -313,20 +305,14 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         IPHONEOS_DEPLOYMENT_TARGET: "26.0"
         GENERATE_INFOPLIST_FILE: YES
-    dependencies:
-      - package: MLXAudio
-        product: MLXAudioCore
-      - package: MLXAudio
-        product: MLXAudioTTS
-      - package: MLXSwift
-        product: MLX
-
   QwenVoiceEngineService:
     type: xpc-service
     platform: macOS
     sources:
       - path: Sources/QwenVoiceEngineService
       - path: Sources/Resources/qwenvoice_contract.json
+        buildPhase: resources
+      - path: Sources/Resources/qwenvoice_production_model_catalog.json
         buildPhase: resources
       - path: Sources/PrivacyInfo.xcprivacy
         buildPhase: resources
@@ -345,9 +331,7 @@ targets:
       - target: QwenVoiceCore
       - target: QwenVoiceEngineSupport
       - package: MLXAudio
-        product: MLXAudioCore
-      - package: MLXAudio
-        product: MLXAudioTTS
+        product: VocelloQwen3Core
       - package: MLXSwift
         product: MLX
       - package: SwiftHuggingFace
@@ -369,6 +353,8 @@ targets:
       - path: Sources/Resources/qwenvoice_contract.json
         buildPhase: resources
       - path: Sources/Resources/qwenvoice_ios_model_catalog.json
+        buildPhase: resources
+      - path: Sources/Resources/qwenvoice_production_model_catalog.json
         buildPhase: resources
       - path: Sources/Resources/voice-previews
         buildPhase: resources
@@ -418,9 +404,7 @@ targets:
       - package: GRDB
       - target: QwenVoiceCore
       - package: MLXAudio
-        product: MLXAudioCore
-      - package: MLXAudio
-        product: MLXAudioTTS
+        product: VocelloQwen3Core
       - package: MLXSwift
         product: MLX
       - package: SwiftHuggingFace
@@ -438,6 +422,7 @@ targets:
       - path: Sources/SharedSupport/Services/GenerationOutputVerifier.swift
       - path: Sources/SharedSupport/Services/VoiceClipTranscriber.swift
       - path: Sources/SharedSupport/Telemetry/MainThreadStallWatchdog.swift
+      - path: Sources/SharedSupport/Database/HistoryPersistenceError.swift
     dependencies:
       - target: QwenVoiceCore
     settings:
@@ -449,6 +434,31 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         CODE_SIGN_IDENTITY: "-"
         GENERATE_INFOPLIST_FILE: YES
+
+  # Deterministic iOS-only unit logic. This deliberately has no application
+  # host and no hidden app behavior. CI compiles it for generic/platform=iOS;
+  # scripts/ios_device.sh logic-test is the explicit physical-device runner.
+  VocelloiOSLogicTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/VocelloiOSLogicTests
+      - path: Sources/iOSSupport/Services/AppPaths.swift
+      - path: Sources/iOSSupport/Services/IOSModelDeliverySupport.swift
+    dependencies:
+      - target: QwenVoiceCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.patricedery.vocello.logic-tests
+        PRODUCT_NAME: VocelloiOSLogicTests
+        PRODUCT_MODULE_NAME: VocelloiOSLogicTests
+        SWIFT_VERSION: "6"
+        IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: $(QWENVOICE_DEVELOPMENT_TEAM)
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1"
+        SUPPORTS_MACCATALYST: NO
 
   # Deterministic macOS XPC transport tests. Frontend journeys live in the
   # separate VocelloMacUITests target and never run as part of this bundle.

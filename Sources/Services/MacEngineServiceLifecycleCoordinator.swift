@@ -43,7 +43,7 @@ final class MacEngineServiceLifecycleCoordinator {
     /// Dev override for the idle dwell (seconds) so retirement can be
     /// exercised without an 8-minute wait: QWENVOICE_ENGINE_RETIRE_DWELL_SECONDS.
     private static var defaultIdleDwell: Duration {
-        if let raw = ProcessInfo.processInfo.environment["QWENVOICE_ENGINE_RETIRE_DWELL_SECONDS"],
+        if let raw = RuntimeDebugGate.value(for: "QWENVOICE_ENGINE_RETIRE_DWELL_SECONDS"),
            let seconds = Int(raw), seconds > 0 {
             return .seconds(seconds)
         }

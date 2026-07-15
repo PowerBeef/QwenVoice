@@ -15,17 +15,34 @@ for required_policy_surface in \
   config/build-output-policy.json \
   config/documentation-contract.json \
   config/public-product-facts.json \
+  config/orchestration-contract.json \
+  config/project-health-contract.json \
+  docs/project-health.md \
   scripts/build_output_policy.py \
   scripts/documentation_contract.py \
+  scripts/model_catalog_contract.py \
+  scripts/evidence_impact.py \
   scripts/vendor_runtime_contract.py \
+  scripts/supply_chain_contract.py \
+  scripts/release_evidence.py \
+  scripts/release_sbom.py \
+  scripts/required_step_ledger.py \
+  scripts/project_health.py \
   scripts/build_cleanup.py \
   scripts/clean_build_caches.sh \
   scripts/lib/build_paths.sh \
   scripts/lib/build_cache.sh \
+  scripts/lib/required_steps.sh \
   scripts/lib/profile_trace_retention.py \
   scripts/tests/test_build_output_policy.py \
   scripts/tests/test_documentation_contract.py \
+  scripts/tests/test_model_catalog_contract.py \
+  scripts/tests/test_evidence_impact.py \
   scripts/tests/test_vendor_runtime_contract.py \
+  scripts/tests/test_supply_chain_contract.py \
+  scripts/tests/test_release_evidence.py \
+  scripts/tests/test_required_step_ledger.py \
+  scripts/tests/test_project_health.py \
   scripts/tests/test_build_routing_contract.py \
   scripts/tests/test_clean_build_caches.py \
   scripts/tests/test_profile_trace_retention.py; do
@@ -96,7 +113,7 @@ for retired in \
   [[ ! -e "$retired" ]] || fail "retired UI harness artifact still exists: $retired"
 done
 
-active=(AGENTS.md README.md .gitignore .agents benchmarks docs scripts config .github project.yml QwenVoice.xcodeproj/project.pbxproj Sources Tests website third_party_patches/mlx-audio-swift)
+active=(AGENTS.md README.md .gitignore .agents benchmarks docs scripts config .github project.yml QwenVoice.xcodeproj/project.pbxproj Sources Tests website Packages/VocelloQwen3Core)
 excludes=(
   --glob '!scripts/check_test_workflows.sh'
   --glob '!scripts/clean_build_caches.sh'
@@ -134,7 +151,7 @@ out="$(rg -n --pcre2 "$release_ui_gate_pattern" AGENTS.md README.md .agents docs
 python3 scripts/documentation_contract.py \
   || fail "active documentation contract failed"
 python3 scripts/vendor_runtime_contract.py validate \
-  || fail "owned vendor-runtime contract failed"
+  || fail "owned Qwen3 runtime contract failed"
 
 # Current guidance uses the typed playback-scheduled and heartbeat metrics. Keep
 # the retired display names in compatibility code and historical evidence only.
@@ -333,6 +350,22 @@ for scheme in ("QwenVoice", "VocelloiOS"):
     body = match.group("body")
     if "VocelloMacUITests" in body or "VocelloiOSUITests" in body:
         raise SystemExit(f"ordinary scheme {scheme} must not include a UI-test bundle")
+
+logic_target = re.search(
+    r"^  VocelloiOSLogicTests:\n(?P<body>(?:    .*\n|\n)*)",
+    text,
+    re.MULTILINE,
+)
+logic_body = logic_target.group("body") if logic_target else ""
+if "type: bundle.unit-test" not in logic_body or "platform: iOS" not in logic_body:
+    raise SystemExit("VocelloiOSLogicTests must remain a standalone iOS unit-test bundle")
+if "TEST_TARGET_NAME" in logic_body:
+    raise SystemExit("VocelloiOSLogicTests must remain app-host-free")
+logic_template = Path("config/xcode-schemes/VocelloiOSLogic.xcscheme.template").read_text(
+    encoding="utf-8"
+)
+if "VocelloiOSLogicTests" not in logic_template or "TestableReference" not in logic_template:
+    raise SystemExit("VocelloiOSLogic generated scheme must own the standalone policy-test bundle")
 PY
 
 # Ordinary CI must neither compile UI-test bundles nor execute UI acceptance.
@@ -355,6 +388,10 @@ for path in paths:
 PY
 2>&1 || true)"
 [[ -z "$ci_error" ]] || fail "$ci_error"
+rg -q -- '-scheme VocelloiOSLogic' .github/workflows/ci.yml \
+  || fail "ordinary CI must compile the standalone iOS logic-test bundle"
+rg -q 'CODE_SIGNING_ALLOWED=NO' .github/workflows/ci.yml \
+  || fail "generic iOS CI compilation must remain signing-independent"
 
 # No simulator destination is supported for Vocello app UI automation.
 out="$(rg -n -i 'platform=iOS Simulator|build_run_sim|test_sim|launch_sim' \
@@ -438,7 +475,7 @@ for root in roots:
         if path != Path("docs/reference/backend-optimization-research-report.md")
     )
 allowed = {
-    "ios_device.sh": {"doctor", "build", "install", "launch", "console", "pull", "bench", "lang-bench", "speech-assets", "crashes", "debug", "logs", "profile", "memory", "memory-field-report", "preflight", "device-state", "gate", "help"},
+    "ios_device.sh": {"doctor", "build", "logic-test", "install", "launch", "console", "pull", "bench", "lang-bench", "speech-assets", "crashes", "debug", "logs", "profile", "memory", "memory-field-report", "preflight", "device-state", "gate", "help"},
     "macos_test.sh": {"preflight", "core-test", "lang-bench", "test", "telemetry-overhead", "crashes", "debug", "logs", "profile", "memory", "gate", "release-readiness", "models", "help"},
     "ui_test.sh": {"macos", "ios"},
 }
@@ -482,7 +519,7 @@ for root in roots:
         for path in candidates
         if path != Path("docs/reference/backend-optimization-research-report.md")
     )
-prefixes = ("Sources/", "Tests/", "scripts/", "config/", ".github/")
+prefixes = ("Sources/", "Tests/", "scripts/", "config/", ".github/", "Packages/")
 errors = []
 for source in files:
     text = source.read_text(encoding="utf-8")
@@ -495,8 +532,8 @@ for source in files:
             continue
         matches = glob.glob(candidate) if "*" in candidate else ([candidate] if Path(candidate).exists() else [])
         if not matches and candidate.startswith("Sources/"):
-            vendored = Path("third_party_patches/mlx-audio-swift") / candidate
-            matches = [str(vendored)] if vendored.exists() else []
+            runtime = Path("Packages/VocelloQwen3Core") / candidate
+            matches = [str(runtime)] if runtime.exists() else []
         if not matches:
             errors.append(f"{source}: stale inline path {candidate}")
 if errors:
@@ -514,6 +551,10 @@ python3 scripts/validate_backend_risk_spine.py
 python3 -m unittest \
   scripts.tests.test_build_output_policy \
   scripts.tests.test_documentation_contract \
+  scripts.tests.test_model_catalog_contract \
+  scripts.tests.test_evidence_impact \
+  scripts.tests.test_required_step_ledger \
+  scripts.tests.test_project_health \
   scripts.tests.test_vendor_runtime_contract \
   scripts.tests.test_build_routing_contract \
   scripts.tests.test_clean_build_caches \

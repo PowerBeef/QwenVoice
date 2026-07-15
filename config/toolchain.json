@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "native": {
+    "xcode": {"version": "26.6", "versionCommand": ["xcodebuild", "-version"]},
+    "swift": {"version": "6.3.3", "versionCommand": ["swift", "--version"]},
+    "xcodegen": {"version": "2.45.4", "versionCommand": ["xcodegen", "--version"]},
+    "xcbeautify": {"version": "3.2.1", "versionCommand": ["xcbeautify", "--version"]},
+    "ripgrep": {"version": "15.1.0", "versionCommand": ["rg", "--version"]},
+    "shellcheck": {"version": "0.11.0", "versionCommand": ["shellcheck", "--version"]},
+    "gh": {"version": "2.92.0", "versionCommand": ["gh", "--version"]}
+  },
+  "website": {
+    "node": {"version": "24.15.0", "versionCommand": ["node", "--version"]},
+    "npm": {"version": "11.12.1", "versionCommand": ["npm", "--version"]}
+  },
+  "actions": {
+    "actions/checkout": {"version": "v4.3.1", "sha": "34e114876b0b11c390a56381ad16ebd13914f8d5"},
+    "actions/cache": {"version": "v4.2.4", "sha": "0400d5f644dc74513175e3cd8d07132dd4860809"},
+    "actions/upload-artifact": {"version": "v4.6.2", "sha": "ea165f8d65b6e75b540449e92b4886f43607fa02"},
+    "actions/setup-node": {"version": "v4.4.0", "sha": "49933ea5288caeca8642d1e84afbd3f7d6820020"},
+    "actions/dependency-review-action": {"version": "v4.8.2", "sha": "3c4e3dcb1aa7874d2c16be7d79418e9b7efd6261"},
+    "actions/attest-build-provenance": {"version": "v3.0.0", "sha": "977bb373ede98d70efdf65b84cb5f73e068dcc2a"},
+    "github/codeql-action": {"version": "v3.30.5", "sha": "3599b3baa15b485a2e49ef411a7a4bb2452e7f93"}
+  }
+}

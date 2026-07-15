@@ -92,9 +92,22 @@ upload depend on deterministic release-readiness and artifact checks.
    An attended launch or generation pass can be performed when models are available, but it is not
    part of the packaging gate.
    (No `--notarize` locally unless the API key env vars are present.)
-7. **Notarized DMG**: publish the GitHub release → CI (`release.yml` `package` job) builds, signs,
-   notarizes, staples, verifies (`verify_packaged_dmg.sh`), and attaches
-   `build/dist/macos/Vocello-macos26.dmg`.
+7. **Atomic Release candidate**: push the protected version tag or dispatch `release.yml` with the
+   exact existing tag. CI verifies tag/source/version identity, builds, signs, notarizes, staples,
+   verifies (`verify_packaged_dmg.sh`), emits SPDX and CycloneDX inventories, writes
+   `SHA256SUMS` plus `release-evidence.json`, and attests the DMG. Only then does it create or reuse
+   a draft GitHub Release, upload the candidate, download every asset, and verify the digests.
+   Reusing a draft first removes every prior asset; the workflow then requires the remote asset-name
+   set to match the current candidate exactly before downloading and validating it. Publication is
+   the final step. A failure leaves only an Actions artifact or draft Release, never a public
+   placeholder or a stale extra asset.
+
+   `release-evidence.json` is schema v2. It embeds a clean full-tree source identity and hashes a
+   `release-verification.json` bundle containing the platform required-step ledger and its individual
+   manifests. Required steps are accepted only when the release runner launched them as managed
+   subprocesses in the same invocation, all digests match the captured source, and completion is
+   within the contract's six-hour freshness window. A manually written PASS file, stale ledger,
+   missing step, changed untracked source file, or mixed invocation fails before publication.
 
 ## Known-cosmetic non-bugs (do not file)
 

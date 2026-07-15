@@ -1,0 +1,51 @@
+name: Bug report
+description: Report a reproducible Vocello defect without private user or device data.
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include private audio, prompts, transcripts, absolute paths, usernames, device identifiers, credentials, or security-sensitive details. Use the Security tab for vulnerabilities.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS application
+        - iPhone application
+        - vocello CLI
+        - Website
+        - Build, test, or release tooling
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Public version/build or full source commit, without a local path.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Observed behavior
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Minimal reproduction
+      description: Use synthetic text/audio and redact all private identifiers.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety checks
+      options:
+        - label: I removed private audio, prompts, transcripts, identifiers, credentials, and absolute paths.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true

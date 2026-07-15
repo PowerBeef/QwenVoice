@@ -1,6 +1,6 @@
 import Foundation
 import MLX
-@preconcurrency import MLXAudioTTS
+@preconcurrency import VocelloQwen3Core
 
 public enum NativeMemoryPolicyResolver {
     private static let oneGB = 1_024 * 1_024 * 1_024
@@ -94,25 +94,31 @@ public enum NativeMemoryPolicyResolver {
         if let memoryLimitBytes = policy.memoryLimitBytes {
             Memory.memoryLimit = memoryLimitBytes
         }
-        Qwen3StreamingMemoryTuning.apply(
-            clearOnStreamChunk: policy.clearMLXCacheOnStreamChunkEmit,
-            tokenCadence: policy.mlxTokenMemoryClearCadence
-        )
         // Sliding-window talker KV cache (generated-audio-token window). Env override
         // is the universal testing/sweep knob on any tier; the per-tier default +
         // user-facing Settings toggle are layered on in the engine wiring step.
-        Qwen3StreamingMemoryTuning.applyTalkerKVWindow(talkerKVGeneratedWindowOverride())
+        try? VocelloQwen3Runtime.apply(
+            memoryConfiguration: VocelloQwen3MemoryConfiguration(
+                clearCacheOnStreamChunk: policy.clearMLXCacheOnStreamChunkEmit,
+                tokenMemoryClearCadence: policy.mlxTokenMemoryClearCadence,
+                talkerKVGeneratedWindow: talkerKVGeneratedWindowOverride()
+            )
+        )
     }
 
     /// Free-form notes describing the active MLX/Metal memory policy so each
     /// telemetry row self-identifies the substrate it ran under.
     public static func currentPolicyNotes(for policy: NativeMemoryPolicy) -> [String: String] {
+        let environment = ProcessInfo.processInfo.environment
         var notes: [String: String] = [
             "mlxCacheLimitMB": String(policy.cacheLimitBytes / (1_024 * 1_024)),
             "mlxTokenMemoryClearCadence": String(policy.mlxTokenMemoryClearCadence),
             "mlxClearCacheAfterGeneration": String(policy.clearCacheAfterGeneration),
             "mlxClearCacheOnStreamChunkEmit": String(policy.clearMLXCacheOnStreamChunkEmit),
-            "talkerKVWindow": ProcessInfo.processInfo.environment["QVOICE_TALKER_KV_WINDOW"] ?? "default"
+            "talkerKVWindow": RuntimeDebugGate.value(
+                for: "QVOICE_TALKER_KV_WINDOW",
+                environment: environment
+            ) ?? "default"
         ]
         if let memoryLimitBytes = policy.memoryLimitBytes {
             notes["mlxMemoryLimitMB"] = String(memoryLimitBytes / (1_024 * 1_024))
@@ -127,7 +133,10 @@ public enum NativeMemoryPolicyResolver {
     private static func talkerKVGeneratedWindowOverride(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Int? {
-        guard let raw = environment["QVOICE_TALKER_KV_WINDOW"]?
+        guard let raw = RuntimeDebugGate.value(
+            for: "QVOICE_TALKER_KV_WINDOW",
+            environment: environment
+        )?
             .trimmingCharacters(in: .whitespacesAndNewlines),
             let window = Int(raw), window > 0
         else {
@@ -223,7 +232,7 @@ public enum NativeMemoryPolicyResolver {
         _ key: String,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Int? {
-        guard let rawValue = environment[key]?
+        guard let rawValue = RuntimeDebugGate.value(for: key, environment: environment)?
             .trimmingCharacters(in: .whitespacesAndNewlines),
               let megabytes = Int(rawValue),
               megabytes > 0 else {
@@ -231,4 +240,5 @@ public enum NativeMemoryPolicyResolver {
         }
         return megabytes * 1_024 * 1_024
     }
+
 }

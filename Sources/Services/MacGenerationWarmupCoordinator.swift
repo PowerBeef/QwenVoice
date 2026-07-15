@@ -10,7 +10,7 @@ final class MacGenerationWarmupCoordinator: ObservableObject {
     /// and records — its own model load instead of being silently pre-warmed. Resolved
     /// once per process; off in normal use (no behavior change).
     static let isSuppressed: Bool = {
-        let value = ProcessInfo.processInfo.environment["QWENVOICE_SUPPRESS_WARMUP"]?
+        let value = RuntimeDebugGate.value(for: "QWENVOICE_SUPPRESS_WARMUP")?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
         guard let value else { return false }

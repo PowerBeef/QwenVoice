@@ -65,9 +65,9 @@ class BenchCommandSourceContractTests(unittest.TestCase):
     def test_label_is_validated_before_runtime_or_generation_work(self) -> None:
         run_start = self.source.index("static func run(_ argv: [String]) async throws")
         label = self.source.index('let label = try validatedBenchmarkLabel(args.string("label"))', run_start)
-        runtime = self.source.index("let dataDir", label)
-        generation = self.source.index("let runtime = try await CLIRuntime.bootstrap", runtime)
-        self.assertLess(label, runtime)
+        data_directory = self.source.index("let resolvedDataDir", label)
+        generation = self.source.index("let runtime = try await CLIRuntime.bootstrap", data_directory)
+        self.assertLess(label, data_directory)
         self.assertLess(label, generation)
         self.assertIn(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$", self.source)
 

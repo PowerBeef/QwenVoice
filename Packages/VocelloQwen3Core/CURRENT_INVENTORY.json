@@ -1,0 +1,387 @@
+{
+  "componentID": "vocello-qwen3-core",
+  "entries": [
+    {
+      "path": ".gitignore",
+      "sha256": "cb712d13db3063f5bd60fc44740320b537c2ddc94736f682d6be0d7021be53cb",
+      "upstreamStatus": "modified"
+    },
+    {
+      "path": "Examples/SimpleChat/Config/Base.xcconfig",
+      "sha256": "d9f9fb2a2ec3c40ea9f2dca94e42111cf589d2347f110e34c01d58b1197e50c4",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/SimpleChat/Config/Debug.xcconfig",
+      "sha256": "087653d5ce0d5d92a6cdcfbf5c4dbdae17d796ad13543bbf820d8831c749bb9a",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/SimpleChat/Config/Local.xcconfig.template",
+      "sha256": "a86b79cb2967457637f0e5892c194bb9b05d17864e63808cd84afdfa12effaf2",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/SimpleChat/Config/Release.xcconfig",
+      "sha256": "087653d5ce0d5d92a6cdcfbf5c4dbdae17d796ad13543bbf820d8831c749bb9a",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/SimpleChat/Package.swift",
+      "sha256": "b3515e5af3201d71e06a97ba46302f018bc2cb29254c774ea6b745e918c83158",
+      "upstreamStatus": "modified"
+    },
+    {
+      "path": "Examples/SimpleChat/README.md",
+      "sha256": "38575b56c25320ce63185b95a7932a128c7125b6bcefb185f193fa418154188c",
+      "upstreamStatus": "modified"
+    },
+    {
+      "path": "Examples/SimpleChat/SimpleChat/Assets.xcassets/AccentColor.colorset/Contents.json",
+      "sha256": "9af65086fa30b49252fae1a1225731691de794f7775af74d71befeb507d12b7c",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/SimpleChat/SimpleChat/Assets.xcassets/AppIcon.appiconset/Contents.json",
+      "sha256": "d776cfae1b33325f70befa1b0fc5e5420c660655603409e8588d94fd8fc6e112",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/SimpleChat/SimpleChat/Assets.xcassets/Contents.json",
+      "sha256": "0fd49ba3c3585c709678e0046a821c3c60685ec7063720d30d3a3448be3a208b",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/SimpleChat/SimpleChat/AudioEngine.swift",
+      "sha256": "f02a1b8c142d02307a1620de045abaf759b53c0982e7de22f97812d708160e18",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/SimpleChat/SimpleChat/ContentView.swift",
+      "sha256": "e6de8ef087cf5468cc654750797030ab5d03697858e0eea55f54237167406f94",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/SimpleChat/SimpleChat/ConversationController.swift",
+      "sha256": "e350a7e617d8d6c8beb54c9c81cbc945e3078971f5ee61c6f834b3e1d181bfc7",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/SimpleChat/SimpleChat/SemanticVAD.swift",
+      "sha256": "79e5b005e8c64074483b6d2a50811047e8f01e120e37830c4a94ad2e36c46c64",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/SimpleChat/SimpleChat/SimpleChatApp.swift",
+      "sha256": "c94c4b556342c82045385c2cdd3319a3630b232e3b88dc8f136fe907164a5c7a",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/VoicesApp/Config/Base.xcconfig",
+      "sha256": "4d77736e98e42fa2e2222c58a35806a769ac1f459ef47a6bb5fdbf72241fdab6",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/VoicesApp/Config/Debug.xcconfig",
+      "sha256": "087653d5ce0d5d92a6cdcfbf5c4dbdae17d796ad13543bbf820d8831c749bb9a",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/VoicesApp/Config/Local.xcconfig.template",
+      "sha256": "a86b79cb2967457637f0e5892c194bb9b05d17864e63808cd84afdfa12effaf2",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/VoicesApp/Config/Release.xcconfig",
+      "sha256": "087653d5ce0d5d92a6cdcfbf5c4dbdae17d796ad13543bbf820d8831c749bb9a",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/VoicesApp/Package.swift",
+      "sha256": "5aa0a405035c997d6698d599c51858bfbe426b4ef7ac9f40d9a5e13f8389237f",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/VoicesApp/README.md",
+      "sha256": "af2bed8614eb527a93dd30abe9b7417829a19086a0faeee3375975fed9ef4431",
+      "upstreamStatus": "modified"
+    },
+    {
+      "path": "Examples/VoicesApp/VoicesApp/Helpers/AudioRecorderManager.swift",
+      "sha256": "070d0ccd7d9693317f2c25bfaac832f8d1dbe2adc8cd9679c94a09dd808ff9fa",
+      "upstreamStatus": "modified"
+    },
+    {
+      "path": "Examples/VoicesApp/VoicesApp/Info.plist",
+      "sha256": "3708336fd185b6f290f6b3a342795c0011653811b490bd451c4a9f2ee1d94112",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/VoicesApp/VoicesApp/Models/Voice.swift",
+      "sha256": "b381709ba7c85fefc8aa87f6920d62dcbf9cfaae51a3f204e563c740c9e4354e",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/VoicesApp/VoicesApp/STSView.swift",
+      "sha256": "10f90b3161378b32e4b0fc5d68c09e8264b53b9b86d4c754809267e92533335d",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/VoicesApp/VoicesApp/STTView.swift",
+      "sha256": "daec541b2fd8d4909aedbde5cb3e77db5dc359667ec4c1fe2cb4928ae56db199",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/VoicesApp/VoicesApp/ViewModels/STSViewModel.swift",
+      "sha256": "e5885fcc8b68b4c52db85d5602a630f239ce477847bb8caf87462b9f1286b820",
+      "upstreamStatus": "modified"
+    },
+    {
+      "path": "Examples/VoicesApp/VoicesApp/ViewModels/STTViewModel.swift",
+      "sha256": "03f4ad199d33369088e7d6891c107bec16da11fe320a775f57cdd3be8c1178fd",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/VoicesApp/VoicesApp/ViewModels/TTSViewModel.swift",
+      "sha256": "2de3546b1bd583e847a70f428d6127fe54d852c82ad5b7e4439ffda4bc2ab311",
+      "upstreamStatus": "modified"
+    },
+    {
+      "path": "Examples/VoicesApp/VoicesApp/Views/AddVoiceView.swift",
+      "sha256": "2d17e36ef64a41c31bd47fd05b34ff5b2a5b444bc90a27aae4e8b2a46c60810d",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/VoicesApp/VoicesApp/Views/Components/VoiceCollectionCard.swift",
+      "sha256": "ecbf4aa6e36daae461592cb520265895870d85968ec632fff58ea6a63311da0a",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/VoicesApp/VoicesApp/Views/Components/VoiceRow.swift",
+      "sha256": "2012abe3eee20d52c5649bc47d4b16458f2a7026e7ab4b1331606a995ec920de",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/VoicesApp/VoicesApp/Views/ContentView.swift",
+      "sha256": "75286f9baee5948543e060858f214433f38e5d0c29e419c2168b060098a068f2",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/VoicesApp/VoicesApp/Views/STTSettingsView.swift",
+      "sha256": "7a094957998dbbc2f09511a33d240dfa86da4a2dd6162c096c1eb984a3d08c00",
+      "upstreamStatus": "modified"
+    },
+    {
+      "path": "Examples/VoicesApp/VoicesApp/Views/SettingsView.swift",
+      "sha256": "f16783acc853fb4e86b24bff96bcaad1ac2453f1004ae29aea11bfc0d2c6c07a",
+      "upstreamStatus": "modified"
+    },
+    {
+      "path": "Examples/VoicesApp/VoicesApp/Views/VoicesView.swift",
+      "sha256": "f8d2ff5e2d3ad80991c3b3923c1a1229d5d780b224fee2ea3eac0138913e3647",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/VoicesApp/VoicesApp/Voices/James.wav",
+      "sha256": "7e5a938eedc9bba829e1e135bb69df0d4a5bf7e116c8eefa9330f8c57a5cb02f",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/VoicesApp/VoicesApp/Voices/Lily.wav",
+      "sha256": "96276886fa8b1387651b6ca028e5b6fab9041342e2a403b5bf575a3c7241bb8c",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/VoicesApp/VoicesApp/Voices/Sophie.wav",
+      "sha256": "4c0b772c2e7d3c6e7555afb4eeff0e08cdd98c959b85d3492ff6d9193c82a8cc",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/VoicesApp/VoicesApp/VoicesApp.entitlements",
+      "sha256": "289696af9834a7ee41aca4c1cd3aa95fc38f9ae2e83655b1d4b86c1ccab771ee",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Examples/VoicesApp/VoicesApp/VoicesApp.swift",
+      "sha256": "17147462d687b6fea6817a3b3ddea5351a445ad9add4d120489a3823ef0de995",
+      "upstreamStatus": "modified"
+    },
+    {
+      "path": "Package.swift",
+      "sha256": "68ba54efa7106f6fafd4a68fc410430e30392b8164e0e7a0b561a23ec1afa466",
+      "upstreamStatus": "modified"
+    },
+    {
+      "path": "Sources/MLXAudioCodecs/Mimi/Conv.swift",
+      "sha256": "045c353b67b80795dee51f52932b3a69afa34f7b7da2e3a2d712266447bb9b30",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Sources/MLXAudioCodecs/Mimi/Quantization.swift",
+      "sha256": "4b24a3dea185d37db5d1b59107a8d77355cde6e5f0ef3beaa4345ec4a54fecb9",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Sources/MLXAudioCodecs/Mimi/Seanet.swift",
+      "sha256": "0317eb61f620c994799aca52976a569cb3fe96ec1a3b1948002865d6f50ba056",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Sources/MLXAudioCodecs/Mimi/Transformer.swift",
+      "sha256": "ce233a521453deeb77433c35ba96ae37aaf97ddb56a7fe31c1eb0f6b11a51ec9",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Sources/MLXAudioCore/AudioUtils.swift",
+      "sha256": "7f525a52c2c4be20e14cda57cb0d4211a84b2cdce5cbfc44f159d3cb51489c5e",
+      "upstreamStatus": "modified"
+    },
+    {
+      "path": "Sources/MLXAudioCore/DSP.swift",
+      "sha256": "b52445db37233397670a6691c9efcce9405d2c9eb08acc2729d0f51f222fe88b",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Sources/MLXAudioCore/Generation/GenerationTypes.swift",
+      "sha256": "c35416e4592255b0879d305162e6066277d3b660e3a0a8367c0494584630ab0f",
+      "upstreamStatus": "modified"
+    },
+    {
+      "path": "Sources/MLXAudioCore/ModelUtils.swift",
+      "sha256": "170ebf94c0e9b2d1bda65e915d30d7d64604fb750c49dc3194e9a147e08736fc",
+      "upstreamStatus": "modified"
+    },
+    {
+      "path": "Sources/MLXAudioTTS/Generation.swift",
+      "sha256": "a4a83641af0ee49fc3bb845545993b67a4c0cf912e12ae17acb42846d7121be4",
+      "upstreamStatus": "modified"
+    },
+    {
+      "path": "Sources/MLXAudioTTS/ModelDiagnostics.swift",
+      "sha256": "35caced9381881da14169ffa21c60712132c463a3ec8e59114ea0762fc019175",
+      "upstreamStatus": "added"
+    },
+    {
+      "path": "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3StreamingMemoryTuning.swift",
+      "sha256": "be2eac320ead4fe26c81525f7ea98d567cd7e6beafc4462704af2e789b5b868a",
+      "upstreamStatus": "added"
+    },
+    {
+      "path": "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
+      "sha256": "4ad6735feddb7c43ab162d6894544ce97f0eda094c73ff159f6bb28413503c0d",
+      "upstreamStatus": "modified"
+    },
+    {
+      "path": "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSCodePredictor.swift",
+      "sha256": "b4c3123aa88ee357724203fe2108bc045387fd650f420c9a068a8efde98b7c08",
+      "upstreamStatus": "modified"
+    },
+    {
+      "path": "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSConfig.swift",
+      "sha256": "937b5686d1fe8475eda3cd59fa9cfb7ce31f8bc22d12be6fb0ff6637c09e1e54",
+      "upstreamStatus": "modified"
+    },
+    {
+      "path": "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSSpeakerEncoder.swift",
+      "sha256": "3d98586ab5349240768bc6c3b844a0e3042aa682d29076fd815bdc4ba5798284",
+      "upstreamStatus": "identical"
+    },
+    {
+      "path": "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSSpeechTokenizer.swift",
+      "sha256": "5bd903cc92c9f1bdfca8760b7954135da87ee5887a47d7ed052953a00918f9b5",
+      "upstreamStatus": "modified"
+    },
+    {
+      "path": "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSTalker.swift",
+      "sha256": "31d05aa1fe48488de0ddeb26015914484985b262f993496573ad201a56597785",
+      "upstreamStatus": "modified"
+    },
+    {
+      "path": "Sources/MLXAudioTTS/Models/Qwen3TTS/README.md",
+      "sha256": "47e3398813eef3c76fd454fced93e98ef0ef0fd0f2485e0aafa63b709920e8bd",
+      "upstreamStatus": "added"
+    },
+    {
+      "path": "Sources/MLXAudioTTS/RuntimeDebugGate.swift",
+      "sha256": "60f8ec62bd0907343da2254a33493771832a5ed91eb8945b7e494a7315ebc67e",
+      "upstreamStatus": "added"
+    },
+    {
+      "path": "Sources/MLXAudioTTS/TTSModel.swift",
+      "sha256": "7b101a364c1c346005bb25f2a116f483f2b7ddcf8f1a0d2c05f6d2eb0ca0baeb",
+      "upstreamStatus": "modified"
+    },
+    {
+      "path": "Sources/MLXAudioTTS/TextProcessor.swift",
+      "sha256": "23b1b9049c2c45ec7ac85b0ea41d0f4c60bcdb5ac73ac5e0f93c849a4fdd1513",
+      "upstreamStatus": "added"
+    },
+    {
+      "path": "Sources/VocelloQwen3Core/CompatibilityExports.swift",
+      "sha256": "21ed46299b217d2e2c4e91c30fbb77d1b1facd6b728b638a85f825e530e9973b",
+      "upstreamStatus": "added"
+    },
+    {
+      "path": "Sources/VocelloQwen3Core/Contracts.swift",
+      "sha256": "2ce20836fd329eb85322d4f1804176a8e57af1088551f33391dcca1f12ee1414",
+      "upstreamStatus": "added"
+    },
+    {
+      "path": "Sources/VocelloQwen3Core/GenerationSession.swift",
+      "sha256": "808d174c5e092f104d533479f53eeb120e1b7cc7184fba883a673e52dcf681a4",
+      "upstreamStatus": "added"
+    },
+    {
+      "path": "Sources/VocelloQwen3Core/LoadedModel.swift",
+      "sha256": "a09e338dfb6735ff1f6655752f5572e4277379a0bf3605b65c4bdd702a33de44",
+      "upstreamStatus": "added"
+    },
+    {
+      "path": "Sources/VocelloQwen3Core/Runtime.swift",
+      "sha256": "57fd166359b3db46a0310628b8f73307a3dd94fb582da0a4e21d5d76b3acee09",
+      "upstreamStatus": "added"
+    },
+    {
+      "path": "Tests/Qwen3RuntimeTests/Qwen3CloneArtifactIntegrityTests.swift",
+      "sha256": "d4c02be247ef1816682eed15da95a8ad0f5a1b2966e2d51156c8da56653a851a",
+      "upstreamStatus": "added"
+    },
+    {
+      "path": "Tests/Qwen3RuntimeTests/Qwen3DecoderPartitionTests.swift",
+      "sha256": "c60609493e3743255e4aea8f7bf6713a89b7808204974602e8e51dfc37eb4e44",
+      "upstreamStatus": "added"
+    },
+    {
+      "path": "Tests/Qwen3RuntimeTests/Qwen3GenerationGateTests.swift",
+      "sha256": "ffd4969bb548b0e0d7419c1eb5b3fc10fabfc7ae3d17a32a4edbad4e5090a503",
+      "upstreamStatus": "added"
+    },
+    {
+      "path": "Tests/Qwen3RuntimeTests/Qwen3StreamingContractTests.swift",
+      "sha256": "ee746e62b0921fbfdec26d328bf3c603b2ba99e66835d41e6c38e5b108e7d132",
+      "upstreamStatus": "added"
+    },
+    {
+      "path": "Tests/Qwen3RuntimeTests/VocelloQwen3FacadeTests.swift",
+      "sha256": "3ce4658f7bf4e43465dec5382a94ebe1a70cb7e899c14fb42663386f078ee99f",
+      "upstreamStatus": "added"
+    }
+  ],
+  "removedBaselinePaths": [],
+  "schemaVersion": 1,
+  "scope": [
+    ".gitignore",
+    "Package.swift",
+    "Sources/**",
+    "Tests/**",
+    "Examples/**"
+  ],
+  "summary": {
+    "added": 15,
+    "identical": 37,
+    "modified": 21,
+    "removed": 0,
+    "retained": 73
+  },
+  "upstreamBaselineSHA256": "08099111586a931f12b8d259938963ccdc8385d21009701779fea2ceb847c1c2"
+}

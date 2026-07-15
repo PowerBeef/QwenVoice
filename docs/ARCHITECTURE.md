@@ -38,7 +38,7 @@ not yet distributed.
 ## 1. Module & target dependency graph
 
 The Xcode project is generated from [`project.yml`](../project.yml) (XcodeGen
-2.45.4). There are 12 targets split into **cross-platform frameworks**,
+2.45.4). There are 13 targets split into **cross-platform frameworks**,
 **macOS-only frameworks + XPC service**, and **apps/CLI/tests**.
 
 ```mermaid
@@ -59,7 +59,7 @@ graph TD
     QwenVoiceBackendCore["QwenVoiceBackendCore<br/>(provenance + policy vocabulary · iOS+macOS)"]:::fw
 
     GRDB["GRDB.swift"]:::spm
-    MLXAudio["MLXAudio<br/>(Core, Codecs, TTS) — vendored"]:::spm
+    MLXAudio["VocelloQwen3Core<br/>(MLXAudio Core, Codecs, TTS) — owned"]:::spm
     MLXSwift["MLXSwift<br/>(MLX, MLXRandom)"]:::spm
     SwiftHuggingFace["SwiftHuggingFace"]:::spm
 
@@ -82,8 +82,6 @@ graph TD
     QwenVoiceEngineSupport --> QwenVoiceCore
     QwenVoiceCore --> QwenVoiceBackendCore
 
-    QwenVoiceBackendCore --> MLXAudio
-    QwenVoiceBackendCore --> MLXSwift
     QwenVoiceCore --> MLXAudio
     QwenVoiceCore --> MLXSwift
     QwenVoiceCore --> SwiftHuggingFace
@@ -107,6 +105,7 @@ graph.)
 | `QwenVoiceNative` | framework.static | macOS | `QwenVoiceNative` | `com.qwenvoice.native` | macOS app-facing XPC client/coordinator/store bridging XPC to SwiftUI. |
 | `QwenVoiceEngineService` | xpc-service | macOS | `QwenVoiceEngineService` | `com.qwenvoice.app.engine-service` | Out-of-process engine host for crash isolation + memory containment. |
 | `VocelloCoreTests` | bundle.unit-test | macOS | `VocelloCoreTests` | `com.qwenvoice.core.tests` | Core semantics, typed telemetry compatibility, and atomic/readable output contracts. |
+| `VocelloiOSLogicTests` | bundle.unit-test | iOS | `VocelloiOSLogicTests` | `com.patricedery.vocello.logic-tests` | Standalone, app-host-free platform policy tests for catalog/ledger, memory, cancellation, storage gating, and privacy-safe diagnostics. Ordinary CI compiles this bundle for the physical-device SDK; execution is explicit on a paired phone. |
 | `VocelloEngineIntegrationTests` | bundle.unit-test | macOS | `VocelloEngineIntegrationTests` | `com.qwenvoice.engine-integration.tests` | Injectable XPC client/transport lifecycle and correlation contracts; never launches frontend UI. |
 | `VocelloMacUITests` | bundle.ui-testing | macOS | `VocelloMacUITests` | `com.qwenvoice.app.uitests` | Explicit native-app smoke and benchmark XCUITest lanes. |
 | `VocelloiOSUITests` | bundle.ui-testing | iOS | `VocelloiOSUITests` | `com.patricedery.vocello.uitests` | Explicit paired-physical-iPhone smoke/benchmark lanes plus the isolated opt-in model-delivery lifecycle proof; never Simulator. |
@@ -115,7 +114,7 @@ graph.)
 
 | Layer | macOS | iOS | Development publishing policy |
 | --- | --- | --- | --- |
-| **Deterministic verification** | Core + XPC integration + `Qwen3RuntimeTests` + app build | Project-input checks + physical-device SDK compile | Required by ordinary CI; sufficient for commit, push, pull request, and merge |
+| **Deterministic verification** | Core + XPC integration + `Qwen3RuntimeTests` + app build | Project-input checks + app and standalone logic-test bundle physical-device SDK compile | Required by ordinary CI; sufficient for commit, push, pull request, and merge |
 | **Platform runtime gate** | `macos_test.sh gate` | `ios_device.sh gate` | Deterministic/device diagnostics; independent of XCUITest |
 | **UI regression** | `ui_test.sh macos smoke\|benchmark` XCUITest | `ui_test.sh ios smoke\|benchmark` XCUITest on a paired physical iPhone | Explicit frontend QA only; never required for publishing or packaging |
 | **Model-delivery lifecycle** | Isolated CLI install | `ui_test.sh ios model-download` on a paired physical iPhone | Opt-in diagnostic only; never part of smoke, benchmark, CI, or release |
@@ -125,15 +124,18 @@ graph.)
 Release packaging is deterministic and does not consume UI results. Frontend evidence remains
 platform-specific and is created only when explicitly requested.
 
-**Five shared schemes**: the four XcodeGen schemes, `QwenVoice` (macOS app + deterministic unit/integration tests), `VocelloiOS`
+**Six shared schemes**: the four XcodeGen schemes, `QwenVoice` (macOS app + deterministic unit/integration tests), `VocelloiOS`
 (iOS app), `VocelloMacUI` (explicit macOS XCUITest), and `VocelloiOSUI` (explicit physical-device
-iOS XCUITest), plus the separately generated `VocelloCLI` scheme. The UI schemes are isolated from ordinary test actions. A single shippable config,
+iOS XCUITest), plus the separately rendered `VocelloCLI` and `VocelloiOSLogic` (standalone iOS
+policy XCTest) schemes. XcodeGen 2.45.4 cannot directly render those tool and app-host-free test
+schemes, so checked-in templates bind to their generated target IDs. The UI schemes are isolated from ordinary test actions; ordinary CI only
+compiles `VocelloiOSLogic` for the generic device SDK and never executes it. A single shippable config,
 **`Release`**, is the only config — there is no `Debug` config or generic `DEBUG` symbol.
 
 ### Key layering rule
 
-`QwenVoiceBackendCore` ← `QwenVoiceCore` ← {macOS frameworks, apps, CLI}. BackendCore is a narrow
-contract/provenance layer; `QwenVoiceCore` and the owned Qwen3 runtime implement model loading,
+`QwenVoiceBackendCore` ← `QwenVoiceCore` ← {macOS frameworks, apps, CLI}. BackendCore is a narrow,
+dependency-light contract/provenance layer; `QwenVoiceCore` and the owned Qwen3 runtime implement model loading,
 synthesis, streaming, and codecs. The
 **iOS app deliberately does not link** `QwenVoiceNative`, `QwenVoiceEngineService`,
 or `QwenVoiceEngineSupport` — those are macOS-only (the XPC stack). iOS reaches
@@ -146,8 +148,8 @@ difference is what enforces the XPC-vs-in-process split.
 
 SPM dependencies are declared in `project.yml` and **pinned to exact versions**
 for backend determinism. `mlx-swift` and `mlx-swift-lm` must move **in lockstep**
-(never one alone); don't float pins without a benchmark-gated review. `mlx-audio-swift`
-is **vendored** under `third_party_patches/mlx-audio-swift/` (see
+(never one alone); don't float pins without a benchmark-gated review. The Qwen3 runtime
+is an **owned monorepo core package** under `Packages/VocelloQwen3Core/` (see
 [`reference/mlx-audio-swift-patching.md`](reference/mlx-audio-swift-patching.md)).
 
 Resolved versions (`QwenVoice.xcodeproj/.../Package.resolved`):
@@ -155,8 +157,8 @@ Resolved versions (`QwenVoice.xcodeproj/.../Package.resolved`):
 | Package | Version | Role |
 | --- | --- | --- |
 | **mlx-swift** | `0.30.6` | MLX runtime bindings (`MLX`, `MLXRandom`). |
-| **mlx-swift-lm** | `2.30.6` | LM utilities (transitive via vendored `mlx-audio-swift`). |
-| **mlx-audio-swift** | vendored (`v0.1.2` snapshot) | `MLXAudioCore`, `MLXAudioCodecs`, `MLXAudioTTS` — Qwen3-TTS load, tokenize, decode. |
+| **mlx-swift-lm** | `2.30.6` | LM utilities (transitive through the owned Qwen3 core package). |
+| **VocelloQwen3Core** | owned package derived from `mlx-audio-swift` `v0.1.2` | Stable first-party `VocelloQwen3Core` facade for model-bundle, capability, sampling, memory, synthesis, terminal, cancellation, and diagnostic contracts. Compatibility-preserved `MLXAudioCore`, `MLXAudioCodecs`, and `MLXAudioTTS` modules remain implementation surfaces for Qwen3-TTS load, tokenize, and decode. |
 | **GRDB.swift** | `7.10.0` | SQLite for local `history.sqlite`. |
 | **SwiftHuggingFace** | `0.9.0` | Hugging Face model download / hub client. |
 | swift-transformers | `1.1.9` | Tokenizer (transitive). |
@@ -251,7 +253,9 @@ actors that own the heavy, isolated work:
 | `NativeStreamingSynthesisSession` | `NativeStreamingSynthesisSession.swift` | Executes one generation: prompt build → MLX inference → codec → PCM → WAV + QC. |
 | `NativeCloneSupport` | `NativeCloneSupport.swift` | Three-level clone cache (normalized audio → decoded `MLXArray` → prompt artifact). |
 | `NativeMemoryPolicyResolver` | `NativeMemoryPolicyResolver.swift` | Per-device-tier MLX memory policy (see [§4.5](#45-memory-policy)). |
-| `UnsafeSpeechGenerationModel` | `UnsafeSpeechGenerationModel.swift` | `@unchecked Sendable` wrapper over `MLXAudioTTS.SpeechGenerationModel`; the bridge into the vendored stack. |
+| `ActiveGenerationCoordinator` | `ActiveGenerationCoordinator.swift` | One active task, typed cancellation reason, and awaited terminal barrier. |
+| `GenerationEventDeliveryProbe` | `GenerationEventDeliveryProbe.swift` | Accepted/dropped yield accounting for bounded progress, chunk, terminal, and termination delivery. |
+| `UnsafeSpeechGenerationModel` | `UnsafeSpeechGenerationModel.swift` | `@unchecked Sendable` single-owner wrapper over the facade's opaque `VocelloQwen3LoadedModel`; no raw MLXAudio model or protocol crosses into product code. |
 
 ### 4.2 Generation domain model
 
@@ -265,8 +269,12 @@ actors that own the heavy, isolated work:
     - `.custom(speakerID:deliveryStyle:)`
     - `.design(voiceDescription:deliveryStyle:)`
     - `.clone(reference: CloneReference)`
-  - `CloneReference { audioPath: String, transcript: String?, preparedVoiceID: String? }`
-- `GenerationEvent { .progress(GenerationProgress), .chunk(GenerationChunk), .completed(GenerationResult), .failed(String) }`
+  - `CloneReference { audioPath, conditioningMode, preparedVoiceID }`, where the non-optional
+    `CloneConditioningMode` is either `.transcriptBacked(String)` or `.xVectorOnly`. The legacy
+    `transcript` wire field remains decode-compatible and is derived from that typed mode.
+- `GenerationEvent { .progress(GenerationProgress), .chunk(GenerationChunk),
+  .completed(GenerationResult), .cancelled(GenerationCancellationSummary), .failed(String) }`.
+  Cancellation is a typed terminal lifecycle outcome, not a failure string.
 - `GenerationResult { audioPath, durationSeconds, finishReason, telemetrySummary }`
 - `EngineLoadState { idle, starting, loaded(modelID), running(modelID: String?, label: String?, fraction: Double?), failed(message: String) }`
 - `ClonePreparationState { idle, preparing(...), primed(...), failed(...) }`
@@ -309,7 +317,7 @@ flowchart TD
     CW --> Run
     DW --> Run
     CL --> Run
-    Run["3. NativeStreamingSynthesisSession.execute<br/>build Qwen3 prompt → MLX inference"] --> Codec["4. Mimi codec → PCM<br/>(vendored MLXAudioCodecs)"]
+    Run["3. NativeStreamingSynthesisSession.execute<br/>build Qwen3 prompt → MLX inference"] --> Codec["4. Mimi codec → PCM<br/>(owned MLXAudioCodecs)"]
     Codec --> Lim["5. PCM16StreamLimiter + defect detection<br/>(clip/click/slew/dropout/nanInf)"]
     Lim --> WAV["6. AtomicPCM16WAVWriter → 24 kHz Int16 WAV"]
     WAV --> Out["7. GenerationResult<br/>(audioPath, duration, finishReason, telemetry)"]
@@ -317,18 +325,27 @@ flowchart TD
     Lim --> QC["AudioQCReport → telemetry"]
 ```
 
-`UnsafeSpeechGenerationModel` wraps `MLXAudioTTS.SpeechGenerationModel` and
-exposes the three mode entry points (`generateCustomVoiceStream`,
+`UnsafeSpeechGenerationModel` wraps the opaque loaded-model handle exported by
+`VocelloQwen3Core` and exposes the three mode entry points (`generateCustomVoiceStream`,
 `generateVoiceDesignStream`, `generateVoiceCloneStream`) plus prewarm.
+
+The owned facade also defines and deterministically contract-tests
+`VocelloQwen3GenerationSession`: bounded ordered events, a single typed terminal result,
+backpressure, first-reason cancellation, and token-cap finish mapping. Product generation has not
+yet adopted that session as its only lifecycle. `NativeStreamingSynthesisSession` still adapts the
+facade's mode-specific streams into Vocello's existing telemetry, PCM, QC, persistence, and WAV
+pipeline. Replacing that transitional adapter without changing output or evidence semantics remains
+Phase 6 follow-up work; the presence of the owned session contract is not a claim that the runtime
+decomposition is complete.
 
 ### 4.5 Memory policy
 
 `NativeMemoryPolicyResolver` (`NativeMemoryPolicyResolver.swift`) classifies the
 device into `NativeDeviceMemoryClass` and resolves an `NativeMemoryPolicy` per
 tier + mode + batch. Classification: iPhone → `.iPhonePro`; Mac ≤10 GB →
-`.floor8GBMac`; ≤24 GB → `.mid16GBMac`; else `.highMemoryMac`. Override via
-`QWENVOICE_FORCE_MEMORY_CLASS` (propagated to the engine over the `initialize`
-handshake).
+`.floor8GBMac`; ≤24 GB → `.mid16GBMac`; else `.highMemoryMac`. Diagnostic override
+`QWENVOICE_FORCE_MEMORY_CLASS` is propagated over the `initialize` handshake only when the
+`QWENVOICE_DEBUG` master gate is enabled.
 
 | Tier (`NativeDeviceMemoryClass`) | MLX cache | Clone slots | Idle-unload | Token clear cadence | Post-batch trim |
 | --- | --- | --- | --- | --- | --- |
@@ -337,10 +354,11 @@ handshake).
 | `.highMemoryMac` | 1 GB | 16 | never (`nil`) | 200 | — |
 | `.iPhonePro` | 128 MB* | 1 | 30 s | 50 | — |
 
-\* iPhone cache default 128 MB, overridable with `QVOICE_IOS_MLX_CACHE_LIMIT_MB`.
-A hard `Memory.memoryLimit` is **only** set on iPhone **and only** when the
-`QVOICE_IOS_MLX_MEMORY_LIMIT_MB` env override is present — so **there is no hard
-memory limit in production**, and no Quality→Speed OOM fallback. `apply(_:)`
+\* iPhone cache default 128 MB, diagnostically overridable with
+`QVOICE_IOS_MLX_CACHE_LIMIT_MB` only behind `QWENVOICE_DEBUG`.
+A hard `Memory.memoryLimit` is **only** set on iPhone **and only** when the debug-gated
+`QVOICE_IOS_MLX_MEMORY_LIMIT_MB` override is present — so **there is no hard memory limit in
+production**, and no Quality→Speed OOM fallback. `apply(_:)`
 also configures `Qwen3StreamingMemoryTuning` (per-token cache clear cadence +
 optional sliding-window talker KV cache via `QVOICE_TALKER_KV_WINDOW`).
 Trim levels (`NativeMemoryTrimLevel`): `.softTrim`, `.hardTrim`, `.fullUnload`.
@@ -350,12 +368,17 @@ Trim levels (`NativeMemoryTrimLevel`): `.softTrim`, `.hardTrim`, `.fullUnload`.
 `MLXTTSEngine.events` is an `AsyncStream<GenerationEvent>`. Buffering policy is
 platform-specific (`MLXTTSEngine.swift`):
 
-- **macOS**: `.unbounded` — never drop playback chunks under load.
-- **iOS**: `.bufferingNewest(64)` — bounded for the memory-tight in-process engine.
+- **macOS**: `.bufferingNewest(256)`.
+- **iOS**: `.bufferingNewest(96)` for the memory-tight in-process engine.
+
+`GenerationEventDeliveryProbe` records accepted and dropped chunk, progress, terminal, and
+termination yields, plus the minimum observed capacity. Consumers must drain continuously; a
+dropped yield is measured evidence, not a silent success.
 
 `NativeStreamingPreviewDataPolicy` controls whether chunk events carry preview
-PCM for live playback; default `.emit` on all platforms, `.skip` when
-`QWENVOICE_STREAMING_PREVIEW_DATA=off`. Output is 24 kHz mono Int16 PCM WAV.
+PCM for live playback; default `.emit` on all platforms. The
+`QWENVOICE_STREAMING_PREVIEW_DATA=off` diagnostic override is inert unless `QWENVOICE_DEBUG`
+enables the master runtime gate. Output is 24 kHz mono Int16 PCM WAV.
 
 ### 4.7 Prewarm
 
@@ -370,20 +393,22 @@ tunable via `CustomVoicePrewarmDepth { .full, .skipDecoderBucket, .skipStreamSte
 
 ### 4.8 Voice cloning cache
 
-`NativeCloneSupport` (actor) keeps a three-level cache keyed by audio/transcript
-hashes: normalized reference audio → decoded `MLXArray` → `VoiceClonePromptArtifact`
-(embedding + prompt tensors written under `voice_clone_prompt/`). Capacities per
-tier come from `NativeMemoryPolicyResolver.cloneCacheCapacity(...)`.
+`NativeCloneSupport` (actor) keeps a three-level cache keyed by audio fingerprint,
+conditioning mode, and transcript hash: normalized reference audio → decoded `MLXArray` →
+`VoiceClonePromptArtifact`. Transcript-backed mode persists the speaker embedding, reference
+codes, and transcript identity; audio-only mode persists a genuine speaker-embedding-only
+x-vector prompt. Those modes never share cache or artifact identity. Capacities per tier come
+from `NativeMemoryPolicyResolver.cloneCacheCapacity(...)`.
 
 ### 4.9 Cancellation
 
-`MLXTTSEngine` admits one model-mutating operation at a time. **macOS** can
-cancel via the `ActiveGenerationCancellable` capability. **iOS** cancel is
-**cooperative only** — `MLXTTSEngine` does not conform to
-`ActiveGenerationCancellable`, so the iOS generate flow must discard the result
-on `Task.isCancelled` so cancelled takes never land in History. `MLXTTSEngine.generate`'s
-catch must not rethrow `CancellationError` early (it would skip the `loadState`
-reset and strand the engine in `.running`).
+`MLXTTSEngine` admits one model-mutating operation at a time and conforms to
+`ActiveGenerationCancellable` on every platform. `ActiveGenerationCoordinator` records one typed
+reason (`user`, `memoryPressure`, `superseded`, or `shutdown`), cancels the registered task, and
+awaits its terminal barrier before ownership is released or trim/unload begins. The engine emits
+`.cancelled(GenerationCancellationSummary)` separately from `.failed`; coordinators must not persist
+a late result after cancellation. Every terminal path restores `loadState` and completes exactly
+once.
 
 ### 4.10 Audio prep & QC
 
@@ -477,7 +502,7 @@ sequenceDiagram
     V->>C: start
     C->>S: generate(request)
     S->>E: generate(request) (same process)
-    E-->>S: GenerationEvent stream (.bufferingNewest(64))
+    E-->>S: GenerationEvent stream (.bufferingNewest(96))
     S-->>V: live preview (in-process, no XPC)
     E-->>S: GenerationResult
     S-->>C: GenerationResult
@@ -485,18 +510,20 @@ sequenceDiagram
 ```
 
 iOS casts the engine to capability protocols at runtime
-(`TTSEngineRuntimeControlling`, `NativeMemoryReporting`) rather than depending on a
+(`TTSEngineRuntimeControlling`, `NativeMemoryReporting`, `ActiveGenerationCancellable`) rather than depending on a
 concrete type. Key iOS behaviors:
 
 - **No batch on iOS** (removed 2026-07-02, maintainer decision): the affordance was
   dead UI (`onBatch` nil everywhere; native engine unsupported, Jetsam risk).
   `IOSBatchSheet` + `IOSBatchGenerationCoordinator` deleted; macOS batch unaffected.
   If batch returns it must be sequential streaming, validated on device.
-- **Cooperative cancel**: results are discarded on `Task.isCancelled`.
+- **Typed cancellation barrier**: user and memory-pressure cancellation flow through
+  `cancelActiveGeneration(reason:)`; the active task reaches `.cancelled` before ownership release,
+  trim, or unload, and no cancelled result is persisted.
 - **Thermal gate** (2026-07-02): `TTSEngineStore.startThermalObservation` records
   thermal transitions and blocks PROACTIVE warm work (prewarm/clone priming) at
   serious/critical; generation is never thermally blocked
-  (`QVOICE_IOS_THERMAL_GATE=off` escape hatch).
+  (`QVOICE_IOS_THERMAL_GATE=off` is a debug-gated diagnostic override).
 - **Interruption recorder** (2026-07-02): `IOSInterruptionRecorder` (CXCallObserver +
   UIApplication lifecycle) runs during headless device diagnostics only; events land in
   `device-diagnostics-done.json` as `interruptions` so doomed runs self-report calls/backgrounding.
@@ -621,8 +648,15 @@ Layout under the root: `models/` (downloaded HF weights, staged in
 `imported_references`, `normalized_clone_refs`, `stream_sessions`). Full detail:
 [`reference/privacy-storage.md`](reference/privacy-storage.md).
 
+History storage fails closed. Database open, migration, read, write, and delete failures are reduced
+to typed privacy-safe classifications; an unavailable store never masquerades as an empty history
+and never turns a destructive operation into a successful no-op. History surfaces enter a degraded
+state and disable deletion until a read succeeds, preserving the existing database and audio. iOS
+exposes a visible Retry action; macOS retries when History reloads or is re-entered and must not be
+described as having a dedicated Retry control until one exists.
+
 **`UserDefaults` keys**: `QwenVoice.DebugModeEnabled` (debug toggle, mirrored to
-`TelemetryGate`), per-mode variant choices
+`TelemetryGate`), `vocello.voiceCloningConsent.v1` (visible clone-consent acknowledgment), per-mode variant choices
 (`QwenVoice.{CustomVoice,VoiceDesign,VoiceCloning}.VariantID`), and UI state
 (`QwenVoice.LastSelectedSidebarItem`, `QwenVoice.LastVoiceCloningSavedVoiceID`).
 
@@ -631,7 +665,7 @@ Layout under the root: `models/` (downloaded HF weights, staged in
 `config/build-output-policy.json` is the machine-readable owner and lifetime contract for native
 repository output under `build/`. Local development has two persistent Xcode platform caches,
 `build/cache/xcode/macos/` and `build/cache/xcode/ios-device/`, plus one serialized shared package
-checkout at `build/cache/xcode/source-packages/`. The vendored MLX Audio runtime uses its separate
+checkout at `build/cache/xcode/source-packages/`. The owned Qwen3 Core runtime uses its separate
 policy-owned SwiftPM scratch cache and must not leave `.build` state in the source tree.
 
 Release, XcodeBuildMCP, package-resolution, CI, and compile-safety DerivedData are isolated below
@@ -662,6 +696,17 @@ schema. It defines `defaultSpeaker`, `speakers` (+ `speakerMetadata`), and a
 `estimatedDownloadBytes`, `outputSubfolder`, `requiredRelativePaths[]`, and
 `variants[]` (speed/quality with platforms + hardware recommendation).
 
+The generated cross-platform artifact contract is
+`Sources/Resources/qwenvoice_production_model_catalog.json`, governed by
+`config/model-catalog-schema-v1.json` and exact evidence in
+`config/model-artifact-receipts.json`. It is **complete**: all three Speed and all three Quality
+artifacts have exact pinned revisions, file sizes, and SHA-256 digests for every required file.
+No missing identity may be inferred or fabricated. macOS and CLI resolve this bundled catalog and
+use the exact-file `downloadFiles` route rather than live repository enumeration; iOS retains its
+background-session lifecycle over the same artifact identities. Deterministic
+`python3 scripts/model_catalog_contract.py validate --require-complete` proves catalog integrity,
+while a post-change isolated live delivery run remains separate quality evidence.
+
 The shipped model ids:
 
 | Model ID | Mode | Speed repo (4-bit) | Quality repo (8-bit) |
@@ -680,8 +725,8 @@ served at `bundle://vocello/ios/catalog/v1/models.json` via
 `Info.plist … QVoiceModelCatalogURL`) and `voice-previews/` (24 kHz mono Int16
 WAVs named by speaker id, played by `IOSVoicePreviewPlayer`).
 
-**Download** (`Sources/QwenVoiceCore/HuggingFaceDownloader.swift`): list files at the pinned
-revision, stage, verify exact size plus **CryptoKit SHA-256**, atomically swap the directory, and
+**Download** (`Sources/QwenVoiceCore/HuggingFaceDownloader.swift`): consume the catalog's exact
+pinned file descriptors, stage, verify exact size plus **CryptoKit SHA-256**, atomically swap the directory, and
 persist `ModelAssetIntegrityManifest.json`. A verified-artifact receipt avoids a second full-file
 hash in the same process; a relaunch rehashes staged data once before reuse. macOS and CLI own
 terminal foreground-session teardown. iPhone owns one bundle-aware background session for the app
@@ -710,6 +755,14 @@ resolved from `QWENVOICE_DEBUG` (1/true/on/yes) or
 propagated to the engine over the `initialize` handshake. All diagnostic writers respect
 `TelemetryGate.resolvedEnabled` — when the gate is off, no JSONL is appended.
 
+Environment-variable ownership is explicit. `config/runtime-debug-knobs.json` registers every
+supported key and classifies production-affecting overrides, bounded observability, and
+test-target-only device diagnostics. Production-affecting values are read only through
+`RuntimeDebugGate` and remain inert unless `QWENVOICE_DEBUG` is enabled. Likewise,
+`config/concurrency-safety.json` is the authoritative inventory and justification for owned
+`@unchecked Sendable` and other unsafe concurrency declarations; unregistered exceptions fail
+`scripts/runtime_security_contract.py`.
+
 Records are written by the `GenerationTelemetryJSONLSink` actor as JSONL under
 `…/QwenVoice[-Debug]/diagnostics/`:
 
@@ -718,7 +771,8 @@ Records are written by the `GenerationTelemetryJSONLSink` actor as JSONL under
 - `engine-service/generations.jsonl` (macOS)
 - `generations-merged.jsonl` (merged by `Sources/Services/GenerationTelemetryMerger.swift`)
 - `*/native-events.jsonl` (chunk gaps, warm-admission, XPC retirement — gated)
-- `<documents>/generation-failures.jsonl` (`GenerationFailureDiagnosticLogger` — gated)
+- `<documents>/generation-failures.jsonl` (`GenerationFailureDiagnosticLogger` — gated,
+  privacy-reduced schema v2, capped at 200 entries and 256 KiB)
 
 `GenerationTelemetryRecord` schema v8 is a versioned Codable struct keyed by `generationID`
 with `layer { engine, engineService, app, merged }`. New validation consumes typed
@@ -738,7 +792,10 @@ boundaries. Publishable benchmark-evidence v2 binds exact verbose sidecars and r
 coverage, capture failures, critical pressure, memory warnings/exits, `hardTrim`, and `fullUnload`.
 macOS UI/XPC aggregates pair app and engine samples by uptime; independent process peaks are never
 summed. Older telemetry remains decodable but cannot enter memory-qualified trends.
-No telemetry persists raw script, transcript, path, or voice description.
+No telemetry persists raw script, transcript, path, or voice description. The generation-failure
+log stores only an allowlisted error code/classification, lifecycle stage, known model identifier,
+mode, text length, streaming flag, and timestamp; reflected errors, localized messages, stack
+symbols, URLs, and arbitrary metadata are never written.
 Aggregate with `scripts/summarize_generation_telemetry.py`; UI-driven tests join matching typed
 records by `generationID` before accepting a take.
 Logs are budget-capped (`QWENVOICE_DIAGNOSTICS_MAX_MB`, default ~8 MB, pruned
@@ -772,6 +829,27 @@ requires Siri enabled). `ITSAppUsesNonExemptEncryption = false`.
 
 All generation, recording, transcription, and model storage happen locally.
 `Sources/PrivacyInfo.xcprivacy` declares no tracking and no collected data types.
+
+Repository supply-chain and publication controls are also security boundaries. External GitHub
+Actions are pinned by full SHA through `config/toolchain.json`; CI performs dependency review,
+scheduled CodeQL, and deterministic website/native checks. Release candidates produce SPDX and
+CycloneDX SBOMs, checksums, provenance/attestation, and a validated
+`config/release-evidence-contract.json` evidence set before a draft Release is created. The emitted
+schema-v2 `release-evidence.json` binds the clean tracked-and-untracked source identity, required
+input digests, and a hashed `release-verification.json` bundle. Every required-step manifest must
+come from the managed release subprocess in the same invocation, use the contract-bound command
+identity for that step, match the source identity, and complete inside the six-hour freshness
+window; a substituted command, prewritten PASS file, or partial manifest is never accepted. The
+iOS candidate first binds the deterministic macOS gate and generic iOS device-SDK compile as its
+managed `platform-readiness` step. It then binds a privacy-safe schema-v2 archive/IPA verification summary that
+proves bundle version/build, bundle identifier, arm64 UUID and signature-normalized code continuity,
+root privacy-manifest identity, App Group and increased-memory entitlements, locally trusted and
+profile-authorized signing, and team/App ID prefix consistency. Only the exported IPA must carry an App Store profile,
+Apple Distribution signature, and no `get-task-allow`; valid two-phase development-signed archives
+remain accepted.
+Draft assets are downloaded and digest-verified before publication, which remains the final transaction. See
+[`SECURITY.md`](../SECURITY.md), `.github/workflows/security.yml`, and
+[`reference/macos-release-qa.md`](reference/macos-release-qa.md).
 
 ---
 
@@ -819,6 +897,9 @@ Most-frequent imports across `Sources/**/*.swift`:
 | `NativeEngineRuntime` | Actor owning model load + conditioning + the prewarm reentrancy gate. |
 | `NativeStreamingSynthesisSession` | Runs one generation end-to-end (prompt → MLX → codec → PCM → WAV + QC). |
 | `NativeMemoryPolicyResolver` | Per-device-tier MLX cache/clone/idle/cadence policy. |
+| `ActiveGenerationCoordinator` | Owns one in-process generation and waits for a typed cancellation terminal barrier before releasing it. |
+| `GenerationEventDeliveryProbe` | Measures accepted and dropped yields from the bounded engine event stream. |
+| `RuntimeDebugGate` | Makes registered production-affecting environment overrides inert unless `QWENVOICE_DEBUG` is enabled. |
 | `EngineServiceHost` | `@MainActor` XPC service host (`QwenVoiceEngineService`) running the engine out-of-process. |
 | `XPCNativeEngineClient` | macOS XPC client conforming to `MacTTSEngine`; `XPCNativeEngineCoordinator` manages the connection. |
 | `EngineCommand` | The XPC command enum carried inside the single `perform(_:withReply:)` envelope. |
@@ -826,8 +907,8 @@ Most-frequent imports across `Sources/**/*.swift`:
 | `EngineServiceTransportAccumulator` | Pure bounded XPC probe state: accepted chunks, gaps/duplicates/reordering, cancellation, and single terminal record. |
 | `ContractBackedModelRegistry` | Loads `qwenvoice_contract.json` and expands it per platform. |
 | `GenerationRequest` / `Payload` | The generation ask + its mode-specific payload (custom/design/clone). |
-| `CloneReference` | Reference audio + transcript + language for voice cloning. |
-| `UnsafeSpeechGenerationModel` | `@unchecked Sendable` wrapper over the vendored `MLXAudioTTS.SpeechGenerationModel`. |
+| `CloneReference` | Reference audio + typed conditioning mode (`transcriptBacked` or genuine audio-only `xVectorOnly`) + optional prepared voice identity. |
+| `UnsafeSpeechGenerationModel` | `@unchecked Sendable` single-owner wrapper over the opaque model handle exported by the owned facade. |
 
 ---
 

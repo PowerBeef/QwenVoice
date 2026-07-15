@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import copy
+import importlib.util
+import json
+import sys
+import unittest
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SPEC = importlib.util.spec_from_file_location(
+    "evidence_impact", REPO_ROOT / "scripts/evidence_impact.py"
+)
+assert SPEC and SPEC.loader
+IMPACT = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = IMPACT
+SPEC.loader.exec_module(IMPACT)
+
+
+class EvidenceImpactTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.contract = IMPACT.load_contract(REPO_ROOT)
+
+    def test_repository_contract_is_valid_and_digest_is_stable(self) -> None:
+        self.assertEqual(IMPACT.validate_contract(self.contract), [])
+        first = IMPACT.contract_digest(self.contract)
+        round_tripped = json.loads(json.dumps(self.contract))
+        self.assertEqual(first, IMPACT.contract_digest(round_tripped))
+
+    def test_model_delivery_change_has_deterministic_blockers_and_nonblocking_live_proofs(self) -> None:
+        result = IMPACT.classify(
+            self.contract,
+            ["Sources/QwenVoiceCore/HuggingFaceDownloader.swift"],
+        )
+        self.assertIn("model-catalog-and-delivery", result["classes"])
+        self.assertIn("engine-runtime", result["classes"])
+        self.assertIn("model-catalog-contract", result["mergeRequiredEvidence"])
+        self.assertIn("ios-model-download-lifecycle", result["qualityEvidence"])
+        self.assertNotIn("ios-model-download-lifecycle", result["mergeRequiredEvidence"])
+        self.assertNotIn("ios-model-download-lifecycle", result["releaseRequiredEvidence"])
+        self.assertFalse(result["qualityEvidenceBlocksOrdinaryPublication"])
+
+    def test_every_catalog_routing_surface_requires_complete_catalog_and_live_quality_proofs(self) -> None:
+        paths = [
+            "Sources/QwenVoiceCore/ProductionModelCatalog.swift",
+            "Sources/Models/TTSContract.swift",
+            "Sources/Models/TTSModel.swift",
+            "Sources/ViewModels/ModelManagerViewModel.swift",
+            "Sources/VocelloCLI/CLIRuntime.swift",
+            "Sources/VocelloCLI/ModelsCommand.swift",
+        ]
+        for path in paths:
+            with self.subTest(path=path):
+                result = IMPACT.classify(self.contract, [path])
+                self.assertIn("model-catalog-and-delivery", result["classes"])
+                self.assertIn("model-catalog-complete", result["mergeRequiredEvidence"])
+                self.assertIn("model-catalog-complete", result["releaseRequiredEvidence"])
+                self.assertIn("macos-model-download-lifecycle", result["qualityEvidence"])
+                self.assertIn("ios-model-download-lifecycle", result["qualityEvidence"])
+                self.assertFalse(result["qualityEvidenceBlocksOrdinaryPublication"])
+
+    def test_unknown_path_uses_deterministic_fallback(self) -> None:
+        result = IMPACT.classify(self.contract, ["misc/new-file.txt"])
+        self.assertEqual(result["classes"], ["repository-other"])
+        self.assertEqual(result["mergeRequiredEvidence"], ["project-inputs"])
+        self.assertEqual(result["qualityEvidence"], [])
+
+    def test_dot_prefixed_repository_paths_keep_their_identity(self) -> None:
+        result = IMPACT.classify(self.contract, [".github/workflows/ci.yml"])
+        self.assertIn("release-and-ci", result["classes"])
+        self.assertNotIn("repository-other", result["classes"])
+
+    def test_device_or_model_evidence_cannot_become_publication_blocking(self) -> None:
+        broken = copy.deepcopy(self.contract)
+        broken["pathClasses"][0]["mergeRequiredEvidence"].append("ios-model-download-lifecycle")
+        errors = IMPACT.validate_contract(broken)
+        self.assertTrue(any("non-deterministic" in error for error in errors))
+
+    def test_unknown_evidence_reference_and_missing_fallback_fail(self) -> None:
+        broken = copy.deepcopy(self.contract)
+        broken["pathClasses"][0]["releaseRequiredEvidence"].append("missing")
+        broken.pop("fallbackClass")
+        errors = IMPACT.validate_contract(broken)
+        self.assertTrue(any("unknown evidence" in error for error in errors))
+        self.assertTrue(any("fallbackClass" in error for error in errors))
+
+
+if __name__ == "__main__":
+    unittest.main()

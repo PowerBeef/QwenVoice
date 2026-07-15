@@ -1418,7 +1418,7 @@ table.matrix .note {
           <span><i style="background:rgba(237,204,138,0.4);border:1px solid var(--gold-300)"></i> App / CLI</span>
           <span><i style="background:rgba(76,195,138,0.35);border:1px solid #4CC38A"></i> Cross-platform FW</span>
           <span><i style="background:rgba(229,72,59,0.3);border:1px solid #E5483B"></i> macOS XPC stack</span>
-          <span><i style="background:rgba(191,170,219,0.35);border:1px solid var(--lavender-300)"></i> SPM / vendored</span>
+          <span><i style="background:rgba(191,170,219,0.35);border:1px solid var(--lavender-300)"></i> SPM / packages</span>
           <span><i style="background:rgba(140,143,155,0.3);border:1px solid var(--charcoal-200)"></i> Tests</span>
         </div>
         <svg id="moduleGraph" viewBox="0 0 860 620" role="img" aria-labelledby="moduleGraphTitle moduleGraphDesc"><title id="moduleGraphTitle">Vocello build dependency graph</title><desc id="moduleGraphDesc">Eleven Xcode targets and their direct package dependencies. Select a node for exact dependencies and key paths.</desc></svg>
@@ -1490,10 +1490,10 @@ table.matrix .note {
   <!-- ========== DEPS ========== -->
   <section class="map-section" id="deps">
     <p class="section-label">07 · Dependencies</p>
-    <h2 class="section-title">SPM &amp; vendored dependencies</h2>
+    <h2 class="section-title">SPM, owned runtime &amp; external dependencies</h2>
     <p class="section-lede">
       Exact pins in <code>project.yml</code> and <code>Package.resolved</code>.
-      <code>mlx-audio-swift</code> is a Qwen3-TTS-only fork under <code>third_party_patches/</code>.
+      <code>VocelloQwen3Core</code> is the owned Qwen3-TTS core package under <code>Packages/</code>.
     </p>
     <div class="dep-grid" id="depGrid"></div>
     <h3 class="subsection-title">Apple frameworks and native services</h3>
@@ -1633,6 +1633,8 @@ scripts/macos_test.sh test
       "QwenVoice.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved",
       "Sources/Resources/qwenvoice_contract.json",
       "Sources/Resources/qwenvoice_ios_model_catalog.json",
+      "Sources/Resources/qwenvoice_production_model_catalog.json",
+      "config/",
       "scripts/",
       ".github/workflows/"
     ]
@@ -1640,7 +1642,7 @@ scripts/macos_test.sh test
   "features": [
     {"name":"Custom Voice","macos":"yes","ios":"yes","cli":"yes","note":"9 built-in speakers; delivery and language control"},
     {"name":"Voice Design","macos":"yes","ios":"yes","cli":"yes","note":"Natural-language brief; result can become a Saved Voice"},
-    {"name":"Voice Cloning","macos":"yes","ios":"yes","cli":"yes","note":"Reference import/enrollment; iOS Files picker and document-open route; microphone recording in apps"},
+    {"name":"Voice Cloning","macos":"yes","ios":"yes","cli":"yes","note":"Transcript-backed or genuine audio-only x-vector conditioning; app generation requires visible consent"},
     {"name":"Delivery presets / custom tone","macos":"yes","ios":"yes","cli":"yes","note":"10 presets × intensity; Clone follows its reference"},
     {"name":"Language pin / Auto","macos":"yes","ios":"yes","cli":"yes","note":"10 spoken languages plus Auto"},
     {"name":"Speed (4-bit) models","macos":"yes","ios":"yes","cli":"yes","note":"iOS production tier; about 2.31–2.34 GB per mode"},
@@ -1663,7 +1665,7 @@ scripts/macos_test.sh test
     {
       "label":"Studio",
       "title":"Compose → Generate → Review",
-      "body":"Mode-specific setup, script composer, readiness gate, cooperative cancel, streaming player, persistence, and replay. iOS enforces a 150-character spoken-script limit; macOS warns on long scripts rather than sharing that device gate.",
+      "body":"Mode-specific setup, script composer, readiness gate, typed cancellation barrier, streaming player, fail-closed persistence, and replay. iOS enforces a 150-character spoken-script limit; macOS warns on long scripts rather than sharing that device gate.",
       "chips":[
         {"t":"GenerationStudioShell","c":""},
         {"t":"StudioGenerationCoordinator","c":""},
@@ -1694,7 +1696,7 @@ scripts/macos_test.sh test
     {
       "label":"Library",
       "title":"Saved Voices · History · Models",
-      "body":"Record or import references, optionally transcribe locally, cache prepared clone prompts, replay/export generations, and manage per-mode model packages. iOS uses one durable ledger and app-lifetime background session; macOS uses terminally invalidated foreground sessions.",
+      "body":"Record or import references, optionally transcribe locally, acknowledge clone consent, cache mode-specific prepared prompts, replay/export generations, and manage per-mode model packages. iOS uses one durable ledger and app-lifetime background session; macOS uses terminally invalidated foreground sessions.",
       "chips":[
         {"t":"PreparedVoice","c":""},
         {"t":"LocalDocumentIO","c":""},
@@ -1708,56 +1710,56 @@ scripts/macos_test.sh test
     {
       "id":"QwenVoice","label":"QwenVoice","sub":"macOS app","kind":"app","type":"application","platform":"macOS","bundle":"com.qwenvoice.app",
       "desc":"Vocello.app: SwiftUI sidebar shell, generation coordinators, library, settings, playback, persistence, and XPC wiring.",
-      "depends":["GRDB","QwenVoiceCore","QwenVoiceEngineService","QwenVoiceEngineSupport","QwenVoiceNative","MLXAudioCore","MLXAudioTTS","MLX","HuggingFace"],
+      "depends":["GRDB","QwenVoiceCore","QwenVoiceEngineService","QwenVoiceEngineSupport","QwenVoiceNative","VocelloQwen3Core","MLX","HuggingFace"],
       "sourceRoots":["Sources"],
       "files":["Sources/QwenVoiceApp.swift","Sources/ContentView.swift","Sources/Views/","Sources/ViewModels/","Sources/Services/"]
     },
     {
       "id":"VocelloiOS","label":"VocelloiOS","sub":"iOS app","kind":"app","type":"application","platform":"iOS","bundle":"com.patricedery.vocello",
       "desc":"Four-tab iPhone app with onboarding, in-process engine, App Group storage, native Files reference import/enrollment, model delivery, diagnostics, and physical-device gates.",
-      "depends":["GRDB","QwenVoiceCore","MLXAudioCore","MLXAudioTTS","MLX","HuggingFace"],
-      "sourceRoots":["Sources/iOS","Sources/iOSSupport","Sources/SharedSupport","Sources/Resources/qwenvoice_contract.json","Sources/Resources/qwenvoice_ios_model_catalog.json","Sources/Resources/voice-previews","Sources/Assets.xcassets","Sources/PrivacyInfo.xcprivacy"],
+      "depends":["GRDB","QwenVoiceCore","VocelloQwen3Core","MLX","HuggingFace"],
+      "sourceRoots":["Sources/iOS","Sources/iOSSupport","Sources/SharedSupport","Sources/Resources/qwenvoice_contract.json","Sources/Resources/qwenvoice_ios_model_catalog.json","Sources/Resources/qwenvoice_production_model_catalog.json","Sources/Resources/voice-previews","Sources/Assets.xcassets","Sources/PrivacyInfo.xcprivacy"],
       "files":["Sources/iOS/QVoiceiOSApp.swift","Sources/iOS/App/RootView.swift","Sources/iOS/IOSVoicesView.swift","Sources/iOS/Voices/IOSRecordVoiceSheet.swift","Sources/iOS/Info.plist","Sources/iOS/Studio/","Sources/iOSSupport/","Sources/SharedSupport/"]
     },
     {
       "id":"VocelloCLI","label":"VocelloCLI","sub":"source-built tool","kind":"app","type":"tool","platform":"macOS","bundle":"com.qwenvoice.cli",
       "desc":"Headless generation, batch, model management, voices, catalogs, language/performance benches, and machine-readable output. Not included in the DMG.",
-      "depends":["QwenVoiceCore","QwenVoiceEngineSupport","MLXAudioCore","MLXAudioTTS","MLX","HuggingFace"],
+      "depends":["QwenVoiceCore","QwenVoiceEngineSupport","VocelloQwen3Core","MLX","HuggingFace"],
       "sourceRoots":["Sources/VocelloCLI","Sources/Resources/qwenvoice_contract.json"],
       "files":["Sources/VocelloCLI/VocelloMain.swift","Sources/VocelloCLI/CLIRuntime.swift","Sources/VocelloCLI/GenerateCommand.swift","Sources/VocelloCLI/BenchCommand.swift"]
     },
     {
       "id":"QwenVoiceCore","label":"QwenVoiceCore","sub":"engine core","kind":"fw","type":"framework.static","platform":"iOS + macOS","bundle":"com.qwenvoice.core",
       "desc":"TTSEngine contracts, MLXTTSEngine, model registry/assets/downloads, semantics, clone cache, streaming synthesis, memory policy, telemetry, and QC.",
-      "depends":["QwenVoiceBackendCore","MLXAudioCore","MLXAudioTTS","MLX","MLXRandom","HuggingFace"],
+      "depends":["QwenVoiceBackendCore","VocelloQwen3Core","MLX","MLXRandom","HuggingFace"],
       "sourceRoots":["Sources/QwenVoiceCore"],
       "files":["Sources/QwenVoiceCore/TTSEngine.swift","Sources/QwenVoiceCore/MLXTTSEngine.swift","Sources/QwenVoiceCore/NativeRuntimeFactory.swift","Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift"]
     },
     {
       "id":"QwenVoiceBackendCore","label":"BackendCore","sub":"generation policy","kind":"fw","type":"framework.static","platform":"iOS + macOS","bundle":"com.qwenvoice.backend-core",
       "desc":"Small low-level backend contract: Qwen3 generation configuration, finish reasons, policy, and synthesis-backend protocol.",
-      "depends":["MLXAudioCore","MLXAudioTTS","MLX"],
+      "depends":[],
       "sourceRoots":["Sources/QwenVoiceBackendCore"],
       "files":["Sources/QwenVoiceBackendCore/QwenVoiceBackendCore.swift"]
     },
     {
       "id":"QwenVoiceNative","label":"QwenVoiceNative","sub":"XPC client","kind":"mac","type":"framework.static","platform":"macOS","bundle":"com.qwenvoice.native",
       "desc":"App-facing macOS store, XPC transport/coordinator, expected-retirement handling, and streaming chunk broker.",
-      "depends":["QwenVoiceCore","QwenVoiceEngineSupport","MLXAudioCore","MLXAudioTTS","MLX","HuggingFace"],
+      "depends":["QwenVoiceCore","QwenVoiceEngineSupport","VocelloQwen3Core","MLX","HuggingFace"],
       "sourceRoots":["Sources/QwenVoiceNative"],
       "files":["Sources/QwenVoiceNative/TTSEngineStore.swift","Sources/QwenVoiceNative/XPCNativeEngineClient.swift","Sources/QwenVoiceNative/GenerationChunkBroker.swift"]
     },
     {
       "id":"QwenVoiceEngineSupport","label":"EngineSupport","sub":"XPC contract","kind":"mac","type":"framework.static","platform":"macOS","bundle":"com.qwenvoice.engine-support",
       "desc":"Single-envelope XPC command/reply/event protocol, wire codec, domain models, and trust policy.",
-      "depends":["QwenVoiceCore","MLXAudioCore","MLXAudioTTS","MLX","HuggingFace"],
+      "depends":["QwenVoiceCore","VocelloQwen3Core","MLX","HuggingFace"],
       "sourceRoots":["Sources/QwenVoiceEngineSupport"],
       "files":["Sources/QwenVoiceEngineSupport/EngineServiceIPC.swift","Sources/QwenVoiceEngineSupport/EngineDomainModels.swift","Sources/QwenVoiceEngineSupport/EngineServiceTrustPolicy.swift"]
     },
     {
       "id":"QwenVoiceEngineService","label":"EngineService","sub":"XPC host","kind":"mac","type":"xpc-service","platform":"macOS","bundle":"com.qwenvoice.app.engine-service",
       "desc":"Out-of-process MLXTTSEngine host, command dispatcher, off-MainActor event forwarding, diagnostics, and idle retirement.",
-      "depends":["QwenVoiceCore","QwenVoiceEngineSupport","MLXAudioCore","MLXAudioTTS","MLX","HuggingFace"],
+      "depends":["QwenVoiceCore","QwenVoiceEngineSupport","VocelloQwen3Core","MLX","HuggingFace"],
       "sourceRoots":["Sources/QwenVoiceEngineService","Sources/Resources/qwenvoice_contract.json","Sources/PrivacyInfo.xcprivacy"],
       "files":["Sources/QwenVoiceEngineService/main.swift","Sources/QwenVoiceEngineService/EngineServiceHost.swift"]
     },
@@ -1772,9 +1774,9 @@ scripts/macos_test.sh test
       "depends":["QwenVoiceCore","QwenVoiceEngineSupport","QwenVoiceNative"],"sourceRoots":["Tests/VocelloEngineIntegrationTests"],"testHost":null,"files":["Tests/VocelloEngineIntegrationTests/"]
     },
     {
-      "id":"MLXAudio","label":"MLXAudio","sub":"vendored fork","kind":"spm","type":"local package","platform":"iOS + macOS","bundle":"third_party_patches/mlx-audio-swift",
-      "desc":"Qwen3-TTS-only fork exposing MLXAudioCore, MLXAudioCodecs, and MLXAudioTTS; owns the Mimi codec and Qwen3 wrappers.",
-      "depends":["mlx-swift","mlx-swift-lm","SwiftHuggingFace"],"files":["third_party_patches/mlx-audio-swift/Package.swift"]
+      "id":"MLXAudio","label":"VocelloQwen3Core","sub":"owned core runtime","kind":"spm","type":"local package","platform":"iOS + macOS","bundle":"Packages/VocelloQwen3Core",
+      "desc":"First-party Qwen3-TTS/Mimi runtime exposing the stable VocelloQwen3Core facade; compatibility-preserved MLXAudioCore, MLXAudioCodecs, and MLXAudioTTS products remain behind it.",
+      "depends":["mlx-swift","mlx-swift-lm","SwiftHuggingFace"],"files":["Packages/VocelloQwen3Core/Package.swift"]
     },
     {
       "id":"MLXSwift","label":"mlx-swift","sub":"0.30.6","kind":"spm","type":"SPM package","platform":"iOS + macOS","bundle":"github.com/ml-explore/mlx-swift",
@@ -1782,7 +1784,7 @@ scripts/macos_test.sh test
     },
     {
       "id":"MLXLM","label":"mlx-swift-lm","sub":"2.30.6","kind":"spm","type":"SPM package","platform":"iOS + macOS","bundle":"github.com/ml-explore/mlx-swift-lm",
-      "desc":"Language-model utilities consumed by the vendored audio stack; pinned in lockstep with mlx-swift.",
+      "desc":"Language-model utilities consumed by the owned Qwen3 runtime; pinned in lockstep with mlx-swift.",
       "depends":["mlx-swift","swift-transformers","swift-jinja"],"files":[]
     },
     {
@@ -1803,16 +1805,16 @@ scripts/macos_test.sh test
     ["QwenVoiceEngineSupport","QwenVoiceCore"],["QwenVoiceEngineSupport","MLXAudio"],["QwenVoiceEngineSupport","MLXSwift"],["QwenVoiceEngineSupport","SwiftHuggingFace"],
     ["QwenVoiceEngineService","QwenVoiceCore"],["QwenVoiceEngineService","QwenVoiceEngineSupport"],["QwenVoiceEngineService","MLXAudio"],["QwenVoiceEngineService","MLXSwift"],["QwenVoiceEngineService","SwiftHuggingFace"],
     ["QwenVoiceCore","QwenVoiceBackendCore"],["QwenVoiceCore","MLXAudio"],["QwenVoiceCore","MLXSwift"],["QwenVoiceCore","SwiftHuggingFace"],
-    ["QwenVoiceBackendCore","MLXAudio"],["QwenVoiceBackendCore","MLXSwift"],["MLXAudio","MLXSwift"],["MLXAudio","MLXLM"],["MLXAudio","SwiftHuggingFace"],
+    ["MLXAudio","MLXSwift"],["MLXAudio","MLXLM"],["MLXAudio","SwiftHuggingFace"],
     ["VocelloCoreTests","QwenVoiceCore"],["VocelloEngineIntegrationTests","QwenVoiceCore"],["VocelloEngineIntegrationTests","QwenVoiceEngineSupport"],["VocelloEngineIntegrationTests","QwenVoiceNative"]
   ],
   "pipeline": [
     {"title":"Acquire operation ownership","body":"MLXTTSEngine.generate enters the user-model operation gate, sets visible engine activity, and establishes cancellation and telemetry scopes.","path":"MLXTTSEngine.generate → beginUserModelOperation"},
     {"title":"Validate and load","body":"NativeEngineRuntime validates the request, applies deterministic MLXRandom seeding when supplied, resolves the contract-backed model variant, and ensures it is loaded.","path":"NativeEngineRuntime.prepareGeneration(for:)"},
     {"title":"Build mode conditioning","body":"Custom resolves speaker and delivery; Design warms natural-language brief conditioning; Clone normalizes the reference and reuses decoded audio/prompt artifacts through NativeCloneSupport.","path":"GenerationRequest.Payload → NativeEngineRuntime / NativeCloneSupport"},
-    {"title":"Run Qwen3-TTS inference","body":"UnsafeSpeechGenerationModel delegates to the vendored Qwen3 custom, design, or clone streaming generator with the resolved language hint and sampling policy.","path":"MLXAudioTTS · Qwen3-TTS 12Hz 1.7B"},
-    {"title":"Decode and quality-check PCM","body":"The Mimi speech tokenizer decodes tokens to PCM. PCM16StreamLimiter and AudioQCReport track clipping, clicks, slew, dropout, and non-finite samples.","path":"MLXAudioCodecs → PCM16StreamLimiter"},
-    {"title":"Publish WAV, events, and result","body":"NativeStreamingSynthesisSession atomically writes 24 kHz mono Int16 WAV, emits ordered progress/chunk/completion events, trims per policy, and returns GenerationResult.","path":"NativeStreamingSynthesisSession.run"}
+    {"title":"Run Qwen3-TTS inference","body":"UnsafeSpeechGenerationModel enters the stable VocelloQwen3Core facade, which delegates to the owned custom, design, or clone streaming generator with the resolved language hint and sampling policy.","path":"VocelloQwen3Core → owned Qwen3-TTS 12Hz 1.7B runtime"},
+    {"title":"Decode and quality-check PCM","body":"The owned Mimi speech tokenizer decodes tokens to PCM behind the facade. PCM16StreamLimiter and AudioQCReport track clipping, clicks, slew, dropout, and non-finite samples.","path":"VocelloQwen3Core → owned Mimi codec → PCM16StreamLimiter"},
+    {"title":"Publish WAV, events, and result","body":"NativeStreamingSynthesisSession atomically writes 24 kHz mono Int16 WAV and emits ordered progress/chunk plus exactly one completed, cancelled, or failed terminal outcome. Cancellation reaches its barrier before trim, unload, or ownership release.","path":"NativeStreamingSynthesisSession.run → ActiveGenerationCoordinator"}
   ],
   "systemFlows": [
     {
@@ -1831,21 +1833,21 @@ scripts/macos_test.sh test
       "steps":[
         "StudioGenerationCoordinator builds and submits GenerationRequest",
         "The iOS TTSEngineStore calls the in-process MLXTTSEngine directly",
-        "A bufferingNewest(64) stream updates preview and player state",
+        "A bufferingNewest(96) stream updates preview and player state while yield outcomes are measured",
         "GenerationResult is persisted asynchronously through GenerationPersistence and GRDB",
-        "Cooperative cancellation discards a late result before History persistence"
+        "Typed user or memory-pressure cancellation awaits the active task's cancelled terminal barrier before ownership release"
       ],
       "note":"No macOS XPC modules are linked. Proactive warm work is thermally gated; generation itself is not blocked, and batch is intentionally absent."
     },
     {
       "title":"Model install",
-      "steps":["Read the model contract or iOS catalog","Reconcile the durable request ledger with existing background tasks","Download into platform-owned staging","Verify exact size and SHA-256 once per process generation","Atomically move into models/ and refresh inventory"],
-      "note":"macOS and CLI tear down foreground sessions on terminal paths. iOS uses one app-lifetime bundle-aware background session, adopts only exact task identities, defers UIKit completion until durable postprocessing, preserves verified files for Retry, and treats explicit Cancel as discard."
+      "steps":["Read the active model contract/catalog route","Reconcile the durable request ledger with existing background tasks","Download into platform-owned staging","Verify exact size and SHA-256 once per process generation","Atomically move into models/ and refresh inventory"],
+      "note":"The cross-platform production catalog is complete for all six Speed/Quality artifacts. macOS/CLI use its fail-closed exact-file download route and tear down foreground sessions on terminal paths. iOS uses one app-lifetime bundle-aware background session, adopts only exact task identities, defers UIKit completion until durable postprocessing, preserves verified files for Retry, and treats explicit Cancel as discard. Static completeness and isolated live delivery evidence remain separate proofs."
     },
     {
       "title":"Persistence and playback",
-      "steps":["Publish the generated WAV","Write generation metadata asynchronously through GRDB","Expose History search, replay, save-as voice, export, and delete","Feed completed or streaming audio into AudioPlayerViewModel"],
-      "note":"App data stays local. The CLI writes directly to its requested output and does not maintain app History."
+      "steps":["Publish the generated WAV","Write generation metadata asynchronously through GRDB","Expose History search, replay, save-as voice, export, and delete","On database failure show a degraded state and disable destructive actions rather than an empty library","Feed completed or streaming audio into AudioPlayerViewModel"],
+      "note":"App data stays local. Persistence errors are typed and fail closed; iOS exposes Retry, while macOS retries on reload/re-entry. The CLI writes directly to its requested output and does not maintain app History."
     },
     {
       "title":"Telemetry join",
@@ -1854,8 +1856,8 @@ scripts/macos_test.sh test
     },
     {
       "title":"Release and distribution",
-      "steps":["Build optimized Release configuration","Sign the macOS app and embedded XPC service","Create, notarize, staple, and verify the DMG","Attach artifacts to GitHub Release","Optionally compile/archive iOS for TestFlight/App Store"],
-      "note":"The marketing site deploys separately from website/ to Vercel. The source-built vocello CLI is not bundled in the DMG."
+      "steps":["Resolve protected tag, source, version, and immutable toolchain identities","Build optimized Release configuration","Sign the macOS app and embedded XPC service","Create, notarize, staple, and verify the DMG","Generate and validate SPDX/CycloneDX SBOMs, checksums, provenance, and release evidence","Create a draft Release, upload, download, and digest-verify its assets","Publish the verified draft as the final transaction","Optionally compile/archive iOS for TestFlight/App Store"],
+      "note":"The marketing site deploys separately from website/ to Vercel. The source-built vocello CLI is not bundled in the DMG; release publication never precedes candidate verification."
     }
   ],
   "sources": [
@@ -1914,7 +1916,7 @@ scripts/macos_test.sh test
         {"name":"Sheets/IOSBottomSheets.swift","desc":"Delivery, language, voice, reference and delete-model sheet types"},
         {"name":"IOSVoicesView.swift · Voices/","desc":"Saved/built-in voices, recording, Files import, visible enrollment, and Clone handoff"},
         {"name":"History/ · Settings/","desc":"History and Settings tab content surfaces"},
-        {"name":"TTSEngineStore.swift","desc":"Bounded event stream and cooperative-cancel facade"},
+        {"name":"TTSEngineStore.swift","desc":"Bounded measured event stream and typed cancellation-barrier facade"},
         {"name":"IOSDeviceDiagnosticsRunner.swift","desc":"Headless, non-UI on-device bench/language diagnostics"}
       ]
     },
@@ -1944,15 +1946,16 @@ scripts/macos_test.sh test
       ]
     },
     {
-      "name":"Sources/Resources/","plat":"bundled metadata","desc":"Canonical model contract, iOS catalog, privacy manifest, and iOS voice-preview WAVs.",
+      "name":"Sources/Resources/","plat":"bundled metadata","desc":"Canonical model/speaker contract, iOS catalog, complete cross-platform exact-artifact catalog, privacy manifest, and iOS voice-preview WAVs.",
       "children":[
         {"name":"qwenvoice_contract.json","desc":"Model/speaker/capability source of truth"},
-        {"name":"qwenvoice_ios_model_catalog.json","desc":"iOS-downloadable Speed catalog"}
+        {"name":"qwenvoice_ios_model_catalog.json","desc":"iOS-downloadable Speed catalog"},
+        {"name":"qwenvoice_production_model_catalog.json","desc":"Generated complete exact-artifact catalog for all six Speed/Quality packages"}
       ]
     },
     {
-      "name":"third_party_patches/mlx-audio-swift/","plat":"vendored","desc":"Qwen3-TTS-only MLXAudio fork with Core, Mimi Codecs, and TTS products.",
-      "children":[{"name":"Package.swift","desc":"Exact MLX, MLXLM, and Hugging Face dependencies"}]
+      "name":"Packages/VocelloQwen3Core/","plat":"owned","desc":"First-party Qwen3-TTS core runtime with a stable VocelloQwen3Core product facade and compatibility-preserved MLXAudio implementation products.",
+      "children":[{"name":"Sources/VocelloQwen3Core/","desc":"Typed model-bundle, capability, sampling, memory, synthesis-session, terminal, cancellation, and diagnostic facade"},{"name":"Package.swift","desc":"Exact MLX, MLXLM, and Hugging Face dependencies"}]
     },
     {
       "name":"Tests/","plat":"macOS + physical-device iOS","desc":"Core/output/telemetry tests, macOS XPC integration, and explicit UI automation.",
@@ -1960,20 +1963,24 @@ scripts/macos_test.sh test
         {"name":"VocelloCoreTests/","desc":"Language, schema-v8 memory/coverage compatibility, sampler/QC, and atomic WAV tests"},
         {"name":"VocelloEngineIntegrationTests/","desc":"Injectable XPC lifecycle and correlation tests"},
         {"name":"UIAutomationSupport/","desc":"Shared waits, fixtures, queries, and evidence helpers"},
-        {"name":"VocelloMacUITests/ · VocelloiOSUITests/","desc":"Explicit smoke and benchmark XCUITest lanes"}
+        {"name":"VocelloMacUITests/ · VocelloiOSUITests/","desc":"Explicit smoke and benchmark XCUITest lanes"},
+        {"name":"VocelloiOSLogicTests/","desc":"App-host-free iOS catalog, ledger, memory, cancellation, storage-gate, and diagnostic policy tests; generic device-SDK compile in CI"}
       ]
     },
     {
       "name":"scripts/ · config/ · benchmarks/","plat":"operations","desc":"Build, gates, device tooling, benchmark matrices, analyzers, PASS-only history, baselines, and release verification.",
       "children":[
         {"name":"build-output-policy.json · build_output_policy.py","desc":"Machine-readable cache/scratch/artifact/dist ownership, inventory, validation, and migration"},
-        {"name":"generate_cli_scheme.py · xcode-schemes/VocelloCLI.xcscheme.template","desc":"Deterministic post-XcodeGen CLI scheme required for fully managed DerivedData"},
+        {"name":"generate_cli_scheme.py · generate_ios_logic_scheme.py","desc":"Two deterministic post-XcodeGen schemes for the CLI tool and app-host-free iOS policy tests"},
         {"name":"macos_test.sh","desc":"macOS deterministic test/gate, exact-PID profile, and retained-memory router"},
         {"name":"ui_test.sh","desc":"Unified explicit XCUITest smoke and benchmark entry point"},
         {"name":"clean_build_caches.sh","desc":"Policy-bounded routine/aggressive/UI/dist/external/clobber cleanup"},
         {"name":"benchmark_history.py","desc":"Validate/publish privacy-safe records and reproduce HISTORY.md"},
         {"name":"backend-risk-spine.json","desc":"Tracked backend report-risk contract"},
-        {"name":"ios_device.sh","desc":"Physical-device build/test/bench/gate router"},
+        {"name":"runtime-debug-knobs.json · concurrency-safety.json","desc":"Master-gated runtime override registry and exhaustive owned concurrency-exception inventory"},
+        {"name":"model-catalog-schema-v1.json · model-artifact-receipts.json","desc":"Complete fail-closed production catalog schema and trusted exact-artifact evidence"},
+        {"name":"orchestration-contract.json · evidence-impact.json · project-health-contract.json · release-evidence-contract.json","desc":"Required-step, changed-path evidence, health, and release-candidate contracts"},
+        {"name":"ios_device.sh","desc":"Physical-device build/logic-test/bench/gate router"},
         {"name":"release.sh","desc":"Optimized signing/notarization packaging"}
       ]
     },
@@ -1985,17 +1992,18 @@ scripts/macos_test.sh test
       ]
     },
     {
-      "name":".github/workflows/","plat":"CI","desc":"iOS compile safety, macOS package/release, and optional iOS archive jobs.",
+      "name":".github/workflows/","plat":"CI","desc":"Native and website deterministic CI, security analysis, verified macOS release, and optional iOS archive jobs.",
       "children":[
-        {"name":"ci.yml","desc":"Project inputs, generic iOS compile safety, and macOS deterministic tests"},
-        {"name":"release.yml","desc":"DMG release, iOS compile, optional archive"}
+        {"name":"ci.yml","desc":"Project inputs, website checks, generic iOS app plus logic-bundle compile safety, and macOS deterministic tests"},
+        {"name":"security.yml","desc":"Dependency review and scheduled CodeQL security analysis"},
+        {"name":"release.yml","desc":"Identity-bound DMG candidate, SBOM/checksum/attestation evidence, draft verification, final publication, and optional iOS archive"}
       ]
     }
   ],
   "deps": [
-    {"name":"MLXAudio","ver":"vendored local fork","role":"MLXAudioCore, MLXAudioCodecs, and MLXAudioTTS for Qwen3-TTS/Mimi","tag":"vendored","direct":true},
+    {"name":"VocelloQwen3Core","ver":"owned local package","role":"Stable typed application facade over the owned Qwen3-TTS/Mimi runtime; legacy MLXAudio products remain implementation compatibility","tag":"owned","direct":true},
     {"name":"mlx-swift","ver":"0.30.6","role":"MLX arrays, Metal compute, NN layers, MLXRandom","tag":"direct","direct":true},
-    {"name":"mlx-swift-lm","ver":"2.30.6","role":"MLXLMCommon used by vendored audio stack; lockstep pin","tag":"vendored direct","direct":true},
+    {"name":"mlx-swift-lm","ver":"2.30.6","role":"MLXLMCommon used by the owned Qwen3 runtime; lockstep pin","tag":"owned-runtime direct","direct":true},
     {"name":"GRDB.swift","ver":"7.10.0","role":"SQLite persistence for History","tag":"direct","direct":true},
     {"name":"SwiftHuggingFace","ver":"0.9.0","role":"Hub/model utilities in the package graph","tag":"direct","direct":true},
     {"name":"EventSource","ver":"1.4.1","role":"Transitive server-sent events support","tag":"transitive","direct":false},
@@ -2016,7 +2024,7 @@ scripts/macos_test.sh test
     {"name":"AVFoundation","role":"Recording, playback, audio files, PCM/WAV handling","owners":"apps, shared support, engine prep"},
     {"name":"Speech · NaturalLanguage","role":"Local transcript fill, prompt detection, and output verification","owners":"shared support and tests"},
     {"name":"CryptoKit","role":"SHA-256 integrity and reference hashes","owners":"core and iOS support"},
-    {"name":"Metal · MLX","role":"Apple Silicon GPU inference and memory telemetry","owners":"core and vendored backend"},
+    {"name":"Metal · MLX","role":"Apple Silicon GPU inference and memory telemetry","owners":"core and owned runtime"},
     {"name":"UniformTypeIdentifiers","role":"Reference import and generated-audio export types","owners":"macOS/iOS views"},
     {"name":"OSLog · os_signpost","role":"Runtime logs, performance intervals, and diagnostics","owners":"core, apps, XPC service"},
     {"name":"NSXPCConnection","role":"macOS app-to-engine-service isolation","owners":"QwenVoiceNative / EngineService"},
@@ -2024,7 +2032,7 @@ scripts/macos_test.sh test
   ],
   "externalSystems": [
     {"name":"Hugging Face","role":"Pinned model repository downloads over HTTPS","boundary":"No inference or user-script upload"},
-    {"name":"GitHub Actions / Releases","role":"Compile safety, DMG packaging, artifacts, and release attachment","boundary":"UI acceptance remains explicit and local"},
+    {"name":"GitHub Actions / Releases","role":"Deterministic CI, security analysis, verified candidate/SBOM/provenance, and draft-last release publication","boundary":"UI acceptance remains explicit and local"},
     {"name":"Apple Developer services","role":"Developer ID signing, notarytool, App Store Connect, optional TestFlight","boundary":"Secrets stay in CI or local keychains"},
     {"name":"CoreDevice and paired iPhone","role":"Physical-device install, launch, diagnostics, XCUITest, and profiling","boundary":"Simulator is prohibited"},
     {"name":"Vercel","role":"Marketing-site deployment from website/","boundary":"Separate from native app runtime"},
@@ -2051,6 +2059,7 @@ scripts/macos_test.sh test
     ],
     "iOS device":[
       {"cmd":"scripts/ios_device.sh preflight","desc":"Paired-device, signing, state, app, and dSYM readiness"},
+      {"cmd":"scripts/ios_device.sh logic-test","desc":"Explicit app-host-free iOS policy XCTest execution on the paired phone"},
       {"cmd":"scripts/ui_test.sh ios smoke","desc":"Physical-iPhone semantic, accessibility, generation, and screenshot assertions"},
       {"cmd":"scripts/ui_test.sh ios benchmark","desc":"Physical-iPhone full UI matrix with run-scoped app/engine evidence"},
       {"cmd":"scripts/ios_device.sh lang-bench|profile|crashes","desc":"Headless language, exact-PID profiling, and crash evidence"},
@@ -2068,9 +2077,10 @@ scripts/macos_test.sh test
       {"cmd":"scripts/clean_build_caches.sh --routine --dry-run","desc":"Inspect bounded scratch and superseded-evidence reclamation; distribution is preserved"}
     ],
     "CI / release":[
-      {"cmd":".github/workflows/ci.yml · ios-compile-check","desc":"Generic iOS device-SDK build"},
+      {"cmd":".github/workflows/ci.yml · ios-compile-check","desc":"Generic iOS device-SDK app plus standalone logic-test bundle compile"},
       {"cmd":".github/workflows/ci.yml · macos-deterministic-tests","desc":"Headless tests and app build; no UI driving"},
-      {"cmd":".github/workflows/release.yml · package","desc":"Signed/notarized DMG and GitHub Release after strict macOS readiness"},
+      {"cmd":".github/workflows/security.yml","desc":"Dependency review and scheduled CodeQL"},
+      {"cmd":".github/workflows/release.yml · package","desc":"Signed/notarized candidate, SBOM/checksum/provenance evidence, draft asset verification, then final publication"},
       {"cmd":".github/workflows/release.yml · compile-ios|archive-ios","desc":"iOS compile safety and optional manual signed archive"}
     ],
     "Codex workflow":[
@@ -2111,7 +2121,7 @@ scripts/macos_test.sh test
       "id":"pro_clone","mode":"clone","title":"Voice Cloning · pro_clone",
       "speed":"mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit · 2,336,075,167 B",
       "quality":"mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit · 3,104,158,788 B",
-      "ios":"Speed eligible; Quality macOS only","notes":"speaker encoder required · transcript-backed prompt preferred · no delivery control",
+      "ios":"Speed eligible; Quality macOS only","notes":"speaker encoder required · transcript-backed or genuine audio-only x-vector conditioning · visible app consent · no delivery control",
       "capabilities":{"familyType":"base_clone","supportsInstructionControl":false,"supportsVoiceClone":true,"requiresSpeakerEncoder":true,"sampleRateHz":24000,"frameRateHz":12.5},
       "variants":[
         {"id":"speed","repo":"mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit","revision":"37e955a1deb861c088ae5f3a67043185f3d1a60c","estimatedDownloadBytes":2336075167,"platforms":["iOS","macOS"],"iosDownloadEligible":true},
@@ -2132,9 +2142,9 @@ scripts/macos_test.sh test
   ],
   "languages":["Auto","English","Chinese","Japanese","Korean","German","French","Russian","Portuguese","Spanish","Italian"],
   "storage": [
-    {"title":"macOS release","root":"~/Library/Application Support/QwenVoice/","items":["models/ and .qwenvoice-downloads/","outputs/{mode}/","voices/ and prepared artifacts","history.sqlite","cache/{prepared_audio,imported_references,native_mlx,stream_sessions}/","diagnostics/ when telemetry is enabled"]},
+    {"title":"macOS release","root":"~/Library/Application Support/QwenVoice/","items":["models/ and .qwenvoice-downloads/","outputs/{mode}/","voices/ and mode-specific prepared artifacts","history.sqlite fails closed; degraded state disables destructive actions","local clone-consent preference","cache/{prepared_audio,imported_references,native_mlx,stream_sessions}/","diagnostics/ when telemetry is enabled"]},
     {"title":"macOS debug","root":"~/Library/Application Support/QwenVoice-Debug/","items":["Same logical layout as release","Model fixtures may symlink to the canonical store","Raw diagnostics remain gitignored"]},
-    {"title":"iOS App Group","root":"group.com.patricedery.vocello.shared/Vocello/","items":["Speed model packages","One downloads/staging tree plus the atomic model-delivery ledger","Bounded privacy-safe model-download diagnostics","App Group history database and outputs","Saved voices and reference material","Pullable diagnostics mirror for device gates","Increased-memory-limit entitlement required"]},
+    {"title":"iOS App Group","root":"group.com.patricedery.vocello.shared/Vocello/","items":["Speed model packages","One downloads/staging tree plus the atomic model-delivery ledger","Bounded privacy-safe model-download diagnostics","App Group history database fails closed and exposes Retry","Saved voices, reference material, and local clone consent","Pullable diagnostics mirror for device gates","Increased-memory-limit entitlement required"]},
     {"title":"Privacy boundary","root":"local-first runtime","items":["No cloud TTS or bundled model weights","Recording, transcription, generation, playback, and History stay local","Network use is model download, release/CI, and website delivery","Production telemetry is disabled by default"]}
   ],
   "invariants": [
@@ -2142,11 +2152,14 @@ scripts/macos_test.sh test
     "iOS real-engine work and UI tests use a paired physical device, never Simulator",
     "mlx-swift and mlx-swift-lm pins move together after benchmark review",
     "macOS event draining stays off MainActor; expected XPC retirement is not an error",
-    "iOS cancellation is cooperative and cancelled results never persist",
-    "macOS events are unbounded; iOS events use bufferingNewest(64)",
+    "Typed cancellation awaits the active task terminal barrier before ownership release; cancelled results never persist",
+    "macOS events use bufferingNewest(256), iOS uses bufferingNewest(96), and all yield outcomes are measured",
     "No hard production Memory.memoryLimit, no Quality-to-Speed OOM fallback, no Core ML backend",
     "Stable accessibilityIdentifier values survive refactors",
     "Production telemetry stays runtime-gated through TelemetryGate.resolvedEnabled",
+    "Production-affecting environment overrides are registered and inert without the QWENVOICE_DEBUG master gate",
+    "Every owned unchecked or unsafe concurrency declaration is registered with its safety argument",
+    "The complete production model catalog owns all six exact Speed/Quality identities; absent digests fail closed and are never inferred",
     "Telemetry-off constructs no sampler, sink, chunk QC, or expensive derived diagnostics",
     "Benchmark history is PASS-only; HISTORY.md is generated and raw evidence stays untracked",
     "Memory-qualified history requires telemetry v8, evidence v2, at least 95% sampler coverage, and no critical pressure or memory exit",

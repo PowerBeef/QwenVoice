@@ -2,8 +2,7 @@ import CryptoKit
 @preconcurrency import AVFoundation
 import Foundation
 @preconcurrency import MLX
-import MLXAudioCore
-@preconcurrency import MLXAudioTTS
+@preconcurrency import VocelloQwen3Core
 
 enum ResolvedCloneTranscriptMode: String, Sendable {
     case inline
@@ -11,15 +10,27 @@ enum ResolvedCloneTranscriptMode: String, Sendable {
     case none
 }
 
+struct NativeClonePromptCreationContract: Equatable, Sendable {
+    let refText: String?
+    let xVectorOnlyMode: Bool
+
+    init(conditioningMode: CloneConditioningMode) {
+        let normalized = conditioningMode.normalized
+        refText = normalized.transcript
+        xVectorOnlyMode = normalized.isXVectorOnly
+    }
+}
+
 struct ResolvedCloneConditioning: @unchecked Sendable {
-    let uiIdentityKey: String
-    let internalIdentityKey: String
+    let uiIdentity: GenerationSemantics.CloneReferenceIdentity
+    let internalIdentity: GenerationSemantics.CloneReferenceIdentity
     let normalizedReference: AudioNormalizationResult
     let resolvedTranscript: String?
     let transcriptMode: ResolvedCloneTranscriptMode
-    let referenceAudio: MLXArray
+    let conditioningMode: CloneConditioningMode
+    let referenceAudio: [Float]
     let preparedVoiceID: String?
-    let voiceClonePrompt: Qwen3TTSVoiceClonePrompt?
+    let voiceClonePrompt: VocelloQwen3ClonePrompt?
     let preparedCloneUsed: Bool
     let cloneCacheHit: Bool?
     let clonePromptCacheHit: Bool?
@@ -30,18 +41,28 @@ struct ResolvedCloneConditioning: @unchecked Sendable {
     let referenceQualityWarnings: [String]
     var timingsMS: [String: Int]
 
+    /// Existing UI state uses the historical human-readable key. Cache
+    /// ownership uses `uiIdentity` / `internalIdentity` directly.
+    var uiIdentityKey: String { uiIdentity.legacyKey }
+
+    /// Persistent clone prompt directories intentionally retain their v1
+    /// digest input; changing that is an artifact-format migration, not a
+    /// cache-key hardening change.
+    var internalIdentityKey: String { internalIdentity.legacyKey }
+
     func withVoiceClonePrompt(
-        _ voiceClonePrompt: Qwen3TTSVoiceClonePrompt,
+        _ voiceClonePrompt: VocelloQwen3ClonePrompt,
         cacheHit: Bool,
         conditioningReused: Bool,
         timingsMS additionalTimingsMS: [String: Int] = [:]
     ) -> ResolvedCloneConditioning {
         ResolvedCloneConditioning(
-            uiIdentityKey: uiIdentityKey,
-            internalIdentityKey: internalIdentityKey,
+            uiIdentity: uiIdentity,
+            internalIdentity: internalIdentity,
             normalizedReference: normalizedReference,
             resolvedTranscript: resolvedTranscript,
             transcriptMode: transcriptMode,
+            conditioningMode: conditioningMode,
             referenceAudio: referenceAudio,
             preparedVoiceID: preparedVoiceID,
             voiceClonePrompt: voiceClonePrompt,
@@ -67,29 +88,40 @@ actor NativePreparedCloneConditioningCache {
     }
 
     private struct DecodedReferenceAudio {
-        let referenceAudio: MLXArray
+        let referenceAudio: [Float]
     }
 
     private struct CachedVoiceClonePrompt {
-        let prompt: Qwen3TTSVoiceClonePrompt
+        let prompt: VocelloQwen3ClonePrompt
+    }
+
+    private struct NormalizedReferenceIdentity: Hashable {
+        let fingerprint: String
+    }
+
+    private struct DecodedReferenceIdentity: Hashable {
+        let normalizedPath: String
+        let referenceFingerprint: String
+        let sampleRate: Int
     }
 
     struct CachedConditioning {
-        let internalIdentityKey: String
+        let internalIdentity: GenerationSemantics.CloneReferenceIdentity
         let normalizedReference: AudioNormalizationResult
-        let resolvedTranscript: String
+        let resolvedTranscript: String?
         let transcriptMode: ResolvedCloneTranscriptMode
-        let referenceAudio: MLXArray
+        let conditioningMode: CloneConditioningMode
+        let referenceAudio: [Float]
     }
 
-    private var cachedValues: [String: CachedConditioning] = [:]
-    private var lruKeys: [String] = []
-    private var normalizedReferenceCache: [String: AudioNormalizationResult] = [:]
-    private var normalizedReferenceLRUKeys: [String] = []
-    private var decodedReferenceAudioCache: [String: DecodedReferenceAudio] = [:]
-    private var decodedReferenceAudioLRUKeys: [String] = []
-    private var voiceClonePromptCache: [String: CachedVoiceClonePrompt] = [:]
-    private var voiceClonePromptLRUKeys: [String] = []
+    private var cachedValues: [GenerationSemantics.CloneReferenceIdentity: CachedConditioning] = [:]
+    private var lruKeys: [GenerationSemantics.CloneReferenceIdentity] = []
+    private var normalizedReferenceCache: [NormalizedReferenceIdentity: AudioNormalizationResult] = [:]
+    private var normalizedReferenceLRUKeys: [NormalizedReferenceIdentity] = []
+    private var decodedReferenceAudioCache: [DecodedReferenceIdentity: DecodedReferenceAudio] = [:]
+    private var decodedReferenceAudioLRUKeys: [DecodedReferenceIdentity] = []
+    private var voiceClonePromptCache: [GenerationSemantics.CloneReferenceIdentity: CachedVoiceClonePrompt] = [:]
+    private var voiceClonePromptLRUKeys: [GenerationSemantics.CloneReferenceIdentity] = []
 
     init(capacity: Int = NativeMemoryPolicyResolver.cloneCacheCapacity()) {
         self.capacity = max(capacity, 0)
@@ -155,80 +187,45 @@ actor NativePreparedCloneConditioningCache {
             requestedTranscript: requestedTranscript,
             normalizedAudioURL: normalizedReference.normalizedURL
         )
-        let uiIdentityKey = GenerationSemantics.cloneReferenceIdentityKey(
+        let conditioningMode = CloneConditioningMode(
+            transcript: transcriptResolution.transcript
+        )
+        let uiIdentity = GenerationSemantics.cloneReferenceIdentity(
             modelID: modelID,
             refAudio: reference.audioPath,
             refText: requestedTranscript
         )
-        let internalIdentityKey = GenerationSemantics.cloneReferenceIdentityKey(
+        let internalIdentity = GenerationSemantics.internalCloneReferenceIdentity(
             modelID: modelID,
-            refAudio: "\(normalizedReference.normalizedPath)#\(referenceFingerprint)",
-            refText: transcriptResolution.transcript
+            normalizedReferencePath: normalizedReference.normalizedPath,
+            referenceFingerprint: referenceFingerprint,
+            conditioningMode: conditioningMode
         )
 
-        if let resolvedTranscript = transcriptResolution.transcript {
-            if let cached = cachedValues[internalIdentityKey] {
-                touch(internalIdentityKey)
-                return ResolvedCloneConditioning(
-                    uiIdentityKey: uiIdentityKey,
-                    internalIdentityKey: internalIdentityKey,
-                    normalizedReference: cached.normalizedReference,
-                    resolvedTranscript: cached.resolvedTranscript,
-                    transcriptMode: cached.transcriptMode,
-                    referenceAudio: cached.referenceAudio,
-                    preparedVoiceID: reference.preparedVoiceID,
-                    voiceClonePrompt: nil,
-                    preparedCloneUsed: true,
-                    cloneCacheHit: true,
-                    clonePromptCacheHit: nil,
-                    cloneConditioningReused: true,
-                    usedTemporaryReference: cached.normalizedReference.normalizedPath
-                        != cached.normalizedReference.sourcePath,
-                    reusedNormalizedReference: normalizedReferenceOutcome.reusedExistingOutput,
-                    reusedDecodedReference: true,
-                    referenceQualityWarnings: referenceQualityWarnings,
-                    timingsMS: [
-                        "reference_normalize": normalizationDurationMS,
-                        "reference_decode": 0,
-                    ]
-                )
-            }
-
-            let decodeStartedAt = ContinuousClock.now
-            let (referenceAudio, reusedDecodedReference) = try resolveDecodedReferenceAudio(
-                normalizedReference: normalizedReference,
-                referenceFingerprint: referenceFingerprint,
-                sampleRate: sampleRate
-            )
-            let decodeDurationMS = decodeStartedAt.elapsedMilliseconds
-            let cached = CachedConditioning(
-                internalIdentityKey: internalIdentityKey,
-                normalizedReference: normalizedReference,
-                resolvedTranscript: resolvedTranscript,
-                transcriptMode: transcriptResolution.mode,
-                referenceAudio: referenceAudio
-            )
-            insert(cached)
+        if let cached = cachedValues[internalIdentity] {
+            touch(internalIdentity)
             return ResolvedCloneConditioning(
-                uiIdentityKey: uiIdentityKey,
-                internalIdentityKey: internalIdentityKey,
-                normalizedReference: normalizedReference,
-                resolvedTranscript: resolvedTranscript,
-                transcriptMode: transcriptResolution.mode,
-                referenceAudio: referenceAudio,
+                uiIdentity: uiIdentity,
+                internalIdentity: internalIdentity,
+                normalizedReference: cached.normalizedReference,
+                resolvedTranscript: cached.resolvedTranscript,
+                transcriptMode: cached.transcriptMode,
+                conditioningMode: cached.conditioningMode,
+                referenceAudio: cached.referenceAudio,
                 preparedVoiceID: reference.preparedVoiceID,
                 voiceClonePrompt: nil,
                 preparedCloneUsed: true,
-                cloneCacheHit: false,
+                cloneCacheHit: true,
                 clonePromptCacheHit: nil,
-                cloneConditioningReused: false,
-                usedTemporaryReference: normalizedReference.normalizedPath != normalizedReference.sourcePath,
+                cloneConditioningReused: true,
+                usedTemporaryReference: cached.normalizedReference.normalizedPath
+                    != cached.normalizedReference.sourcePath,
                 reusedNormalizedReference: normalizedReferenceOutcome.reusedExistingOutput,
-                reusedDecodedReference: reusedDecodedReference,
+                reusedDecodedReference: true,
                 referenceQualityWarnings: referenceQualityWarnings,
                 timingsMS: [
                     "reference_normalize": normalizationDurationMS,
-                    "reference_decode": decodeDurationMS,
+                    "reference_decode": 0,
                 ]
             )
         }
@@ -240,17 +237,27 @@ actor NativePreparedCloneConditioningCache {
             sampleRate: sampleRate
         )
         let decodeDurationMS = decodeStartedAt.elapsedMilliseconds
-        return ResolvedCloneConditioning(
-            uiIdentityKey: uiIdentityKey,
-            internalIdentityKey: internalIdentityKey,
+        let cached = CachedConditioning(
+            internalIdentity: internalIdentity,
             normalizedReference: normalizedReference,
-            resolvedTranscript: nil,
-            transcriptMode: .none,
+            resolvedTranscript: transcriptResolution.transcript,
+            transcriptMode: transcriptResolution.mode,
+            conditioningMode: conditioningMode,
+            referenceAudio: referenceAudio
+        )
+        insert(cached)
+        return ResolvedCloneConditioning(
+            uiIdentity: uiIdentity,
+            internalIdentity: internalIdentity,
+            normalizedReference: normalizedReference,
+            resolvedTranscript: transcriptResolution.transcript,
+            transcriptMode: transcriptResolution.mode,
+            conditioningMode: conditioningMode,
             referenceAudio: referenceAudio,
             preparedVoiceID: reference.preparedVoiceID,
             voiceClonePrompt: nil,
             preparedCloneUsed: false,
-            cloneCacheHit: nil,
+            cloneCacheHit: false,
             clonePromptCacheHit: nil,
             cloneConditioningReused: false,
             usedTemporaryReference: normalizedReference.normalizedPath != normalizedReference.sourcePath,
@@ -273,17 +280,20 @@ actor NativePreparedCloneConditioningCache {
         qwenRuntimeProfileSignature: String? = nil
     ) throws -> ResolvedCloneConditioning {
         guard model.supportsOptimizedVoiceClone,
-              conditioning.voiceClonePrompt == nil,
-              let transcript = conditioning.resolvedTranscript else {
+              conditioning.voiceClonePrompt == nil else {
             return conditioning
         }
 
-        let cacheKey = conditioning.internalIdentityKey
+        let cacheKey = conditioning.internalIdentity
+        let conditioningMode = conditioning.conditioningMode.normalized
+        let creationContract = NativeClonePromptCreationContract(
+            conditioningMode: conditioningMode
+        )
         let artifactMetadata = clonePromptArtifactMetadata(
             modelID: modelID,
             conditioning: conditioning,
             language: language,
-            xVectorOnlyMode: false,
+            xVectorOnlyMode: creationContract.xVectorOnlyMode,
             qwenRuntimeProfileSignature: qwenRuntimeProfileSignature
         )
         let artifactDirectory = clonePromptArtifactDirectory(
@@ -298,7 +308,7 @@ actor NativePreparedCloneConditioningCache {
            FileManager.default.fileExists(atPath: artifactDirectory.path) {
             let artifactLoadStartedAt = ContinuousClock.now
             do {
-                let prompt = try Qwen3TTSVoiceClonePrompt.load(
+                let prompt = try VocelloQwen3ClonePrompt.load(
                     from: artifactDirectory,
                     expectedMetadata: artifactMetadata
                 )
@@ -332,10 +342,16 @@ actor NativePreparedCloneConditioningCache {
         let promptBuildStartedAt = ContinuousClock.now
         guard let prompt = try model.createVoiceClonePrompt(
             refAudio: conditioning.referenceAudio,
-            refText: transcript,
-            xVectorOnlyMode: false
+            refText: creationContract.refText,
+            xVectorOnlyMode: creationContract.xVectorOnlyMode
         ) else {
             return conditioning
+        }
+        guard prompt.xVectorOnlyMode == creationContract.xVectorOnlyMode,
+              prompt.inContextLearningMode == !creationContract.xVectorOnlyMode else {
+            throw MLXTTSEngineError.generationFailed(
+                "The Qwen clone prompt mode does not match the requested conditioning contract."
+            )
         }
         let promptBuildMS = promptBuildStartedAt.elapsedMilliseconds
         let promptWithMetadata = prompt.withArtifactMetadata(
@@ -357,8 +373,8 @@ actor NativePreparedCloneConditioningCache {
     }
 
     private func insert(_ conditioning: CachedConditioning) {
-        cachedValues[conditioning.internalIdentityKey] = conditioning
-        touch(conditioning.internalIdentityKey)
+        cachedValues[conditioning.internalIdentity] = conditioning
+        touch(conditioning.internalIdentity)
         var evicted = false
         while lruKeys.count > capacity {
             let evictedKey = lruKeys.removeFirst()
@@ -370,7 +386,7 @@ actor NativePreparedCloneConditioningCache {
         }
     }
 
-    private func touch(_ key: String) {
+    private func touch(_ key: GenerationSemantics.CloneReferenceIdentity) {
         lruKeys.removeAll { $0 == key }
         lruKeys.append(key)
     }
@@ -428,7 +444,7 @@ actor NativePreparedCloneConditioningCache {
         )
     }
 
-    private func touchNormalizedReference(_ key: String) {
+    private func touchNormalizedReference(_ key: NormalizedReferenceIdentity) {
         normalizedReferenceLRUKeys.removeAll { $0 == key }
         normalizedReferenceLRUKeys.append(key)
     }
@@ -437,7 +453,7 @@ actor NativePreparedCloneConditioningCache {
         normalizedReference: AudioNormalizationResult,
         referenceFingerprint: String,
         sampleRate: Int
-    ) throws -> (referenceAudio: MLXArray, reusedDecodedReference: Bool) {
+    ) throws -> (referenceAudio: [Float], reusedDecodedReference: Bool) {
         let key = decodedReferenceAudioCacheKey(
             normalizedPath: normalizedReference.normalizedPath,
             referenceFingerprint: referenceFingerprint,
@@ -448,9 +464,9 @@ actor NativePreparedCloneConditioningCache {
             return (cached.referenceAudio, true)
         }
 
-        let (_, referenceAudio) = try loadAudioArray(
+        let referenceAudio = try Self.loadCanonicalReferenceSamples(
             from: normalizedReference.normalizedURL,
-            sampleRate: sampleRate
+            expectedSampleRate: sampleRate
         )
         decodedReferenceAudioCache[key] = DecodedReferenceAudio(referenceAudio: referenceAudio)
         touchDecodedReferenceAudio(key)
@@ -466,12 +482,46 @@ actor NativePreparedCloneConditioningCache {
         return (referenceAudio, false)
     }
 
-    private func touchDecodedReferenceAudio(_ key: String) {
+    /// Clone normalization already guarantees mono 24 kHz PCM. Decode that
+    /// owned product artifact with AVFoundation so no MLXAudio utility or
+    /// tensor-shaped type crosses the `VocelloQwen3Core` facade boundary.
+    private static func loadCanonicalReferenceSamples(
+        from url: URL,
+        expectedSampleRate: Int
+    ) throws -> [Float] {
+        let file = try AVAudioFile(forReading: url)
+        let format = file.processingFormat
+        guard Int(format.sampleRate.rounded()) == expectedSampleRate,
+              format.channelCount == 1 else {
+            throw AudioPreparationError.conversionFailed(
+                "Normalized clone reference does not match the model sample-rate contract."
+            )
+        }
+        let frameCount = AVAudioFrameCount(file.length)
+        guard frameCount > 0,
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            throw AudioPreparationError.conversionFailed(
+                "Could not allocate the normalized clone reference buffer."
+            )
+        }
+        try file.read(into: buffer)
+        guard let channel = buffer.floatChannelData?[0] else {
+            throw AudioPreparationError.conversionFailed(
+                "Could not decode normalized clone reference samples."
+            )
+        }
+        return Array(UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength)))
+    }
+
+    private func touchDecodedReferenceAudio(_ key: DecodedReferenceIdentity) {
         decodedReferenceAudioLRUKeys.removeAll { $0 == key }
         decodedReferenceAudioLRUKeys.append(key)
     }
 
-    private func cacheVoiceClonePrompt(_ prompt: Qwen3TTSVoiceClonePrompt, for key: String) {
+    private func cacheVoiceClonePrompt(
+        _ prompt: VocelloQwen3ClonePrompt,
+        for key: GenerationSemantics.CloneReferenceIdentity
+    ) {
         voiceClonePromptCache[key] = CachedVoiceClonePrompt(prompt: prompt)
         touchVoiceClonePrompt(key)
         var evicted = false
@@ -485,14 +535,14 @@ actor NativePreparedCloneConditioningCache {
         }
     }
 
-    private func touchVoiceClonePrompt(_ key: String) {
+    private func touchVoiceClonePrompt(_ key: GenerationSemantics.CloneReferenceIdentity) {
         voiceClonePromptLRUKeys.removeAll { $0 == key }
         voiceClonePromptLRUKeys.append(key)
     }
 
-    private func trimCache<Value>(
-        _ cache: inout [String: Value],
-        lruKeys: inout [String],
+    private func trimCache<Key: Hashable, Value>(
+        _ cache: inout [Key: Value],
+        lruKeys: inout [Key],
         retainingMostRecent retainedCount: Int
     ) {
         guard retainedCount < lruKeys.count else { return }
@@ -646,6 +696,25 @@ actor NativePreparedCloneConditioningCache {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    /// Resolves the contract far enough to reject an unsupported clone mode
+    /// before model loading. Full resolution still happens after reference
+    /// normalization, where the mirrored sidecar is authoritative.
+    static func anticipatedConditioningMode(
+        for reference: CloneReference
+    ) -> CloneConditioningMode {
+        if reference.conditioningMode.usesTranscript {
+            return reference.conditioningMode.normalized
+        }
+
+        let sidecarURL = reference.audioURL
+            .deletingPathExtension()
+            .appendingPathExtension("txt")
+        guard let sidecar = try? String(contentsOf: sidecarURL, encoding: .utf8) else {
+            return .xVectorOnly
+        }
+        return CloneConditioningMode(transcript: sidecar)
+    }
+
     static func stableNormalizedCloneReferenceFileName(for sourceURL: URL) throws -> String {
         let fingerprint = try stableCloneReferenceFingerprint(for: sourceURL)
         return stableNormalizedCloneReferenceFileName(
@@ -692,12 +761,18 @@ actor NativePreparedCloneConditioningCache {
         normalizedPath: String,
         referenceFingerprint: String,
         sampleRate: Int
-    ) -> String {
-        "\(normalizedPath)|\(referenceFingerprint)|\(sampleRate)"
+    ) -> DecodedReferenceIdentity {
+        DecodedReferenceIdentity(
+            normalizedPath: normalizedPath,
+            referenceFingerprint: referenceFingerprint,
+            sampleRate: sampleRate
+        )
     }
 
-    private func normalizedReferenceCacheKey(referenceFingerprint: String) -> String {
-        referenceFingerprint
+    private func normalizedReferenceCacheKey(
+        referenceFingerprint: String
+    ) -> NormalizedReferenceIdentity {
+        NormalizedReferenceIdentity(fingerprint: referenceFingerprint)
     }
 
     static func preparedVoiceClonePromptRootDirectory(
@@ -768,16 +843,16 @@ actor NativePreparedCloneConditioningCache {
         language: String?,
         xVectorOnlyMode: Bool,
         qwenRuntimeProfileSignature: String?
-    ) -> Qwen3TTSVoiceClonePrompt.ArtifactMetadata {
+    ) -> VocelloQwen3CloneArtifactMetadata {
         let normalizedLanguage = Self.normalizedClonePromptLanguage(language)
-        return Qwen3TTSVoiceClonePrompt.ArtifactMetadata(
+        return VocelloQwen3CloneArtifactMetadata(
             modelID: modelID,
             language: normalizedLanguage,
             sourceAudioFingerprint: conditioning.normalizedReference.fingerprint,
             transcriptHash: conditioning.resolvedTranscript.map(Self.sha256Hex(text:)),
             hasTranscript: conditioning.resolvedTranscript != nil,
             xVectorOnlyMode: xVectorOnlyMode,
-            qwen3RuntimeProfileSignature: qwenRuntimeProfileSignature
+            runtimeProfileSignature: qwenRuntimeProfileSignature
         )
     }
 
@@ -795,7 +870,7 @@ actor NativePreparedCloneConditioningCache {
     }
 
     private func writeVoiceClonePrompt(
-        _ prompt: Qwen3TTSVoiceClonePrompt,
+        _ prompt: VocelloQwen3ClonePrompt,
         to directory: URL
     ) throws {
         try prompt.writeAtomically(to: directory)

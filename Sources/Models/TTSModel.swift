@@ -39,6 +39,7 @@ struct TTSModel: Identifiable, Hashable, Sendable, Codable {
     let mode: GenerationMode
     let huggingFaceRepo: String
     let huggingFaceRevision: String?
+    let artifactVersion: String
     let outputSubfolder: String
     let requiredRelativePaths: [String]
     let baseModelID: String
@@ -56,6 +57,7 @@ struct TTSModel: Identifiable, Hashable, Sendable, Codable {
         mode: GenerationMode,
         huggingFaceRepo: String,
         huggingFaceRevision: String? = nil,
+        artifactVersion: String = "",
         outputSubfolder: String,
         requiredRelativePaths: [String],
         baseModelID: String? = nil,
@@ -72,6 +74,7 @@ struct TTSModel: Identifiable, Hashable, Sendable, Codable {
         self.mode = mode
         self.huggingFaceRepo = huggingFaceRepo
         self.huggingFaceRevision = huggingFaceRevision
+        self.artifactVersion = artifactVersion
         self.outputSubfolder = outputSubfolder
         self.requiredRelativePaths = requiredRelativePaths
         self.baseModelID = baseModelID ?? id

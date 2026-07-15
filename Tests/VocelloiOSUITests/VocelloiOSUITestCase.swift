@@ -211,6 +211,11 @@ class VocelloiOSUITestCase: XCTestCase {
             )
             let selectedReference = element("studioChip_reference")
             XCTAssertTrue(VocelloUIWait.exists(selectedReference, timeout: 30))
+            let consent = element("voiceCloning_consentAcknowledgment")
+            XCTAssertTrue(VocelloUIWait.exists(consent, timeout: 20))
+            if (consent.value as? String) != "1" && (consent.value as? String) != "On" {
+                XCTAssertTrue(VocelloUIPrimaryAction.perform(on: consent, timeout: 20))
+            }
             // Proactive priming is a best-effort optimization. The production
             // Generate action performs required preparation on demand.
             XCTAssertTrue(

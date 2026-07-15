@@ -7,13 +7,23 @@
 
 **Owns:**
 - `scripts/*.sh` and `scripts/lib/`
-- `.github/workflows/ci.yml` and `.github/workflows/release.yml`
-- `config/build-output-policy.json`, `config/documentation-contract.json`, and
-  `config/public-product-facts.json`
+- `.github/workflows/ci.yml`, `.github/workflows/release.yml`, and
+  `.github/workflows/security.yml`
+- `config/build-output-policy.json`, `config/documentation-contract.json`,
+  `config/public-product-facts.json`, `config/toolchain.json`,
+  `config/orchestration-contract.json`, `config/evidence-impact.json`,
+  `config/project-health-contract.json`, and `config/release-evidence-contract.json`
 - `benchmarks/` schema-v1 compatibility/schema-v2 memory-qualified records, generated history,
   and preserved reference baselines
 - `docs/releases/`
-- Release verification scripts (`scripts/verify_*.sh`, `scripts/create_dmg.sh`, etc.)
+- Release verification, evidence-impact, required-step, project-health, supply-chain, and packaging
+  scripts (`scripts/verify_*.sh`, `scripts/release_evidence.py`, `scripts/required_step_ledger.py`,
+  `scripts/project_health.py`, `scripts/supply_chain_contract.py`, `scripts/create_dmg.sh`, etc.)
+- Release-candidate evidence, SBOM/checksum generation, immutable Actions pins, and repository
+  security/governance files
+- Production-model-catalog reproducibility and activation gating. Backend owns artifact meaning and
+  trusted receipts; Release/QA ensures staged state cannot become active until completeness,
+  deterministic validation, and explicit delivery evidence pass.
 
 **Does NOT own:**
 - App source code (`.agents/backend-mlx.md`, `.agents/ios-engineer.md`, `.agents/macos-engineer.md`)
@@ -48,8 +58,9 @@ Before changing scripts or CI, read:
 - Release packaging is deterministic. macOS packaging is subordinate to
   `scripts/macos_test.sh release-readiness`, which requires project-input, build,
   deterministic-test, and crash-delta checks. Model-dependent telemetry remains optional explicit
-  QA. iOS archive/TestFlight uses
-  its signing, archive, entitlement, catalog, and artifact verification. XCUITest is optional
+  QA. iOS archive/TestFlight first binds `scripts/macos_test.sh gate` and the generic physical-
+  device SDK compile into the same release ledger, then uses its signing, archive, entitlement,
+  catalog, and artifact verification. XCUITest is optional
   explicit frontend QA and never a signing, notarization, packaging, or upload prerequisite.
 - **Generated-output contract:** `config/build-output-policy.json` owns the persistent caches,
   scratch DerivedData, untracked evidence, current symbols, and distribution outputs. Do not add an
@@ -112,6 +123,8 @@ scripts/macos_test.sh models check|ensure|install
 
 # Release packaging
 ./scripts/build.sh release
+python3 scripts/supply_chain_contract.py
+python3 scripts/release_evidence.py validate --output-dir build/dist/macos
 
 # Benchmark driver (PASS publishes a registry record automatically when run in this checkout)
 QWENVOICE_DEBUG=1 ./build/vocello bench --modes clone --variants speed \
@@ -121,6 +134,8 @@ QWENVOICE_DEBUG=1 ./build/vocello bench --modes clone --variants speed \
 # Registry validation / reproducibility
 python3 scripts/benchmark_history.py validate --all
 python3 scripts/benchmark_history.py rebuild-index --check
+python3 scripts/model_catalog_contract.py rebuild --check
+python3 scripts/model_catalog_contract.py validate
 
 # Optional regression compare (see macos-release-qa.md step 3)
 python3 scripts/summarize_generation_telemetry.py \
@@ -149,14 +164,16 @@ scripts/clean_build_caches.sh --routine
 - **Single shippable config: `Release` only.** There is no `Debug` config or generic `DEBUG` symbol.
   `build.sh` compiles `-Onone`; `release.sh` compiles optimized.
 - **XcodeGen project generation.** `project.yml` is the source of truth; never edit
-  `QwenVoice.xcodeproj/project.pbxproj` directly. The generated `VocelloCLI` shared scheme is the
-  one narrow exception to XcodeGen output: `scripts/generate_cli_scheme.py` renders it from the
-  checked-in template after regeneration because XcodeGen 2.45.4 traps on tool-product schemes.
+  `QwenVoice.xcodeproj/project.pbxproj` directly. There are two narrow post-XcodeGen scheme
+  renderers: `scripts/generate_cli_scheme.py` for the tool product and
+  `scripts/generate_ios_logic_scheme.py` for the app-host-free iOS policy bundle. Both bind
+  checked-in templates to generated target IDs because XcodeGen 2.45.4 cannot render those schemes.
 - **Developer ID signing + notarization.** macOS release uses Developer ID Application cert,
   hardened runtime, and `notarytool` stapling. CI uses App Store Connect API key auth.
-- **Ordinary CI is deterministic-only.** GitHub CI builds `VocelloiOS` with
-  `generic/platform=iOS` and runs macOS deterministic verification. XCUITest execution is used only
-  for explicitly requested frontend acceptance.
+- **Ordinary CI is deterministic-only.** GitHub CI compiles the `VocelloiOS` app and standalone
+  `VocelloiOSLogicTests` bundle with `generic/platform=iOS`, runs macOS deterministic verification,
+  and never executes XCUITest. The policy bundle executes only through the explicit paired-phone
+  `logic-test` command.
 - **Committed benchmark records ≤256 KB.** Records use a strict privacy allowlist; raw JSONL,
   WAVs, screenshots, result bundles, and traces are gitignored. `HISTORY.md` is generated, never
   manually appended.
@@ -178,6 +195,30 @@ scripts/clean_build_caches.sh --routine
   clear a machine warning or failure.
 - **Deep checkout on CI.** `fetch-depth: 0` is required so `git rev-parse HEAD` in
   `scripts/release.sh` resolves for `release-metadata.txt`.
+- **Release publication is the final transaction.** A protected `v*` tag or explicit existing tag
+  starts the workflow. Source/tag/version identity, signing, notarization, package verification,
+  SPDX/CycloneDX generation, checksums, and provenance all pass before a draft Release exists.
+  Schema-v2 release evidence accepts only a clean full-tree source identity and fresh same-invocation
+  required-step manifests produced by the managed release subprocess. Every release step must match
+  its `config/orchestration-contract.json` command template, and declared outputs are hashed at step
+  completion and rechecked during evidence creation; handwritten, substituted-command, replaced-
+  output, or stale PASS artifacts are never authoritative. iOS additionally requires
+  `verify_ios_release_artifacts.py` to prove archive/IPA identity, entitlements, root privacy
+  manifest, locally trusted and profile-authorized signing, and Mach-O UUID plus
+  signature-normalized code continuity
+  before evidence or attestation. Archive signing may be development or distribution; the exported
+  IPA alone must satisfy the App Store distribution profile and `get-task-allow` policy.
+  Reused drafts are emptied before upload, then their exact remote asset-name set and digests are
+  verified before publication. Never restore a
+  `release.published` trigger.
+- **Action and toolchain identities are immutable inputs.** Every external Action uses the full SHA
+  recorded in `config/toolchain.json`; native and website runners validate exact tool versions.
+  Dependabot may propose updates, but the manifest and adjacent version comment change together.
+- **Catalog activation is fail closed.** All six Speed/Quality identities are exact and the generated
+  production catalog is complete. macOS/CLI use the bundled `downloadFiles` route; never restore
+  live repository enumeration, infer a digest, or accept a partial catalog. Deterministic
+  `model_catalog_contract.py validate --require-complete` and explicit post-change delivery evidence
+  remain distinct proofs.
 - **Burn-in-safe iOS testing.** Headless generation, profiling, logs, and device diagnostics go
   through `scripts/ios_device.sh`; physical-device UI acceptance goes through `scripts/ui_test.sh`.
 - **macOS real-generation acceptance needs model fixtures.** XCUITest verifies readiness in Settings;

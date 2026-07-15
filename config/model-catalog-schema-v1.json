@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vocello.app/schemas/model-catalog-v1.json",
+  "title": "Vocello production model catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "catalogSchema",
+    "activationState",
+    "allowedArtifactHosts",
+    "allowedRedirectHostSuffixes",
+    "sourceDigests",
+    "artifacts",
+    "missingArtifactIdentities"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "catalogSchema": { "const": "config/model-catalog-schema-v1.json" },
+    "activationState": { "enum": ["staged", "complete"] },
+    "allowedArtifactHosts": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "allowedRedirectHostSuffixes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "sourceDigests": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/artifact" }
+    },
+    "missingArtifactIdentities": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z0-9_]+:[a-z0-9_]+$" }
+    }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "modelID",
+        "variantID",
+        "platforms",
+        "folder",
+        "repo",
+        "revision",
+        "artifactVersion",
+        "baseURL",
+        "totalBytes",
+        "files"
+      ],
+      "properties": {
+        "modelID": { "type": "string", "minLength": 1 },
+        "variantID": { "type": "string", "minLength": 1 },
+        "platforms": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["iOS", "macOS"] }
+        },
+        "folder": { "type": "string", "minLength": 1 },
+        "repo": { "type": "string", "pattern": "^[^/]+/[^/]+$" },
+        "revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "artifactVersion": { "type": "string", "minLength": 1 },
+        "baseURL": { "type": "string", "pattern": "^https://" },
+        "totalBytes": { "type": "integer", "minimum": 1 },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/file" }
+        }
+      }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relativePath", "sizeBytes", "sha256"],
+      "properties": {
+        "relativePath": { "type": "string", "minLength": 1 },
+        "sizeBytes": { "type": "integer", "minimum": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    }
+  }
+}

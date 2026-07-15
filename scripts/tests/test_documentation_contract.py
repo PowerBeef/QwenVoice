@@ -125,6 +125,58 @@ class DocumentationContractTests(unittest.TestCase):
         )
         self.assertEqual(DOCUMENTATION.validate_optional_capabilities(self.root, [source]), [])
 
+    def test_stale_generation_lifecycle_guidance_is_rejected(self) -> None:
+        source = self.write(
+            "docs/reference/runtime.md",
+            "macOS uses `.unbounded`; iOS uses `.bufferingNewest(64)`. "
+            "iOS cancel is cooperative only and does not conform to `ActiveGenerationCancellable`.\n",
+        )
+        errors = DOCUMENTATION.validate_current_runtime_guidance(self.root, [source])
+        self.assertEqual(len(errors), 4)
+        source.write_text(
+            "Both streams are bounded and measured. Cancellation awaits the owned task before unload.\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(DOCUMENTATION.validate_current_runtime_guidance(self.root, [source]), [])
+
+    def test_complete_catalog_rejects_staged_prose_and_live_enumeration(self) -> None:
+        self.write(
+            "Sources/Resources/qwenvoice_production_model_catalog.json",
+            json.dumps({"activationState": "complete", "missingArtifactIdentities": []}),
+        )
+        for relative in (
+            "AGENTS.md",
+            ".agents/backend-mlx.md",
+            ".agents/release-qa-engineer.md",
+            "docs/ARCHITECTURE.md",
+            "docs/development-progress.md",
+            "docs/reference/model-delivery.md",
+            "docs/project-map.html",
+        ):
+            self.write(relative, "The production model catalog is complete.\n")
+        self.write(
+            "Sources/ViewModels/ModelManagerViewModel.swift",
+            "ProductionModelCatalog.shared.downloadFiles()\n",
+        )
+        cli = self.write(
+            "Sources/VocelloCLI/ModelsCommand.swift",
+            "ProductionModelCatalog.shared.downloadFiles()\n",
+        )
+        self.assertEqual(DOCUMENTATION.validate_model_catalog_guidance(self.root), [])
+        cli.write_text(
+            "The catalog is staged and Quality remains pending.\n"
+            "ProductionModelCatalog.shared.downloadRepo()\n",
+            encoding="utf-8",
+        )
+        (self.root / "AGENTS.md").write_text(
+            "The production model catalog is staged and Quality remains pending.\n",
+            encoding="utf-8",
+        )
+        errors = DOCUMENTATION.validate_model_catalog_guidance(self.root)
+        self.assertTrue(any("staged or Quality-pending" in error for error in errors))
+        self.assertTrue(any("missing downloadFiles" in error for error in errors))
+        self.assertTrue(any("live repository enumeration" in error for error in errors))
+
     def test_local_markdown_heading_anchor_is_validated(self) -> None:
         target = self.write("docs/guide.md", "# Guide\n\n## Exact heading\n")
         source = self.write("README.md", "[good](docs/guide.md#exact-heading)\n")

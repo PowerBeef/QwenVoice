@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 2,
+  "componentID": "vocello-qwen3-core",
+  "lineagePolicy": "immutable-import-separate-upstream-review",
+  "origin": {
+    "name": "mlx-audio-swift",
+    "repository": "https://github.com/Blaizzy/mlx-audio-swift",
+    "tag": "v0.1.2",
+    "commit": "fcbd04daa1bfebe881932f630af2ba6ce9af3274",
+    "license": "MIT",
+    "licenseFile": "LICENSE",
+    "licenseSHA256": "fd330bb5d9adf9e65bfe4d8f6f90c808a4196ef5c98aad018a3344256fcb2374"
+  },
+  "baselineInventory": {
+    "path": "UPSTREAM_BASELINE.json",
+    "sha256": "08099111586a931f12b8d259938963ccdc8385d21009701779fea2ceb847c1c2"
+  },
+  "lastReviewedUpstream": {
+    "commit": "d302a5c6080d2bb97bae38c7418f82abb76013b6",
+    "date": "2026-07-14"
+  },
+  "monorepoRelocation": {
+    "from": "third_party_patches/mlx-audio-swift",
+    "to": "Packages/VocelloQwen3Core",
+    "comparisonBaseCommit": "2f1391d846b2ed259db6959ca47f6129cddb58d2",
+    "classification": "semantic-move-with-modifications-and-additions",
+    "inventory": {
+      "path": "RELOCATION_INVENTORY.json",
+      "sha256": "f3ffe175ac18fe86cb6c98bd6bdf53b30ad8cdc4b7e942adecf77593dacbc50e"
+    },
+    "fileComparison": {
+      "identical": 65,
+      "modified": 11,
+      "added": 12,
+      "removed": 0
+    }
+  },
+  "rule": "The origin import is historical identity and is never rewritten when newer upstream commits are reviewed or selectively adopted."
+}

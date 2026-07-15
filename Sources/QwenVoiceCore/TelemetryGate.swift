@@ -2,10 +2,8 @@ import Foundation
 
 /// Process-portable runtime gate for durable generation telemetry.
 ///
-/// `DebugMode` (the app-level "secret debug toggle") lives in the macOS app target
-/// and is invisible to `QwenVoiceCore`, the XPC service, and the iOS extension —
-/// which run in **separate processes**. `TelemetryGate` is the Core-visible
-/// equivalent every process can read, so telemetry persistence is gated at runtime
+/// `TelemetryGate` is the Core-visible equivalent every process can read, so
+/// telemetry persistence is gated at runtime
 /// (never compiled out, no `#if DEBUG`): dev and shipped binaries run identical paths.
 ///
 /// Resolution sources:
@@ -13,8 +11,7 @@ import Foundation
 ///   key, so `scripts/build.sh run` lights up every process it launches.
 /// - `QWENVOICE_NATIVE_TELEMETRY_MODE` set to `light` / `lightweight` (back-compat).
 /// - A handshake override (`applyHandshakeMode(_:)`): the app process resolves its own
-///   telemetry mode (env + the persisted 7-tap gesture flag, neither of which crosses
-///   the process boundary) and passes it to engine processes over the IPC `initialize`
+///   environment mode and passes it to engine processes over the IPC `initialize`
 ///   handshake. The host applies it on receipt, so `verbose` reaches the engine too.
 public enum TelemetryGate {
     private static let environmentKey = "QWENVOICE_DEBUG"
@@ -56,7 +53,7 @@ public enum TelemetryGate {
     }
 
     /// The telemetry **mode** as seen from the **app process** — the env mode if set
-    /// explicitly, else `.lightweight` when the gate (incl. the persisted 7-tap flag)
+    /// explicitly, else `.lightweight` when the explicit process gate
     /// is on, else `.off`. The client ships this over the handshake.
     public static var appProcessIntendedMode: NativeTelemetryMode {
         let envMode = NativeTelemetryMode.current()
@@ -64,18 +61,11 @@ public enum TelemetryGate {
         return appProcessIntendedEnabled ? .lightweight : .off
     }
 
-    /// UserDefaults key mirroring the app-target `DebugMode.userDefaultsKey`. The
-    /// engine processes have a different bundle id (so their `UserDefaults.standard`
-    /// can't see this), which is exactly why the value is shipped over the handshake.
-    private static let debugModeUserDefaultsKey = "QwenVoice.DebugModeEnabled"
-
-    /// The telemetry decision as seen from the **app process**: the environment gate
-    /// plus the persisted 7-tap gesture flag (which the environment can't carry to
-    /// engine processes). Used to derive `appProcessIntendedMode`, shipped to engine
-    /// hosts on the `initialize` handshake.
+    /// The telemetry decision as seen from the app process. It is shipped to
+    /// engine hosts on the initialize handshake because environment values do
+    /// not automatically cross an XPC process boundary.
     public static var appProcessIntendedEnabled: Bool {
-        if isEnabled { return true }
-        return UserDefaults.standard.bool(forKey: debugModeUserDefaultsKey)
+        isEnabled
     }
 
     private static func resolve(

@@ -1,0 +1,178 @@
+{
+  "schemaVersion": 1,
+  "trackedSummary": "docs/project-health.md",
+  "localOutputRoot": "build/artifacts/project-health",
+  "criticalDomains": [
+    {
+      "id": "generation-terminal",
+      "owner": "backend",
+      "productionGlobs": [
+        "Sources/QwenVoiceCore/TTSEngine.swift",
+        "Sources/QwenVoiceCore/MLXTTSEngine.swift",
+        "Sources/QwenVoiceCore/SemanticTypes.swift",
+        "Sources/QwenVoiceEngineService/EngineServiceHost.swift"
+      ],
+      "testGlobs": [
+        "Tests/VocelloCoreTests/ActiveGenerationCoordinatorTests.swift",
+        "Tests/VocelloEngineIntegrationTests/EngineServiceTransportAccumulatorTests.swift"
+      ],
+      "hardwarePlatforms": ["macos", "ios"]
+    },
+    {
+      "id": "clone-conditioning",
+      "owner": "backend",
+      "productionGlobs": [
+        "Sources/QwenVoiceCore/NativeCloneSupport.swift",
+        "Packages/VocelloQwen3Core/Sources/**/*.swift"
+      ],
+      "testGlobs": [
+        "Tests/VocelloCoreTests/CloneConditioningContractTests.swift",
+        "Packages/VocelloQwen3Core/Tests/**/*Clone*.swift"
+      ],
+      "hardwarePlatforms": ["macos", "ios"]
+    },
+    {
+      "id": "event-delivery",
+      "owner": "backend",
+      "productionGlobs": [
+        "Sources/QwenVoiceCore/GenerationEventDeliveryProbe.swift",
+        "Sources/QwenVoiceCore/LatestEventCoalescer.swift",
+        "Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift"
+      ],
+      "testGlobs": [
+        "Tests/VocelloCoreTests/GenerationEventDeliveryProbeTests.swift",
+        "Tests/VocelloCoreTests/AtomicWAVPublicationTests.swift"
+      ],
+      "hardwarePlatforms": ["macos", "ios"]
+    },
+    {
+      "id": "memory-policy",
+      "owner": "backend-platform",
+      "productionGlobs": [
+        "Sources/QwenVoiceCore/*Memory*.swift",
+        "Sources/iOS/TTSEngineStore.swift"
+      ],
+      "testGlobs": [
+        "Tests/VocelloCoreTests/MemoryTelemetryV8Tests.swift",
+        "Tests/VocelloiOSLogicTests/*.swift"
+      ],
+      "hardwarePlatforms": ["macos", "ios"]
+    },
+    {
+      "id": "model-delivery",
+      "owner": "backend-platform",
+      "productionGlobs": [
+        "Sources/QwenVoiceCore/HuggingFaceDownloader.swift",
+        "Sources/QwenVoiceCore/IOSModelDownloadLedger.swift",
+        "Sources/QwenVoiceCore/ProductionModelCatalog.swift",
+        "Sources/Models/TTSContract.swift",
+        "Sources/Models/TTSModel.swift",
+        "Sources/Resources/qwenvoice*model_catalog.json",
+        "Sources/ViewModels/ModelManagerViewModel.swift",
+        "Sources/VocelloCLI/CLIRuntime.swift",
+        "Sources/VocelloCLI/ModelsCommand.swift",
+        "Sources/iOS/*ModelDownload*.swift",
+        "Sources/iOSSupport/Services/IOSModelDeliverySupport.swift",
+        "config/model-artifact-receipts.json",
+        "config/model-catalog-schema-v1.json"
+      ],
+      "testGlobs": [
+        "Tests/VocelloCoreTests/ModelDownloadLifecycleTests.swift",
+        "Tests/VocelloiOSLogicTests/*.swift",
+        "Tests/VocelloiOSUITests/VocelloiOSModelDownloadUITests.swift"
+      ],
+      "hardwarePlatforms": ["macos", "ios"]
+    },
+    {
+      "id": "xpc-transport",
+      "owner": "macos",
+      "productionGlobs": [
+        "Sources/QwenVoiceNative/XPCNativeEngineClient.swift",
+        "Sources/QwenVoiceEngineService/EngineServiceHost.swift",
+        "Sources/QwenVoiceEngineSupport/EngineServiceTransportAccumulator.swift"
+      ],
+      "testGlobs": [
+        "Tests/VocelloEngineIntegrationTests/*.swift"
+      ],
+      "hardwarePlatforms": ["macos"]
+    },
+    {
+      "id": "benchmark-validation",
+      "owner": "release-qa",
+      "productionGlobs": [
+        "scripts/check_*benchmark.py",
+        "scripts/benchmark_history.py",
+        "scripts/publish_benchmark_history.py",
+        "scripts/ui_test.sh",
+        "scripts/ios_device.sh",
+        "scripts/macos_test.sh"
+      ],
+      "testGlobs": [
+        "scripts/test_check_*benchmark.py",
+        "scripts/tests/test_benchmark*.py",
+        "scripts/tests/test_publish_benchmark_history.py"
+      ],
+      "hardwarePlatforms": ["macos", "ios"]
+    },
+    {
+      "id": "orchestration-assurance",
+      "owner": "release-qa",
+      "productionGlobs": [
+        "scripts/required_step_ledger.py",
+        "scripts/lib/required_steps.sh",
+        "config/orchestration-contract.json"
+      ],
+      "testGlobs": [
+        "scripts/tests/test_required_step_ledger.py"
+      ],
+      "hardwarePlatforms": []
+    },
+    {
+      "id": "release-supply-chain",
+      "owner": "release-qa",
+      "productionGlobs": [
+        ".github/workflows/release.yml",
+        ".github/workflows/security.yml",
+        "scripts/release_evidence.py",
+        "scripts/release_sbom.py",
+        "scripts/supply_chain_contract.py"
+      ],
+      "testGlobs": [
+        "scripts/tests/test_release_evidence.py",
+        "scripts/tests/test_supply_chain_contract.py"
+      ],
+      "hardwarePlatforms": ["macos"]
+    },
+    {
+      "id": "persistence-privacy",
+      "owner": "platform-release-qa",
+      "productionGlobs": [
+        "Sources/Services/DatabaseService.swift",
+        "Sources/iOSSupport/Services/DatabaseService.swift",
+        "Sources/QwenVoiceCore/GenerationFailureDiagnosticLogger.swift",
+        "website/public/privacy/index.html"
+      ],
+      "testGlobs": [
+        "Tests/VocelloCoreTests/GenerationFailureDiagnosticLoggerTests.swift",
+        "Tests/VocelloCoreTests/HistoryPersistenceErrorTests.swift"
+      ],
+      "hardwarePlatforms": []
+    },
+    {
+      "id": "runtime-hardening",
+      "owner": "backend-release-qa",
+      "productionGlobs": [
+        "config/runtime-debug-knobs.json",
+        "config/concurrency-safety.json",
+        "config/release-evidence-contract.json",
+        "scripts/runtime_security_contract.py",
+        "Sources/QwenVoiceCore/RuntimeDebugGate.swift"
+      ],
+      "testGlobs": [
+        "scripts/tests/test_runtime_security_contract.py",
+        "Tests/VocelloCoreTests/RuntimeDebugGateTests.swift"
+      ],
+      "hardwarePlatforms": []
+    }
+  ]
+}

@@ -103,7 +103,7 @@ must preserve exact numerics (KV precision).
 ## E — MLXSwift / mlx-swift-lm version pin (deferred; **stay pinned**)
 
 Pinned `exact: 0.30.6` (mlx-swift) + `2.30.6` (mlx-swift-lm) in **both** `project.yml` and the vendored
-`third_party_patches/mlx-audio-swift/Package.swift`. Latest upstream is **0.31.3** (+ `mlx-swift-lm` 2.31.x;
+`Packages/VocelloQwen3Core/Package.swift`. Latest upstream is **0.31.3** (+ `mlx-swift-lm` 2.31.x;
 a separate 3.x line also exists). **Decision: keep pinned at 0.30.6 / 2.30.6.** Rationale: the backend is
 vendored + hand-ported. The owned `Qwen3RuntimeTests` suite protects deterministic runtime invariants, but
 cannot by itself rule out performance or perceptual drift from a compute-substrate change; the exact pin
@@ -266,7 +266,9 @@ dormant dev/insurance capability that activates only if the token ceiling is eve
 - No **output-side** silence gating/smoothing of dropouts (masks the root cause; risks clipping real pauses).
 - Don't revert the decoder-drift fix to output-side overlap-add (`4fab110`).
 - Don't pipeline the autoregressive 15-pass Code Predictor loop; don't quantize TTS KV; keep macOS
-  `MLXTTSEngine.events` `.unbounded`.
+  event delivery lossless. The original unbounded-stream implementation recorded by this ledger has
+  since been superseded by the current bounded, measured backpressure contract; see
+  `docs/development-progress.md` rather than restoring the historical buffer choice.
 - Don't "fix" the phantom 1.7B arch bugs (projection / speaker-dim / MRoPE are correct).
 
 ## iOS (now on-device-capable — see the iOS-engine doc)

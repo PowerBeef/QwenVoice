@@ -22,14 +22,28 @@ final class EngineServiceTransportAccumulatorTests: XCTestCase {
         let id = UUID()
         var accumulator = EngineServiceTransportAccumulator(telemetryEnabled: true)
         _ = accumulator.observe(event: chunk(id: id, sequence: 0))
-        let first = accumulator.observe(event: .failed("Generation cancelled"))
-        let duplicate = accumulator.observe(event: .failed("Generation cancelled"))
+        let cancellation = GenerationCancellationSummary(generationID: id, reason: .user)
+        let first = accumulator.observe(event: .cancelled(cancellation))
+        let duplicate = accumulator.observe(event: .cancelled(cancellation))
 
         XCTAssertEqual(first?.transportMetrics?.finishReason, .cancelled)
         XCTAssertEqual(first?.transportMetrics?.cancellation, .completed)
         XCTAssertNil(duplicate)
         XCTAssertEqual(accumulator.snapshot.terminalCount, 1)
         XCTAssertEqual(accumulator.snapshot.finishReason, .cancelled)
+    }
+
+    func testFailureTextCannotMasqueradeAsTypedCancellation() throws {
+        let id = UUID()
+        var accumulator = EngineServiceTransportAccumulator(telemetryEnabled: true)
+        _ = accumulator.observe(event: chunk(id: id, sequence: 0))
+
+        let terminal = try XCTUnwrap(
+            accumulator.observe(event: .failed("Transport failed after cancellation acknowledgement"))
+        )
+
+        XCTAssertEqual(terminal.transportMetrics?.finishReason, .failed)
+        XCTAssertEqual(accumulator.snapshot.finishReason, .failed)
     }
 
     func testGenerationSwitchPublishesSupersededTerminalBeforeNewChunks() {
@@ -52,7 +66,13 @@ final class EngineServiceTransportAccumulatorTests: XCTestCase {
             event: chunk(id: id, sequence: 0),
             requestAcceptedUptime: accepted
         )
-        let terminal = try XCTUnwrap(accumulator.observe(event: .failed("cancelled")))
+        let terminal = try XCTUnwrap(
+            accumulator.observe(
+                event: .cancelled(
+                    GenerationCancellationSummary(generationID: id, reason: .user)
+                )
+            )
+        )
 
         let latency = try XCTUnwrap(terminal.transportMetrics?.requestToFirstChunkMS)
         XCTAssertGreaterThanOrEqual(latency, 100)
@@ -65,7 +85,11 @@ final class EngineServiceTransportAccumulatorTests: XCTestCase {
         let id = UUID()
         var accumulator = EngineServiceTransportAccumulator(telemetryEnabled: false)
         _ = accumulator.observe(event: chunk(id: id, sequence: 0))
-        let terminal = accumulator.observe(event: .failed("cancelled"))
+        let terminal = accumulator.observe(
+            event: .cancelled(
+                GenerationCancellationSummary(generationID: id, reason: .user)
+            )
+        )
         XCTAssertNil(terminal)
         XCTAssertEqual(accumulator.snapshot.terminalCount, 0)
     }

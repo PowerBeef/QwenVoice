@@ -112,6 +112,30 @@ struct CLIRuntime {
         throw CLIError("Could not locate qwenvoice_contract.json. Pass --manifest <path>.")
     }
 
+    static func locateProductionCatalogURL() throws -> URL {
+        let resourceName = "qwenvoice_production_model_catalog"
+        let bundles = [Bundle.main] + Bundle.allBundles + Bundle.allFrameworks
+        for bundle in bundles {
+            if let url = bundle.url(forResource: resourceName, withExtension: "json") {
+                return url
+            }
+        }
+        let fm = FileManager.default
+        let exeDir = Bundle.main.bundleURL.deletingLastPathComponent().path
+        let relativePath = "Sources/Resources/\(resourceName).json"
+        let candidates = [
+            exeDir + "/\(resourceName).json",
+            fm.currentDirectoryPath + "/\(relativePath)",
+        ]
+        for path in candidates where fm.fileExists(atPath: path) {
+            return URL(fileURLWithPath: path)
+        }
+        if let found = findUpwards(relativePath: relativePath, from: fm.currentDirectoryPath) {
+            return found
+        }
+        throw CLIError("Could not locate authenticated production model catalog.")
+    }
+
     /// Walk up parent directories from `start`, returning the first existing
     /// `<dir>/<relativePath>` (stops at the filesystem root). Lets the CLI find
     /// repo-relative dev assets (the contract, the summarizer script) regardless

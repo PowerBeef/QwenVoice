@@ -2,7 +2,7 @@ import AVFoundation
 import Combine
 import Foundation
 @preconcurrency import MLX
-@preconcurrency import MLXAudioTTS
+@preconcurrency import VocelloQwen3Core
 
 /// Engine-protocol-level error type. Adopted by every conformer of
 /// `TTSEngine` and by every throwing function on that protocol once the
@@ -41,7 +41,7 @@ public enum TTSEngineError: LocalizedError, Equatable {
 public typealias MLXTTSEngineError = TTSEngineError
 
 @MainActor
-public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReporting, TTSEngineEventStreaming {
+public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReporting, TTSEngineEventStreaming, ActiveGenerationCancellable {
     private static let lightweightWarmupText = "Hi."
     public static var lightweightWarmupTextForUI: String { lightweightWarmupText }
 
@@ -95,12 +95,11 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
     /// audio chunk of every streaming generation.
     @Published public private(set) var latestEvent: GenerationEvent?
 
-    /// Ordered stream of `GenerationEvent` values for transport consumers.
-    /// This is the playback chunk-delivery path, so it must not drop
-    /// `.chunk` events carrying preview audio. Snapshot consumers still use
-    /// `latestEvent`, which strips preview payloads before retaining state.
-    public let events: AsyncStream<GenerationEvent>
-    private let eventStreamContinuation: AsyncStream<GenerationEvent>.Continuation
+    /// One bounded stream is allocated for each caller-minted generation ID.
+    /// This prevents old backlog from consuming a later generation's capacity
+    /// and makes terminal delivery accounting generation-exact.
+    nonisolated private let eventRouter = GenerationScopedEventRouter()
+    private let activeGenerationCoordinator = ActiveGenerationCoordinator()
 
     public var isReady: Bool {
         isInitialized && activeModelOperation?.kind.isGeneration != true && loadState.isReady
@@ -372,17 +371,18 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
                     ].merging(preparedMetadata.qwenRuntimeProfile.diagnosticStringFlags()) { _, rhs in rhs },
                     appSupportDirectoryURL: diagnosticAppSupportBox.url
                 )
-                let base = try await TTS.loadModel(
-                        fromPreparedDirectory: preparedMetadata.preparedDirectory,
-                        modelRepo: descriptor.model.huggingFaceRepo,
-                        modelType: preparedMetadata.modelType,
-                        trustPreparedCheckpoint: preparedMetadata.trustedPreparedCheckpoint,
-                        qwenPreparedLoadBehavior: Self.qwenPreparedLoadBehavior(
+                let base = try await VocelloQwen3Runtime.loadPreparedModel(
+                        descriptor.vocelloQwen3PreparedBundle(
+                            directory: preparedMetadata.preparedDirectory,
+                            modelType: preparedMetadata.modelType,
+                            trustedPreparedCheckpoint: preparedMetadata.trustedPreparedCheckpoint
+                        ),
+                        loadBehavior: Self.qwenPreparedLoadBehavior(
                             for: resolvedProfile,
                             trustPreparedCheckpoint: preparedMetadata.trustedPreparedCheckpoint,
                             preparedDirectoryAlreadyValidated: true
                         ),
-                        diagnosticEventSink: { action, details in
+                        compatibilityDiagnosticSink: { action, details in
                             await Self.recordDiagnosticEvent(
                                 action,
                                 details: details,
@@ -403,7 +403,7 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
                     ].merging(preparedMetadata.qwenRuntimeProfile.diagnosticStringFlags()) { _, rhs in rhs },
                     appSupportDirectoryURL: diagnosticAppSupportBox.url
                 )
-                return try UnsafeSpeechGenerationModel.qwen3Optimized(base: base)
+                return UnsafeSpeechGenerationModel.qwen3Optimized(model: base)
             },
             telemetryRecorder: telemetryRecorder,
             diagnosticEventSink: { action, details in
@@ -482,19 +482,6 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
         self.telemetryRecorder = telemetryRecorder
         self.diagnosticAppSupportBox = diagnosticAppSupportBox
         self.idleUnloadDelayOverride = idleUnloadDelayOverride
-        var capturedContinuation: AsyncStream<GenerationEvent>.Continuation!
-        // macOS must keep `.unbounded` so the playback chunk-delivery path never
-        // drops `.chunk` events under load (see chunk-stream contract above).
-        // iOS keeps a bounded cap because the in-process iOS engine is memory-tight.
-        #if os(iOS)
-        let bufferingPolicy: AsyncStream<GenerationEvent>.Continuation.BufferingPolicy = .bufferingNewest(64)
-        #else
-        let bufferingPolicy: AsyncStream<GenerationEvent>.Continuation.BufferingPolicy = .unbounded
-        #endif
-        self.events = AsyncStream(bufferingPolicy: bufferingPolicy) { continuation in
-            capturedContinuation = continuation
-        }
-        self.eventStreamContinuation = capturedContinuation
         self.runtime = NativeEngineRuntime(
             loadCoordinator: loadCoordinator,
             audioPreparationService: audioPreparationService,
@@ -547,9 +534,11 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
         memoryPressureMonitor.stop()
         memoryPressureMonitor = NativeMemoryPressureMonitor()
         let runtime = runtime
+        let activeGenerationCoordinator = activeGenerationCoordinator
         let previousCleanupTask = stopCleanupTask
         stopCleanupTask = Task.detached(priority: .utility) {
             await previousCleanupTask?.value
+            await activeGenerationCoordinator.cancelCurrent(reason: .shutdown)
             await runtime.configure(normalizedCloneReferenceDirectory: nil, voicesDirectory: nil)
             await runtime.stop()
         }
@@ -630,6 +619,15 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
 
     public func ping() async throws -> Bool {
         isReady
+    }
+
+    public nonisolated func events(for generationID: UUID) -> AsyncStream<GenerationEvent> {
+        #if os(iOS)
+        let capacity = 96
+        #else
+        let capacity = 256
+        #endif
+        return eventRouter.stream(for: generationID, capacity: capacity)
     }
 
     public func loadModel(id: String) async throws {
@@ -809,6 +807,71 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
     }
 
     public func generate(_ request: GenerationRequest) async throws -> GenerationResult {
+        let request = request.generationID == nil
+            ? request.withGenerationID(UUID())
+            : request
+        let deliveryGenerationID = request.generationID!
+        eventRouter.beginGeneration(deliveryGenerationID)
+        let gate = GenerationTaskStartGate()
+        let task = Task { @MainActor [self] in
+            await gate.wait()
+            try Task.checkCancellation()
+            return try await performGenerate(request)
+        }
+        let registration: ActiveGenerationCoordinator.Registration
+        do {
+            registration = try await activeGenerationCoordinator.register(
+                cancel: { task.cancel() },
+                waitForTermination: { _ = await task.result }
+            )
+        } catch {
+            task.cancel()
+            await gate.open()
+            _ = await task.result
+            let terminal = GenerationEvent.failed(error.localizedDescription)
+            yieldEvent(terminal, generationID: deliveryGenerationID)
+            let delivery = eventRouter.snapshot(for: deliveryGenerationID)
+            await recordEventDeliveryLossIfNeeded(delivery, request: request)
+            _ = eventRouter.snapshot(for: deliveryGenerationID, consuming: true)
+            throw error
+        }
+        await gate.open()
+        if Task.isCancelled {
+            task.cancel()
+        }
+        do {
+            let result = try await withTaskCancellationHandler(
+                operation: { try await task.value },
+                onCancel: { task.cancel() }
+            )
+            await activeGenerationCoordinator.finish(registration)
+            _ = eventRouter.snapshot(for: deliveryGenerationID, consuming: true)
+            return result
+        } catch {
+            let cancellationReason = await activeGenerationCoordinator.finish(registration)
+            var delivery = eventRouter.snapshot(for: deliveryGenerationID)
+            if delivery.terminalYielded == 0 {
+                let terminal: GenerationEvent
+                if NativeGenerationTerminalClassifier.reason(for: error) == .cancelled {
+                    terminal = .cancelled(
+                        GenerationCancellationSummary(
+                            generationID: deliveryGenerationID,
+                            reason: cancellationReason ?? .user
+                        )
+                    )
+                } else {
+                    terminal = .failed(error.localizedDescription)
+                }
+                yieldEvent(terminal, generationID: deliveryGenerationID)
+                delivery = eventRouter.snapshot(for: deliveryGenerationID)
+                await recordEventDeliveryLossIfNeeded(delivery, request: request)
+            }
+            _ = eventRouter.snapshot(for: deliveryGenerationID, consuming: true)
+            throw error
+        }
+    }
+
+    private func performGenerate(_ request: GenerationRequest) async throws -> GenerationResult {
         let operationID = try await beginUserModelOperation(.generation)
         defer { finishModelOperation(id: operationID) }
         return try await generate(request, allowsBatchRequest: false)
@@ -817,6 +880,48 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
     public func generateBatch(
         _ requests: [GenerationRequest],
         progressHandler: (@MainActor (Double?, String) -> Void)? = nil
+    ) async throws -> [GenerationResult] {
+        let requests = requests.map { request in
+            request.generationID == nil ? request.withGenerationID(UUID()) : request
+        }
+        let gate = GenerationTaskStartGate()
+        let task = Task { @MainActor [self] in
+            await gate.wait()
+            try Task.checkCancellation()
+            return try await performGenerateBatch(requests, progressHandler: progressHandler)
+        }
+        let registration: ActiveGenerationCoordinator.Registration
+        do {
+            registration = try await activeGenerationCoordinator.register(
+                cancel: { task.cancel() },
+                waitForTermination: { _ = await task.result }
+            )
+        } catch {
+            task.cancel()
+            await gate.open()
+            _ = await task.result
+            throw error
+        }
+        await gate.open()
+        if Task.isCancelled {
+            task.cancel()
+        }
+        do {
+            let results = try await withTaskCancellationHandler(
+                operation: { try await task.value },
+                onCancel: { task.cancel() }
+            )
+            await activeGenerationCoordinator.finish(registration)
+            return results
+        } catch {
+            await activeGenerationCoordinator.finish(registration)
+            throw error
+        }
+    }
+
+    private func performGenerateBatch(
+        _ requests: [GenerationRequest],
+        progressHandler: (@MainActor (Double?, String) -> Void)?
     ) async throws -> [GenerationResult] {
         try ensureInitialized()
         guard !requests.isEmpty else { return [] }
@@ -857,6 +962,10 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
         return results
     }
 
+    public func cancelActiveGeneration(reason: GenerationCancellationReason) async throws {
+        await activeGenerationCoordinator.cancelCurrent(reason: reason)
+    }
+
     private func generate(_ request: GenerationRequest, allowsBatchRequest: Bool) async throws -> GenerationResult {
         try ensureInitialized()
         cancelIdleUnload()
@@ -870,6 +979,9 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
             }
         }
 
+        let deliveryGenerationID = request.generationID ?? UUID()
+        eventRouter.beginGeneration(deliveryGenerationID)
+
         do {
             let result = try await runGenerationAttempt(
                 request,
@@ -877,8 +989,11 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
             )
             loadState = .loaded(modelID: request.modelID)
             visibleErrorMessage = nil
+            let delivery = eventRouter.snapshot(for: deliveryGenerationID)
+            await recordEventDeliveryLossIfNeeded(delivery, request: request)
+            let deliveryAnnotated = Self.annotatingEventDelivery(result, delivery: delivery)
             let annotated = Self.annotatingAllocationRetry(
-                result,
+                deliveryAnnotated,
                 streamingUsed: request.shouldStream,
                 attempted: false,
                 succeeded: false,
@@ -901,7 +1016,18 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
                 try? FileManager.default.removeItem(at: URL(fileURLWithPath: request.outputPath))
                 // Preserve the UI's no-visible-error cancellation contract while
                 // still closing the service-layer transport accumulator.
-                eventStreamContinuation.yield(.failed("Generation cancelled"))
+                let reason = await activeGenerationCoordinator.currentCancellationReason ?? .user
+                yieldEvent(
+                    .cancelled(
+                        GenerationCancellationSummary(
+                            generationID: request.generationID,
+                            reason: reason
+                        )
+                    ),
+                    generationID: deliveryGenerationID
+                )
+                let delivery = eventRouter.snapshot(for: deliveryGenerationID)
+                await recordEventDeliveryLossIfNeeded(delivery, request: request)
                 throw CancellationError()
             }
             if NativeGenerationTerminalClassifier.isRetryableAllocationFailure(error) {
@@ -917,8 +1043,11 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
                     )
                     loadState = .loaded(modelID: request.modelID)
                     visibleErrorMessage = nil
+                    let delivery = eventRouter.snapshot(for: deliveryGenerationID)
+                    await recordEventDeliveryLossIfNeeded(delivery, request: request)
+                    let deliveryAnnotated = Self.annotatingEventDelivery(retryResult, delivery: delivery)
                     let annotated = Self.annotatingAllocationRetry(
-                        retryResult,
+                        deliveryAnnotated,
                         streamingUsed: request.shouldStream,
                         attempted: true,
                         succeeded: true,
@@ -934,7 +1063,18 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
                     if NativeGenerationTerminalClassifier.reason(for: error) == .cancelled {
                         loadState = .loaded(modelID: request.modelID)
                         try? FileManager.default.removeItem(at: URL(fileURLWithPath: request.outputPath))
-                        eventStreamContinuation.yield(.failed("Generation cancelled"))
+                        let reason = await activeGenerationCoordinator.currentCancellationReason ?? .user
+                        yieldEvent(
+                            .cancelled(
+                                GenerationCancellationSummary(
+                                    generationID: request.generationID,
+                                    reason: reason
+                                )
+                            ),
+                            generationID: deliveryGenerationID
+                        )
+                        let delivery = eventRouter.snapshot(for: deliveryGenerationID)
+                        await recordEventDeliveryLossIfNeeded(delivery, request: request)
                         throw CancellationError()
                     }
                     let surfacedMessage = "The native runtime could not start audio generation after one allocation retry."
@@ -942,7 +1082,8 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
                         surfacedMessage: surfacedMessage,
                         stage: NativeRuntimeStage.streamStartup.description,
                         underlyingError: error,
-                        request: request
+                        request: request,
+                        appSupportDirectory: diagnosticAppSupportBox.url
                     )
                     let surfacedError = NativeRuntimeError.wrapping(
                         error,
@@ -951,8 +1092,10 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
                     )
                     handle(surfacedError)
                     let failureEvent = GenerationEvent.failed(surfacedError.localizedDescription)
-                    eventStreamContinuation.yield(failureEvent)
+                    yieldEvent(failureEvent, generationID: deliveryGenerationID)
                     latestEvent = failureEvent
+                    let delivery = eventRouter.snapshot(for: deliveryGenerationID)
+                    await recordEventDeliveryLossIfNeeded(delivery, request: request)
                     throw surfacedError
                 }
             }
@@ -961,7 +1104,8 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
                 surfacedMessage: surfacedMessage,
                 stage: NativeRuntimeStage.streamStartup.description,
                 underlyingError: error,
-                request: request
+                request: request,
+                appSupportDirectory: diagnosticAppSupportBox.url
             )
             let surfacedError = NativeRuntimeError.wrapping(
                 error,
@@ -970,8 +1114,10 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
             )
             handle(surfacedError)
             let failureEvent = GenerationEvent.failed(surfacedError.localizedDescription)
-            eventStreamContinuation.yield(failureEvent)
+            yieldEvent(failureEvent, generationID: deliveryGenerationID)
             latestEvent = failureEvent
+            let delivery = eventRouter.snapshot(for: deliveryGenerationID)
+            await recordEventDeliveryLossIfNeeded(delivery, request: request)
             throw surfacedError
         }
     }
@@ -1013,65 +1159,114 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
             prepared.memoryPolicy,
             prepared.mlxMemorySnapshots
         )
+        let deliveryGenerationID = request.generationID ?? prepared.generationID
         return try await session.run { [weak self] event in
-            // Yield to the ordered AsyncStream BEFORE the @Published
-            // slot. The stream is the chunk-delivery transport; the
-            // slot is for snapshot consumers.
-            self?.eventStreamContinuation.yield(event)
+            // Yield to the generation-scoped stream BEFORE the @Published
+            // slot. The stream is the chunk-delivery transport; the slot is
+            // for snapshot consumers.
+            self?.yieldEvent(event, generationID: deliveryGenerationID)
             self?.latestEventCoalescer.push(event.withoutPreviewAudioPayload())
         }
     }
 
-    private static func annotatingAllocationRetry(
+    nonisolated private func yieldEvent(_ event: GenerationEvent, generationID: UUID) {
+        eventRouter.yield(event, for: generationID)
+    }
+
+    private func recordEventDeliveryLossIfNeeded(
+        _ delivery: GenerationEventDeliverySnapshot,
+        request: GenerationRequest
+    ) async {
+        guard delivery.droppedTotal > 0
+            || delivery.terminatedYields > 0
+            || (delivery.subscriberPresent && delivery.unobserved > 0)
+            || !delivery.accountingIsExact
+            || !delivery.terminalDeliveryComplete else { return }
+        await Self.recordDiagnosticEvent(
+            "generation_event_delivery_loss",
+            details: [
+                "generationID": request.generationID?.uuidString ?? "unscoped",
+                "droppedChunks": String(delivery.droppedChunks),
+                "droppedProgress": String(delivery.droppedProgress),
+                "droppedTerminals": String(delivery.droppedTerminals),
+                "terminatedYields": String(delivery.terminatedYields),
+                "unobservedYields": String(delivery.unobserved),
+                "terminalYielded": String(delivery.terminalYielded),
+                "terminalEnqueued": String(delivery.terminalEnqueued),
+                "accountingExact": String(delivery.accountingIsExact),
+            ],
+            appSupportDirectoryURL: diagnosticAppSupportBox.url
+        )
+    }
+
+    private static func annotatingEventDelivery(
+        _ result: GenerationResult,
+        delivery: GenerationEventDeliverySnapshot
+    ) -> GenerationResult {
+        var booleans = result.diagnosticBooleanFlags
+        booleans["eventDeliveryComplete"] = (!delivery.subscriberPresent
+            || (delivery.droppedTotal == 0
+                && delivery.terminatedYields == 0
+                && delivery.unobserved == 0
+                && delivery.terminalDeliveryComplete))
+            && delivery.accountingIsExact
+        booleans["eventDeliverySubscriberPresent"] = delivery.subscriberPresent
+        booleans["eventDeliveryAccountingExact"] = delivery.accountingIsExact
+        var strings = result.diagnosticStringFlags
+        strings["eventDeliveryYieldedCount"] = String(delivery.yielded)
+        strings["eventDeliveryAcceptedCount"] = String(delivery.accepted)
+        strings["eventDeliveryUnobservedCount"] = String(delivery.unobserved)
+        strings["eventDeliveryDroppedChunkCount"] = String(delivery.droppedChunks)
+        strings["eventDeliveryDroppedProgressCount"] = String(delivery.droppedProgress)
+        strings["eventDeliveryDroppedTerminalCount"] = String(delivery.droppedTerminals)
+        strings["eventDeliveryTerminatedYieldCount"] = String(delivery.terminatedYields)
+        strings["eventDeliveryTerminalYieldedCount"] = String(delivery.terminalYielded)
+        strings["eventDeliveryTerminalEnqueuedCount"] = String(delivery.terminalEnqueued)
+        strings["eventDeliveryMinimumRemainingCapacity"] = delivery.minimumRemainingCapacity
+            .map(String.init) ?? "unknown"
+        return GenerationResult(
+            audioPath: result.audioPath,
+            durationSeconds: result.durationSeconds,
+            streamSessionDirectory: result.streamSessionDirectory,
+            usedStreaming: result.usedStreaming,
+            finishReason: result.finishReason,
+            diagnosticTimingsMS: result.diagnosticTimingsMS,
+            diagnosticBooleanFlags: booleans,
+            diagnosticStringFlags: strings,
+            telemetrySummary: result.telemetrySummary
+        )
+    }
+
+    static func annotatingAllocationRetry(
         _ result: GenerationResult,
         streamingUsed: Bool,
         attempted: Bool,
         succeeded: Bool,
         cleanupMS: Int?
     ) -> GenerationResult {
-        result
+        var booleans = result.diagnosticBooleanFlags
+        booleans["allocationRetryAttempted"] = attempted
+        booleans["allocationRetrySucceeded"] = attempted && succeeded
+        booleans["allocationRetryStreamingUsed"] = streamingUsed
+        var timings = result.diagnosticTimingsMS
+        if let cleanupMS {
+            timings["allocationRetryCleanupMS"] = cleanupMS
+        }
+        return GenerationResult(
+            audioPath: result.audioPath,
+            durationSeconds: result.durationSeconds,
+            streamSessionDirectory: result.streamSessionDirectory,
+            usedStreaming: result.usedStreaming,
+            finishReason: result.finishReason,
+            diagnosticTimingsMS: timings,
+            diagnosticBooleanFlags: booleans,
+            diagnosticStringFlags: result.diagnosticStringFlags,
+            telemetrySummary: result.telemetrySummary
+        )
     }
 
     private static func generationSessionKey(for request: GenerationRequest) -> GenerationSessionKey {
-        let language = GenerationSemantics.qwenLanguageHint(for: request)
-        switch request.payload {
-        case .custom(let speakerID, let deliveryStyle):
-            return GenerationSessionKey(
-                modelID: request.modelID,
-                mode: request.mode,
-                language: language,
-                speakerOrVoiceDescriptionHash: stableSessionHash(
-                    "\(speakerID)|\(deliveryStyle ?? "")"
-                )
-            )
-        case .design(let voiceDescription, let deliveryStyle):
-            return GenerationSessionKey(
-                modelID: request.modelID,
-                mode: request.mode,
-                language: language,
-                speakerOrVoiceDescriptionHash: stableSessionHash(
-                    "\(voiceDescription)|\(deliveryStyle ?? "")"
-                )
-            )
-        case .clone(let reference):
-            return GenerationSessionKey(
-                modelID: request.modelID,
-                mode: request.mode,
-                language: language,
-                cloneReferenceHash: stableSessionHash(
-                    "\(reference.audioPath)|\(reference.transcript ?? "")|\(reference.preparedVoiceID ?? "")"
-                )
-            )
-        }
-    }
-
-    private static func stableSessionHash(_ value: String) -> String {
-        var hash: UInt64 = 14_695_981_039_346_656_037
-        for byte in value.utf8 {
-            hash ^= UInt64(byte)
-            hash &*= 1_099_511_628_211
-        }
-        return String(hash, radix: 16)
+        GenerationSemantics.generationSessionIdentity(for: request).sessionKey
     }
 
     public func listPreparedVoices() async throws -> [PreparedVoice] {
@@ -1439,15 +1634,15 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
         for profile: NativeQwenPreparedLoadProfile,
         trustPreparedCheckpoint: Bool,
         preparedDirectoryAlreadyValidated: Bool = false
-    ) -> QwenPreparedLoadBehavior {
+    ) -> VocelloQwen3LoadBehavior {
         switch profile {
         case .fullCapabilities:
-            return QwenPreparedLoadBehavior(
+            return VocelloQwen3LoadBehavior(
                 trustPreparedCheckpoint: trustPreparedCheckpoint,
                 preparedDirectoryAlreadyValidated: preparedDirectoryAlreadyValidated
             )
         case .withoutCloneEncoders, .streamingOnly:
-            return QwenPreparedLoadBehavior(
+            return VocelloQwen3LoadBehavior(
                 trustPreparedCheckpoint: trustPreparedCheckpoint,
                 preparedDirectoryAlreadyValidated: preparedDirectoryAlreadyValidated,
                 loadSpeakerEncoder: false,

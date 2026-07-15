@@ -17,7 +17,7 @@ This document covers both paths:
 
 **Source-of-truth hierarchy**
 
-1. `third_party_patches/mlx-audio-swift/` and `mlx-swift` 0.30.6 source — actual dispatch behavior.
+1. `Packages/VocelloQwen3Core/` and `mlx-swift` 0.30.6 source — actual dispatch behavior.
 2. `Sources/QwenVoiceCore/NativeMemoryPolicyResolver.swift` — cache/memory-limit policy.
 3. `Sources/QwenVoiceCore/IOSMemorySnapshot.swift` — iOS Metal memory telemetry.
 4. `Sources/QwenVoiceCore/NativeTelemetrySampler.swift` — runtime sampling of GPU allocation.
@@ -582,13 +582,17 @@ Approximate peak values for planning. Real sustained throughput is lower due to 
 
 ### 11.3 Useful environment variables
 
+The MLX/Metal diagnostic variables below come from their respective runtimes. Vocello-owned
+production-affecting keys are registered in `config/runtime-debug-knobs.json`, read through
+`RuntimeDebugGate`, and remain inert unless `QWENVOICE_DEBUG=1`.
+
 | Variable | Effect |
 | --- | --- |
 | `MTL_CAPTURE_ENABLED=1` | Enable Metal GPU capture. |
 | `MLX_METAL_DEBUG=1` | Preserve Metal shader source in captures. |
 | `MLX_DISABLE_COMPILE=1` | Disable MLX automatic kernel fusion. |
-| `QVOICE_IOS_MLX_CACHE_LIMIT_MB` | Override iOS MLX cache limit. |
-| `QVOICE_IOS_MLX_MEMORY_LIMIT_MB` | Override iOS MLX memory limit. |
+| `QVOICE_IOS_MLX_CACHE_LIMIT_MB` | Debug-gated override of the iOS MLX cache limit. |
+| `QVOICE_IOS_MLX_MEMORY_LIMIT_MB` | Debug-gated override of the iOS MLX memory limit. |
 
 ### 11.4 Cross-references
 

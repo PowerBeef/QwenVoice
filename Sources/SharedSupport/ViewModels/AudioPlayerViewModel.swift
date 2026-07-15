@@ -149,9 +149,15 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
         static func current(
             environment: [String: String] = ProcessInfo.processInfo.environment
         ) -> LivePreviewConfiguration {
-            let rawThreshold = environment["QWENVOICE_LIVE_PREVIEW_PREBUFFER_CHUNKS"]
+            let rawThreshold = RuntimeDebugGate.value(
+                for: "QWENVOICE_LIVE_PREVIEW_PREBUFFER_CHUNKS",
+                environment: environment
+            )
             let parsedThreshold = rawThreshold.flatMap(Int.init).map { min(max($0, 1), 8) }
-            let rawDuration = environment["QWENVOICE_LIVE_PREVIEW_PREBUFFER_SECONDS"]
+            let rawDuration = RuntimeDebugGate.value(
+                for: "QWENVOICE_LIVE_PREVIEW_PREBUFFER_SECONDS",
+                environment: environment
+            )
             let parsedDuration = rawDuration.flatMap(Double.init).map { min(max($0, 0), 8) }
             return LivePreviewConfiguration(
                 prebufferThreshold: parsedThreshold ?? 3,

@@ -1,0 +1,217 @@
+{
+  "schemaVersion": 1,
+  "ordinaryPublicationPolicy": "deterministic-only",
+  "evidence": [
+    {
+      "id": "project-inputs",
+      "kind": "deterministic",
+      "command": "./scripts/check_project_inputs.sh"
+    },
+    {
+      "id": "documentation-contract",
+      "kind": "deterministic",
+      "command": "python3 scripts/documentation_contract.py"
+    },
+    {
+      "id": "model-catalog-contract",
+      "kind": "deterministic",
+      "command": "python3 scripts/model_catalog_contract.py validate"
+    },
+    {
+      "id": "model-catalog-complete",
+      "kind": "deterministic",
+      "command": "python3 scripts/model_catalog_contract.py validate --require-complete"
+    },
+    {
+      "id": "macos-deterministic-tests",
+      "kind": "deterministic",
+      "command": "scripts/macos_test.sh test"
+    },
+    {
+      "id": "ios-device-sdk-compile",
+      "kind": "deterministic",
+      "command": "./scripts/build_foundation_targets.sh ios"
+    },
+    {
+      "id": "website-build",
+      "kind": "deterministic",
+      "command": "npm --prefix website run build"
+    },
+    {
+      "id": "supply-chain-contract",
+      "kind": "deterministic",
+      "command": "python3 scripts/supply_chain_contract.py"
+    },
+    {
+      "id": "macos-model-download-lifecycle",
+      "kind": "model-dependent",
+      "command": "vocello models install in the isolated acceptance data root"
+    },
+    {
+      "id": "ios-model-download-lifecycle",
+      "kind": "device-ui",
+      "command": "scripts/ui_test.sh ios model-download"
+    },
+    {
+      "id": "macos-ui-benchmark",
+      "kind": "model-ui",
+      "command": "scripts/ui_test.sh macos benchmark"
+    },
+    {
+      "id": "ios-ui-benchmark",
+      "kind": "device-ui",
+      "command": "scripts/ui_test.sh ios benchmark"
+    }
+  ],
+  "pathClasses": [
+    {
+      "id": "model-catalog-and-delivery",
+      "include": [
+        "Sources/QwenVoiceCore/HuggingFaceDownloader.swift",
+        "Sources/QwenVoiceCore/IOSModelDownloadLedger.swift",
+        "Sources/QwenVoiceCore/ModelDownloadContracts.swift",
+        "Sources/QwenVoiceCore/ProductionModelCatalog.swift",
+        "Sources/Models/TTSContract.swift",
+        "Sources/Models/TTSModel.swift",
+        "Sources/Resources/qwenvoice_contract.json",
+        "Sources/Resources/qwenvoice_ios_model_catalog.json",
+        "Sources/Resources/qwenvoice_production_model_catalog.json",
+        "Sources/iOS/IOSModelDownloadCoordinator.swift",
+        "Sources/iOSSupport/Services/IOSModelDeliverySupport.swift",
+        "Sources/ViewModels/ModelManagerViewModel.swift",
+        "Sources/VocelloCLI/CLIRuntime.swift",
+        "Sources/VocelloCLI/ModelsCommand.swift",
+        "config/model-catalog-schema-v1.json",
+        "config/model-artifact-receipts.json",
+        "scripts/check_ios_catalog.sh",
+        "scripts/model_catalog_contract.py",
+        "scripts/tests/test_model_catalog_contract.py"
+      ],
+      "mergeRequiredEvidence": [
+        "project-inputs",
+        "model-catalog-contract",
+        "model-catalog-complete",
+        "macos-deterministic-tests",
+        "ios-device-sdk-compile"
+      ],
+      "releaseRequiredEvidence": [
+        "project-inputs",
+        "model-catalog-contract",
+        "model-catalog-complete",
+        "supply-chain-contract"
+      ],
+      "qualityEvidence": [
+        "macos-model-download-lifecycle",
+        "ios-model-download-lifecycle"
+      ]
+    },
+    {
+      "id": "engine-runtime",
+      "include": [
+        "Sources/QwenVoiceBackendCore/**",
+        "Sources/QwenVoiceCore/**",
+        "Sources/QwenVoiceEngineService/**",
+        "Sources/QwenVoiceEngineSupport/**",
+        "Packages/VocelloQwen3Core/**"
+      ],
+      "mergeRequiredEvidence": [
+        "project-inputs",
+        "macos-deterministic-tests",
+        "ios-device-sdk-compile"
+      ],
+      "releaseRequiredEvidence": [
+        "project-inputs",
+        "macos-deterministic-tests",
+        "ios-device-sdk-compile",
+        "supply-chain-contract"
+      ],
+      "qualityEvidence": [
+        "macos-ui-benchmark",
+        "ios-ui-benchmark"
+      ]
+    },
+    {
+      "id": "release-and-ci",
+      "include": [
+        ".github/**",
+        "SECURITY.md",
+        "config/toolchain.json",
+        "scripts/release.sh",
+        "scripts/release_evidence.py",
+        "scripts/release_sbom.py",
+        "scripts/supply_chain_contract.py"
+      ],
+      "mergeRequiredEvidence": [
+        "project-inputs",
+        "supply-chain-contract"
+      ],
+      "releaseRequiredEvidence": [
+        "project-inputs",
+        "supply-chain-contract"
+      ],
+      "qualityEvidence": []
+    },
+    {
+      "id": "evidence-governance",
+      "include": [
+        "config/evidence-impact.json",
+        "docs/reference/evidence-impact.md",
+        "scripts/evidence_impact.py",
+        "scripts/tests/test_evidence_impact.py"
+      ],
+      "mergeRequiredEvidence": [
+        "project-inputs",
+        "documentation-contract"
+      ],
+      "releaseRequiredEvidence": [
+        "project-inputs",
+        "documentation-contract"
+      ],
+      "qualityEvidence": []
+    },
+    {
+      "id": "website",
+      "include": [
+        "website/**"
+      ],
+      "mergeRequiredEvidence": [
+        "documentation-contract",
+        "website-build"
+      ],
+      "releaseRequiredEvidence": [
+        "documentation-contract",
+        "website-build"
+      ],
+      "qualityEvidence": []
+    },
+    {
+      "id": "documentation-and-governance",
+      "include": [
+        "AGENTS.md",
+        ".agents/**",
+        "CONTRIBUTING.md",
+        "README.md",
+        "config/documentation-contract.json",
+        "config/evidence-impact.json",
+        "docs/**"
+      ],
+      "mergeRequiredEvidence": [
+        "documentation-contract"
+      ],
+      "releaseRequiredEvidence": [
+        "documentation-contract"
+      ],
+      "qualityEvidence": []
+    }
+  ],
+  "fallbackClass": {
+    "id": "repository-other",
+    "mergeRequiredEvidence": [
+      "project-inputs"
+    ],
+    "releaseRequiredEvidence": [
+      "project-inputs"
+    ],
+    "qualityEvidence": []
+  }
+}

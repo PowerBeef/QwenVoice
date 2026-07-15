@@ -18,14 +18,24 @@ REQUIRED_SURFACES=(
     "scripts/check_backend_resource_contract.sh"
     "scripts/regenerate_project.sh"
     "scripts/generate_cli_scheme.py"
+    "scripts/generate_ios_logic_scheme.py"
     "scripts/build_foundation_targets.sh"
     "scripts/build_output_policy.py"
     "scripts/documentation_contract.py"
+    "scripts/model_catalog_contract.py"
+    "scripts/evidence_impact.py"
+    "scripts/required_step_ledger.py"
+    "scripts/project_health.py"
+    "scripts/runtime_security_contract.py"
     "scripts/vendor_runtime_contract.py"
+    "scripts/supply_chain_contract.py"
+    "scripts/release_evidence.py"
+    "scripts/release_sbom.py"
     "scripts/build_cleanup.py"
     "scripts/clean_build_caches.sh"
     "scripts/lib/build_paths.sh"
     "scripts/lib/build_cache.sh"
+    "scripts/lib/required_steps.sh"
     "scripts/lib/profile_trace_retention.py"
     "scripts/ui_test.sh"
     "scripts/check_test_workflows.sh"
@@ -45,31 +55,61 @@ REQUIRED_SURFACES=(
     "scripts/test_check_language_output.py"
     "scripts/tests/test_build_output_policy.py"
     "scripts/tests/test_documentation_contract.py"
+    "scripts/tests/test_model_catalog_contract.py"
+    "scripts/tests/test_evidence_impact.py"
+    "scripts/tests/test_required_step_ledger.py"
+    "scripts/tests/test_project_health.py"
+    "scripts/tests/test_runtime_security_contract.py"
     "scripts/tests/test_vendor_runtime_contract.py"
+    "scripts/tests/test_supply_chain_contract.py"
+    "scripts/tests/test_release_evidence.py"
     "scripts/tests/test_build_routing_contract.py"
     "scripts/tests/test_generate_cli_scheme.py"
+    "scripts/tests/test_generate_ios_logic_scheme.py"
     "scripts/tests/test_clean_build_caches.py"
     "scripts/tests/test_profile_trace_retention.py"
     "scripts/release.sh"
     "Sources/Resources/qwenvoice_contract.json"
+    "Sources/Resources/qwenvoice_production_model_catalog.json"
     "benchmarks/hardware-profiles.json"
     "benchmarks/schema-v1.json"
     "benchmarks/schema-v2.json"
     "benchmarks/HISTORY.md"
     "benchmarks/LEGACY_HISTORY.md"
+    "docs/project-health.md"
     "config/language-bench-diagnostic-cohort.json"
     "config/memory-qualification-policy.json"
     "config/build-output-policy.json"
     "config/documentation-contract.json"
+    "config/evidence-impact.json"
+    "config/model-catalog-schema-v1.json"
+    "config/model-artifact-receipts.json"
+    "config/orchestration-contract.json"
+    "config/project-health-contract.json"
+    "config/runtime-debug-knobs.json"
+    "config/concurrency-safety.json"
+    "config/release-evidence-contract.json"
     "config/public-product-facts.json"
+    "config/toolchain.json"
     "config/xcode-schemes/VocelloCLI.xcscheme.template"
+    "config/xcode-schemes/VocelloiOSLogic.xcscheme.template"
     "config/apple-platform-capability-matrix.json"
-    "third_party_patches/mlx-audio-swift/VENDOR_MANIFEST.json"
-    "third_party_patches/mlx-audio-swift/UPSTREAM_BASELINE.json"
-    "third_party_patches/mlx-audio-swift/PATCHES.json"
+    "Packages/VocelloQwen3Core/VENDOR_MANIFEST.json"
+    "Packages/VocelloQwen3Core/LINEAGE.json"
+    "Packages/VocelloQwen3Core/COMPATIBILITY.json"
+    "Packages/VocelloQwen3Core/OWNERSHIP.json"
+    "Packages/VocelloQwen3Core/RUNTIME_CAPABILITIES.json"
+    "Packages/VocelloQwen3Core/UPSTREAM_BASELINE.json"
+    "Packages/VocelloQwen3Core/PATCHES.json"
+    "Packages/VocelloQwen3Core/ORIGINS.md"
+    "Packages/VocelloQwen3Core/NOTICES.md"
+    "SECURITY.md"
+    ".github/CODEOWNERS"
+    ".github/dependabot.yml"
     "Tests/UIAutomationSupport"
     "Tests/VocelloMacUITests"
     "Tests/VocelloiOSUITests"
+    "Tests/VocelloiOSLogicTests"
     ".xcodebuildmcp/config.yaml"
     "project.yml"
 )
@@ -85,17 +125,21 @@ done
 # cleanup, or higher-level workflow check can rely on its paths.
 python3 "$SCRIPT_DIR/build_output_policy.py" validate
 python3 "$SCRIPT_DIR/generate_cli_scheme.py" --check
+python3 "$SCRIPT_DIR/generate_ios_logic_scheme.py" --check
+python3 "$SCRIPT_DIR/model_catalog_contract.py" rebuild --check
+python3 "$SCRIPT_DIR/model_catalog_contract.py" validate
+python3 "$SCRIPT_DIR/evidence_impact.py" validate
 
 # iOS device tooling and explicit XCUITest are first-class. `scripts/ios_device.sh` owns
 # physical-device operations; `scripts/ui_test.sh` is the sole app-UI entry point.
 # The owned Qwen3 runtime now has one curated direct test target. Broad upstream
 # multi-model tests remain prohibited; only this exact directory is allowed.
-VENDOR_TEST_ROOT="$PROJECT_DIR/third_party_patches/mlx-audio-swift/Tests"
-if [ -d "$VENDOR_TEST_ROOT" ]; then
-    unexpected_vendor_test="$(find "$VENDOR_TEST_ROOT" -mindepth 1 -maxdepth 1 \
+RUNTIME_TEST_ROOT="$PROJECT_DIR/Packages/VocelloQwen3Core/Tests"
+if [ -d "$RUNTIME_TEST_ROOT" ]; then
+    unexpected_runtime_test="$(find "$RUNTIME_TEST_ROOT" -mindepth 1 -maxdepth 1 \
         ! -name Qwen3RuntimeTests -print -quit)"
-    if [ -n "$unexpected_vendor_test" ]; then
-        echo "error: unapproved vendored test surface: ${unexpected_vendor_test#"$PROJECT_DIR/"}" >&2
+    if [ -n "$unexpected_runtime_test" ]; then
+        echo "error: unapproved owned-runtime test surface: ${unexpected_runtime_test#"$PROJECT_DIR/"}" >&2
         exit 1
     fi
 fi
@@ -104,12 +148,12 @@ fi
 # in-engine audioQC, scripts/ios_device.sh, and the isolated UI-test targets). Committed
 # benchmark/QC summaries are allowed (bounded by the benchmarks/ cap below).
 
-# General hygiene bans only (kept): vendored upstream tests, stale macOS-15 product /
+# General hygiene bans only (kept): broad upstream tests, stale macOS-15 product /
 # old build-path names, and the Python-script variants (the "no Python backend"
 # standing decision — the .sh versions are canonical). UI-stack consistency is
 # enforced separately by check_test_workflows.sh.
 PROHIBITED_REFERENCE_PATTERNS=(
-    "third_party_patches/mlx-audio-swift/Tests/(MLXAudioTTSTests|MLXAudioCodecsTests)"
+    "Packages/VocelloQwen3Core/Tests/(MLXAudioTTSTests|MLXAudioCodecsTests)"
     "QwenVoice-macos15.dmg"
     "build/QwenVoice.app"
     "scripts/check_qwen3_backend_only\.py"
@@ -278,6 +322,11 @@ python3 "$SCRIPT_DIR/benchmark_history.py" validate --all
 python3 "$SCRIPT_DIR/benchmark_history.py" rebuild-index --check
 python3 "$SCRIPT_DIR/vendor_runtime_contract.py" validate
 python3 "$SCRIPT_DIR/documentation_contract.py"
+python3 "$SCRIPT_DIR/supply_chain_contract.py"
+python3 "$SCRIPT_DIR/required_step_ledger.py" validate-contract
+python3 "$SCRIPT_DIR/project_health.py" validate
+python3 "$SCRIPT_DIR/project_health.py" rebuild-summary --check
+python3 "$SCRIPT_DIR/runtime_security_contract.py"
 
 "$SCRIPT_DIR/check_backend_resource_contract.sh" --project
 "$SCRIPT_DIR/check_qwen3_backend_only.sh"

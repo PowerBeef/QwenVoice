@@ -39,7 +39,10 @@ final class MacWarmupAdmissionPolicy {
             // Default flipped records → enforce 2026-06-09 after the live
             // pressured validation (simulated hardTrim → both the live-level
             // and cool-down deferral paths observed on the floor tier).
-            Mode(rawValue: environment["QWENVOICE_MAC_WARM_GATE"] ?? "") ?? .enforce
+            Mode(rawValue: RuntimeDebugGate.value(
+                for: "QWENVOICE_MAC_WARM_GATE",
+                environment: environment
+            ) ?? "") ?? .enforce
         }
     }
 

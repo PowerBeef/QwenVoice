@@ -86,15 +86,28 @@ public struct IOSModelDownloadLedger: Codable, Equatable, Sendable {
         var logicalIDs = Set<String>()
         var modelIDs = Set<String>()
         for request in requests {
-            guard !request.logicalRequestID.isEmpty,
-                  !request.modelID.isEmpty,
-                  !request.artifactVersion.isEmpty,
+            let expectedFiles = Set(request.expectedFiles)
+            let verifiedPaths = request.verifiedFiles.map(\.relativePath)
+            guard isSafeIdentityComponent(request.logicalRequestID),
+                  isSafeIdentityComponent(request.modelID),
+                  isSafeIdentityComponent(request.artifactVersion),
+                  isSafeRepo(request.repo),
+                  isImmutableRevision(request.revision),
                   !request.targetFolder.isEmpty,
+                  request.targetFolder != ".",
+                  request.targetFolder != "..",
                   !request.targetFolder.contains("/"),
+                  !request.targetFolder.contains("\\"),
+                  request.expectedFiles.count == expectedFiles.count,
                   request.expectedFiles.allSatisfy({ isSafeRelativePath($0) }),
                   request.verifiedFiles.allSatisfy({ isSafeRelativePath($0.relativePath) }),
+                  request.verifiedFiles.allSatisfy({ $0.expectedSize > 0 }),
+                  request.verifiedFiles.allSatisfy({ isLowercaseSHA256($0.sha256) }),
+                  verifiedPaths.count == Set(verifiedPaths).count,
+                  Set(verifiedPaths).isSubset(of: expectedFiles),
                   request.receivedBytes >= 0,
-                  request.totalBytes >= 0,
+                  request.totalBytes > 0,
+                  request.receivedBytes <= request.totalBytes,
                   request.retryCount >= 0,
                   logicalIDs.insert(request.logicalRequestID).inserted,
                   modelIDs.insert(request.modelID).inserted else {
@@ -105,7 +118,43 @@ public struct IOSModelDownloadLedger: Codable, Equatable, Sendable {
     }
 
     private func isSafeRelativePath(_ value: String) -> Bool {
-        !value.isEmpty && !value.hasPrefix("/") && !value.split(separator: "/").contains("..")
+        !value.isEmpty
+            && value == value.trimmingCharacters(in: .whitespacesAndNewlines)
+            && !value.hasPrefix("/")
+            && !value.contains("\\")
+            && value.removingPercentEncoding == value
+            && value.split(separator: "/", omittingEmptySubsequences: false).allSatisfy {
+                !$0.isEmpty && $0 != "." && $0 != ".."
+            }
+    }
+
+    private func isSafeRepo(_ value: String) -> Bool {
+        let components = value.split(separator: "/", omittingEmptySubsequences: false)
+        return components.count == 2 && components.allSatisfy {
+            !$0.isEmpty && $0 != "." && $0 != ".."
+        }
+    }
+
+    private func isSafeIdentityComponent(_ value: String) -> Bool {
+        !value.isEmpty
+            && value == value.trimmingCharacters(in: .whitespacesAndNewlines)
+            && !value.contains("/")
+            && !value.contains("\\")
+            && !value.contains("://")
+            && !value.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) })
+    }
+
+    private func isImmutableRevision(_ value: String) -> Bool {
+        value.count == 40 && value.unicodeScalars.allSatisfy {
+            CharacterSet(charactersIn: "0123456789abcdef").contains($0)
+        }
+    }
+
+    private func isLowercaseSHA256(_ value: String?) -> Bool {
+        guard let value, value.count == 64 else { return false }
+        return value.unicodeScalars.allSatisfy {
+            CharacterSet(charactersIn: "0123456789abcdef").contains($0)
+        }
     }
 }
 

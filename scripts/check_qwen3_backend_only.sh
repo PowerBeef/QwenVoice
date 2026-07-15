@@ -8,7 +8,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 PROJECT_DIR="$(cd -- "$SCRIPT_DIR/.." &>/dev/null && pwd)"
-TTS_ROOT="$PROJECT_DIR/third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS"
+TTS_ROOT="$PROJECT_DIR/Packages/VocelloQwen3Core/Sources/MLXAudioTTS"
 MODELS_ROOT="$TTS_ROOT/Models"
 CONTRACT_PATH="$PROJECT_DIR/Sources/Resources/qwenvoice_contract.json"
 TTS_MODEL_PATH="$TTS_ROOT/TTSModel.swift"
@@ -58,7 +58,7 @@ fail() {
 validate_removed_model_dirs() {
   for dirname in "${REMOVED_MODEL_DIRS[@]}"; do
     if [[ -d "$MODELS_ROOT/$dirname" ]]; then
-      fail "non-Qwen3-TTS vendored model directory is present: ${MODELS_ROOT#$PROJECT_DIR/}/$dirname"
+      fail "non-Qwen3-TTS model directory is present in the owned runtime: ${MODELS_ROOT#$PROJECT_DIR/}/$dirname"
     fi
   done
 }
@@ -141,7 +141,42 @@ validate_contract() {
   ' "$CONTRACT_PATH")
 }
 
+validate_owned_facade_boundary() {
+  local direct_imports
+  direct_imports="$(
+    rg -n --glob '*.swift' \
+      '^\s*(@preconcurrency\s+)?import\s+MLXAudio(Core|Codecs|TTS)\b' \
+      "$PROJECT_DIR/Sources" "$PROJECT_DIR/Tests" || true
+  )"
+  if [[ -n "$direct_imports" ]]; then
+    fail "application or repository test source bypasses the VocelloQwen3Core facade:\n$direct_imports"
+  fi
+
+  if rg -n 'product:\s+MLXAudio(Core|Codecs|TTS)\b' "$PROJECT_DIR/project.yml" >/dev/null; then
+    fail "project.yml declares a compatibility MLXAudio* product instead of VocelloQwen3Core"
+  fi
+  if ! rg -n 'product:\s+VocelloQwen3Core\b' "$PROJECT_DIR/project.yml" >/dev/null; then
+    fail "project.yml does not consume the VocelloQwen3Core facade product"
+  fi
+
+  local raw_types
+  raw_types="$(
+    rg -n --glob '*.swift' \
+      '\b(SpeechGenerationModel|Qwen3OptimizedSpeechGenerationModel|Qwen3TTSVoiceClonePrompt|AudioGenerationCompletion|AudioGenerationFinishReason|QwenPreparedLoadBehavior|ChunkSubstageTimings|MimiDecoderStepTimings|KVCacheDiagnostics)\b' \
+      "$PROJECT_DIR/Sources" "$PROJECT_DIR/Tests" || true
+  )"
+  if [[ -n "$raw_types" ]]; then
+    fail "raw implementation type crosses the VocelloQwen3Core product boundary:\n$raw_types"
+  fi
+
+  if rg -n '^\s*@_exported\s+import\s+MLXAudio' \
+      "$PROJECT_DIR/Packages/VocelloQwen3Core/Sources/VocelloQwen3Core" >/dev/null; then
+    fail "VocelloQwen3Core publicly re-exports a raw MLXAudio implementation module"
+  fi
+}
+
 validate_removed_model_dirs
 validate_tts_model_switch
 validate_contract
+validate_owned_facade_boundary
 echo "==> Qwen3-TTS backend exclusivity is clean."

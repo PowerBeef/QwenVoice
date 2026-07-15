@@ -21,8 +21,10 @@ __pycache__/
 *.pyo
 .venv/
 
-# Dependencies
-Packages/
+# Owned monorepo packages. Other ad hoc package checkouts remain local-only.
+Packages/*
+!Packages/VocelloQwen3Core/
+!Packages/VocelloQwen3Core/**
 
 # Release build output
 build/

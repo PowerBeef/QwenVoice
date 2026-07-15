@@ -33,6 +33,7 @@ SCRIPT_DIR="$ROOT_DIR/scripts"
 . "$SCRIPT_DIR/lib/build_paths.sh"
 # shellcheck source=lib/build_cache.sh
 . "$SCRIPT_DIR/lib/build_cache.sh"
+. "$SCRIPT_DIR/lib/required_steps.sh"
 . "$SCRIPT_DIR/lib/test_models.sh"
 test_models_init "$ROOT_DIR"
 APP_NAME="Vocello"
@@ -648,17 +649,22 @@ EOF
 # core-test: VocelloCoreTests (language semantics, no models).
 cmd_core_test() {
   note "core-test: VocelloCoreTests (QwenVoiceCore language semantics, no models)"
+  local build_log="$QVOICE_ARTIFACTS_MACOS/tests/core-test-build.log"
+  local test_log="$QVOICE_ARTIFACTS_MACOS/tests/core-test.log"
+  rm -f "$test_log"
   set +e
   local build_st=0 st=0
-  build_mac_test_bundles "$QVOICE_ARTIFACTS_MACOS/tests/core-test-build.log" || build_st=$?
+  build_mac_test_bundles "$build_log" || build_st=$?
   if (( build_st == 0 )); then
-    run_mac_test_bundle VocelloCoreTests "$QVOICE_ARTIFACTS_MACOS/tests/core-test.log" || st=$?
+    run_mac_test_bundle VocelloCoreTests "$test_log" || st=$?
   else
     st="$build_st"
   fi
   set -e
   if (( st == 0 )); then
     note "core-test PASS"
+  elif (( build_st != 0 )); then
+    warn "core-test BUILD FAIL (see build/artifacts/macos/tests/core-test-build.log)"
   else
     warn "core-test FAIL (see build/artifacts/macos/tests/core-test.log)"
   fi
@@ -820,8 +826,8 @@ cmd_test() {
     transport_st="$test_build_st"
   fi
 
-  note "test: Qwen3RuntimeTests (owned vendored runtime, seeded Metal fixture)"
-  local runtime_package="$ROOT_DIR/third_party_patches/mlx-audio-swift"
+  note "test: Qwen3RuntimeTests (owned core runtime, seeded Metal fixture)"
+  local runtime_package="$ROOT_DIR/Packages/VocelloQwen3Core"
   local mlx_bundle="$QVOICE_XCODE_MACOS_DERIVED/Build/Products/Release/mlx-swift_Cmlx.bundle"
   if ensure_swiftpm_scratch_location "$runtime_package" "$QVOICE_SWIFTPM_RUNTIME_CACHE" \
       && swift build --package-path "$runtime_package" \
@@ -972,16 +978,31 @@ PY
   return 0
 }
 
+gate_crash_delta() {
+  local gate_dir="$1" crash_marker="$2"
+  cmd_crashes >>"$gate_dir/crashes.log" 2>&1 || return 1
+  local diagnostic_root="$HOME/Library/Logs/DiagnosticReports" new_ips
+  new_ips="$(find "$diagnostic_root" \( -name 'Vocello-*.ips' -o -name 'QwenVoiceEngineService-*.ips' -o -name '*engine-service*.ips' \) -newer "$crash_marker" 2>/dev/null || true)"
+  if [[ -n "$new_ips" ]]; then
+    printf '%s\n' "$new_ips" >"$gate_dir/new-crashes.txt"
+    return 1
+  fi
+}
+
 cmd_gate() {
   local run_id="mac-gate-$(date +%Y%m%d-%H%M%S)"
   local gate_dir="$QVOICE_ARTIFACTS_MACOS/gates/gate-$run_id"
   local verdict="$gate_dir/verdict.txt"
+  local step_ledger="$gate_dir/required-steps.json"
   mkdir -p "$gate_dir"
   local overall=0
   local gate_bench=0
   [[ "${QWENVOICE_GATE_BENCH:-0}" == "1" ]] && gate_bench=1
   local total_steps=4
   (( gate_bench )) && total_steps=5
+  local workflow="macos-gate"
+  (( gate_bench )) && workflow="macos-gate-with-benchmark"
+  required_steps_init "$step_ledger" "$workflow" "$run_id"
   { echo "Vocello macOS gate — $run_id"; echo; } | tee "$verdict"
 
   # Marker for the gate-fatal crash-delta check: only .ips files newer than this
@@ -990,45 +1011,41 @@ cmd_gate() {
   touch "$crash_marker"
 
   note "gate step 0/$total_steps: check_project_inputs"
-  if "$SCRIPT_DIR/check_project_inputs.sh" >>"$gate_dir/inputs.log" 2>&1; then
+  if required_step_run "$step_ledger" project-inputs \
+      "$SCRIPT_DIR/check_project_inputs.sh" >>"$gate_dir/inputs.log" 2>&1; then
     echo "check_project_inputs: PASS" | tee -a "$verdict"
   else echo "check_project_inputs: FAIL" | tee -a "$verdict"; overall=1; fi
 
   note "gate step 1/$total_steps: build_foundation_targets macos"
-  if "$SCRIPT_DIR/build_foundation_targets.sh" macos >>"$gate_dir/build.log" 2>&1; then
+  if required_step_run "$step_ledger" foundation-build \
+      "$SCRIPT_DIR/build_foundation_targets.sh" macos >>"$gate_dir/build.log" 2>&1; then
     echo "build_foundation macos: PASS" | tee -a "$verdict"
   else echo "build_foundation macos: FAIL" | tee -a "$verdict"; overall=1; fi
 
   note "gate step 2/$total_steps: core-test (VocelloCoreTests)"
-  if ( cmd_core_test ) >>"$gate_dir/core-test.log" 2>&1; then
+  if required_step_run "$step_ledger" core-tests cmd_core_test \
+      >>"$gate_dir/core-test.log" 2>&1; then
     echo "core-test: PASS" | tee -a "$verdict"
   else echo "core-test: FAIL" | tee -a "$verdict"; overall=1; fi
 
   note "gate step 3/$total_steps: deterministic Core + XPC transport + Qwen3 runtime tests"
-  if ( cmd_test ) >>"$gate_dir/test.log" 2>&1; then
+  if required_step_run "$step_ledger" deterministic-tests cmd_test \
+      >>"$gate_dir/test.log" 2>&1; then
     echo "test: PASS" | tee -a "$verdict"
   else echo "test: FAIL" | tee -a "$verdict"; overall=1; fi
 
   note "gate step 4/$total_steps: crashes (GATE-FATAL on new .ips during this run)"
-  if ( cmd_crashes ) >>"$gate_dir/crashes.log" 2>&1; then
-    local dr="$HOME/Library/Logs/DiagnosticReports"
-    local new_ips
-    new_ips="$(find "$dr" \( -name 'Vocello-*.ips' -o -name 'QwenVoiceEngineService-*.ips' -o -name '*engine-service*.ips' \) -newer "$crash_marker" 2>/dev/null || true)"
-    if [[ -n "$new_ips" ]]; then
-      echo "crashes: FAIL — new .ips during this gate run:" | tee -a "$verdict"
-      echo "$new_ips" | sed 's/^/    /' | tee -a "$verdict"
-      overall=1
-    else
-      echo "crashes: PASS (no new .ips)" | tee -a "$verdict"
-    fi
+  if required_step_run "$step_ledger" crash-delta \
+      gate_crash_delta "$gate_dir" "$crash_marker"; then
+    echo "crashes: PASS (no new .ips)" | tee -a "$verdict"
   else
-    echo "crashes: FAIL (check errored — see crashes.log)" | tee -a "$verdict"
+    echo "crashes: FAIL (see crashes.log/new-crashes.txt)" | tee -a "$verdict"
     overall=1
   fi
 
   if (( gate_bench )); then
     note "gate step 5/$total_steps: bounded vocello bench (QWENVOICE_GATE_BENCH=1)"
-    if run_gate_bench "$gate_dir"; then
+    if required_step_run "$step_ledger" benchmark-validation run_gate_bench "$gate_dir"; then
       echo "bench: PASS (see bench.log)" | tee -a "$verdict"
     else
       echo "bench: FAIL (see bench.log)" | tee -a "$verdict"; overall=1
@@ -1036,7 +1053,8 @@ cmd_gate() {
   fi
 
   if (( overall == 0 && gate_bench )); then
-    if record_benchmark_history "$gate_dir/engine-benchmark" >>"$gate_dir/bench.log" 2>&1; then
+    if required_step_run "$step_ledger" history-publication \
+        record_benchmark_history "$gate_dir/engine-benchmark" >>"$gate_dir/bench.log" 2>&1; then
       echo "history: PASS" | tee -a "$verdict"
     else
       echo "history: FAIL (see bench.log)" | tee -a "$verdict"
@@ -1045,6 +1063,9 @@ cmd_gate() {
   fi
 
   echo | tee -a "$verdict"
+  if ! required_steps_finalize "$step_ledger"; then
+    overall=1
+  fi
   if (( overall == 0 )); then
     echo "GATE: PASS" | tee -a "$verdict"; note "gate PASS · $gate_dir"
   else
@@ -1059,23 +1080,30 @@ cmd_release_readiness() {
   local run_id="release-readiness-$(date +%Y%m%d-%H%M%S)"
   local out="$QVOICE_ARTIFACTS_MACOS/release-readiness/$run_id"
   local crash_marker="$out/.crash-marker"
+  local step_ledger="$out/required-steps.json"
   mkdir -p "$out"
   touch "$crash_marker"
+  required_steps_init "$step_ledger" macos-release-readiness "$run_id"
 
   note "release readiness: project inputs"
-  "$SCRIPT_DIR/check_project_inputs.sh" 2>&1 | tee "$out/project-inputs.log"
+  required_step_run "$step_ledger" project-inputs \
+    "$SCRIPT_DIR/check_project_inputs.sh" 2>&1 | tee "$out/project-inputs.log"
 
   note "release readiness: exact-path app build"
-  "$SCRIPT_DIR/build.sh" build 2>&1 | tee "$out/build.log"
+  required_step_run "$step_ledger" app-build \
+    "$SCRIPT_DIR/build.sh" build 2>&1 | tee "$out/build.log"
 
   note "release readiness: deterministic macOS tests"
-  cmd_test 2>&1 | tee "$out/tests.log"
+  required_step_run "$step_ledger" deterministic-tests cmd_test \
+    2>&1 | tee "$out/tests.log"
 
   note "release readiness: crash delta"
-  cmd_crashes 2>&1 | tee "$out/crashes.log"
-  local diagnostic_root="$HOME/Library/Logs/DiagnosticReports" new_ips
-  new_ips="$(find "$diagnostic_root" \( -name 'Vocello-*.ips' -o -name 'QwenVoiceEngineService-*.ips' -o -name '*engine-service*.ips' \) -newer "$crash_marker" 2>/dev/null || true)"
-  [[ -z "$new_ips" ]] || die "release readiness found new crash reports: $new_ips"
+  required_step_run "$step_ledger" crash-delta \
+    gate_crash_delta "$out" "$crash_marker" \
+    || die "release readiness found a crash-check failure (see $out/crashes.log and $out/new-crashes.txt)"
+
+  required_steps_finalize "$step_ledger" \
+    || die "release readiness required-step ledger did not pass"
 
   printf 'RELEASE READINESS: PASS\n' | tee "$out/verdict.txt"
   note "release readiness PASS · $out"

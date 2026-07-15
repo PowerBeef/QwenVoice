@@ -48,6 +48,8 @@ See [`docs/reference/testing-runbook.md`](docs/reference/testing-runbook.md) for
 - Code and machine-readable contracts take precedence over prose.
 - Update relevant documentation in the same change when behavior, public facts, commands, platform support, models, or test contracts change.
 - Keep dependencies pinned. MLX dependency changes require the backend review and benchmark process in [`.agents/backend-mlx.md`](.agents/backend-mlx.md).
+- Keep external Actions pinned to the full SHA in [`config/toolchain.json`](config/toolchain.json).
+  Dependabot proposals must update that manifest and the adjacent workflow version comment together.
 - Do not commit prompts, transcripts, usernames, device identifiers, absolute paths, secrets, raw telemetry, WAV evidence, screenshots from test results, traces, or `.xcresult` bundles.
 - Successful benchmark runners publish only their compact privacy-safe record. They never commit or push it automatically.
 

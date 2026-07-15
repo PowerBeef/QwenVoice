@@ -296,7 +296,7 @@ struct IOSSettingsBrandFooter: View {
                 .shadow(color: IOSBrandTheme.accent.opacity(0.18), radius: 14, x: 0, y: 10)
                 .accessibilityHidden(true)
 
-            Text(Theme.Branding.version.uppercased())
+            Text("VERSION \(IOSSettingsSupportInfo.appVersionLabel)".uppercased())
                 .font(.system(size: 11, weight: .medium))
                 .accessibilityIdentifier("iosSettings_versionLabel")
                 .tracking(0.66)

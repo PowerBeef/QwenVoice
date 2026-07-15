@@ -112,13 +112,14 @@ Rule: keep actor-isolated methods short. Move heavy MLX work off the actor when 
 
 ### 3.4 Sendable and unchecked conformances
 
-Most value types in the engine conform to `Sendable` automatically or explicitly. A few types are `@unchecked Sendable`:
+Most value types in the engine conform to `Sendable` automatically or explicitly. The exhaustive
+authority for owned `@unchecked Sendable` and other unsafe concurrency declarations is
+`config/concurrency-safety.json`; examples in prose are intentionally non-exhaustive. Each registry
+entry names the protected state, synchronization/immutability argument, owner, and review evidence.
 
-- `ResolvedCloneConditioning` — carries an `MLXArray`, which is not `Sendable` by design. The runtime guarantees it is only passed across isolation boundaries after creation and never mutated concurrently.
-- `MainThreadStallWatchdog` — uses `NSLock` to protect mutable counters from a background timer and main-queue callback.
-- `BatchProgressRelay` — captures a closure that is called from a `@Sendable` progress handler and forwards to `@MainActor`.
-
-Do not add `@unchecked Sendable` to new types without a written concurrency-safety argument in a code comment. Prefer `actor`, `Mutex` (Swift 6), or value types instead.
+Do not add an unchecked or unsafe declaration without a narrow code-level safety argument and a
+matching registry entry. Prefer `actor`, `Mutex` (Swift 6), immutable adapters, or value types.
+`python3 scripts/runtime_security_contract.py` rejects unregistered declarations and stale entries.
 
 ### 3.5 `Task` and `Task.detached`
 
@@ -312,10 +313,12 @@ WWDC 2025 demonstrated profiling a test from Xcode's test navigator (secondary-c
 
 ### 9.3 Streaming chunk dispatch must not block
 
-- macOS: `MLXTTSEngine.events` is `.unbounded` so playback never drops a chunk.
-- iOS: `MLXTTSEngine.events` is `.bufferingNewest(64)` to cap memory under the in-process budget.
+- macOS: `MLXTTSEngine.events` is `.bufferingNewest(256)`.
+- iOS: `MLXTTSEngine.events` is `.bufferingNewest(96)` to cap memory under the in-process budget.
 
-The Swift code that forwards chunks (XPC on macOS, Combine on iOS) must return quickly. Heavy work per chunk belongs on a background task, not in the chunk publisher's sink.
+`GenerationEventDeliveryProbe` measures accepted and dropped yield outcomes. The Swift code that
+forwards chunks (XPC on macOS, in-process observation on iOS) must drain continuously and return
+quickly. Heavy work per chunk belongs on a background task, not in the publisher's sink.
 
 ### 9.4 Prewarm serialization
 

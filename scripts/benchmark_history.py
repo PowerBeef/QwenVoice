@@ -794,7 +794,7 @@ def default_inputs(record: dict[str, Any]) -> dict[str, Any]:
     }
     package_locks = [
         REPO_ROOT / "QwenVoice.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved",
-        REPO_ROOT / "third_party_patches/mlx-audio-swift/Package.resolved",
+        REPO_ROOT / "Packages/VocelloQwen3Core/Package.resolved",
     ]
     harness_paths = [
         REPO_ROOT / "scripts" / "ui_test.sh",

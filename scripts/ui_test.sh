@@ -7,6 +7,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "$ROOT_DIR/scripts/lib/build_paths.sh"
 . "$ROOT_DIR/scripts/lib/build_cache.sh"
+. "$ROOT_DIR/scripts/lib/required_steps.sh"
 PROJECT="$ROOT_DIR/QwenVoice.xcodeproj"
 MAC_DERIVED="$QVOICE_XCODE_MACOS_DERIVED"
 IOS_DERIVED="$QVOICE_XCODE_IOS_DERIVED"
@@ -119,6 +120,8 @@ run_id="${platform}-xcui-${lane}-${timestamp}-${nonce}"
 out="$QVOICE_ARTIFACTS_UI_TESTS/$platform/$run_id"
 result="$out/result.xcresult"
 mkdir -p "$out"
+step_ledger="$out/required-steps.json"
+required_steps_init "$step_ledger" "ui-$platform-$lane" "$run_id"
 started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 printf '%s\n' "$started_at" >"$out/started-at.txt"
 printf '%s\n' "${label:-$run_id}" >"$out/label.txt"
@@ -165,7 +168,8 @@ record_early_failure() {
   exit "$status"
 }
 trap record_early_failure EXIT
-python3 "$ROOT_DIR/scripts/publish_benchmark_history.py" snapshot \
+required_step_run "$step_ledger" source-provenance \
+  python3 "$ROOT_DIR/scripts/publish_benchmark_history.py" snapshot \
   --output "$out/benchmark-source.json" --crash-scope none >/dev/null \
   || die "could not capture pre-run source provenance"
 
@@ -185,6 +189,14 @@ check_mac_crash_delta() {
   local root="$HOME/Library/Logs/DiagnosticReports" new
   new="$(find "$root" \( -name 'Vocello-*.ips' -o -name 'QwenVoiceEngineService-*.ips' -o -name '*engine-service*.ips' \) -newer "$mac_crash_marker" -print 2>/dev/null || true)"
   [[ -z "$new" ]] || { printf '%s\n' "$new" >"$out/new-crashes.txt"; die "new Vocello crash report detected (see $out/new-crashes.txt)"; }
+}
+
+check_ios_crash_delta() {
+  snapshot_ios_crashes "$out/crashes-after" || return 1
+  local new_crashes
+  new_crashes="$(comm -13 "$out/crashes-before/hashes.txt" "$out/crashes-after/hashes.txt" || true)"
+  [[ -z "$new_crashes" ]] \
+    || { printf '%s\n' "$new_crashes" >"$out/new-crashes.txt"; return 1; }
 }
 
 process_executable_path() {
@@ -489,7 +501,7 @@ if [[ "$platform" == "macos" ]]; then
   fi
 
   note "macOS XCUITest $lane → $out"
-  run_xcodebuild xcb_run test \
+  required_step_run "$step_ledger" xcuitest run_xcodebuild xcb_run test \
     -project "$PROJECT" -scheme VocelloMacUI -configuration Release \
     -destination 'platform=macOS,arch=arm64' -derivedDataPath "$MAC_DERIVED" \
     -clonedSourcePackagesDirPath "$QVOICE_XCODE_SOURCE_PACKAGES" \
@@ -499,7 +511,8 @@ if [[ "$platform" == "macos" ]]; then
     CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="-" ONLY_ACTIVE_ARCH=YES ARCHS=arm64 \
     SWIFT_OPTIMIZATION_LEVEL=-O \
     || die "macOS XCUITest failed (see $out/xcodebuild.log)"
-  check_mac_crash_delta
+  required_step_run "$step_ledger" crash-delta check_mac_crash_delta \
+    || die "new Vocello crash report detected"
   write_build_provenance "$MAC_DERIVED/last-build.json" \
     "scripts/ui_test.sh macos $lane" VocelloMacUI Release \
     "platform=macOS,arch=arm64" arm64 O ad-hoc \
@@ -508,7 +521,8 @@ if [[ "$platform" == "macos" ]]; then
     "scripts/ui_test.sh macos $lane" VocelloMacUI Release \
     "platform=macOS,arch=arm64" arm64 O ad-hoc \
     "$MAC_DERIVED" "$QVOICE_XCODE_SOURCE_PACKAGES"
-  [[ "$lane" != "benchmark" ]] || validate_macos_benchmark \
+  [[ "$lane" != "benchmark" ]] || required_step_run "$step_ledger" \
+    benchmark-validation validate_macos_benchmark \
     || die "macOS benchmark telemetry gate failed"
   terminate_macos_app
 else
@@ -521,7 +535,8 @@ else
   [[ "$locked" == "0" ]] || die "paired iPhone is locked; unlock it and retry"
   team="$(derive_team || true)"
   [[ -n "$team" ]] || die "no Apple Development team found; set QWENVOICE_DEVELOPMENT_TEAM"
-  snapshot_ios_crashes "$out/crashes-before" \
+  required_step_run "$step_ledger" crash-baseline \
+    snapshot_ios_crashes "$out/crashes-before" \
     || die "could not establish the pre-run iPhone crash snapshot"
 
   if [[ "$lane" == "smoke" ]]; then
@@ -538,7 +553,7 @@ else
   fi
 
   note "physical-iPhone XCUITest $lane on $device → $out"
-  run_xcodebuild xcb_run test \
+  required_step_run "$step_ledger" xcuitest run_xcodebuild xcb_run test \
     -project "$PROJECT" -scheme VocelloiOSUI -configuration Release \
     -destination "id=$device" -derivedDataPath "$IOS_DERIVED" \
     -clonedSourcePackagesDirPath "$QVOICE_XCODE_SOURCE_PACKAGES" \
@@ -552,21 +567,21 @@ else
     || die "physical-iPhone XCUITest failed (see $out/xcodebuild.log)"
 
   if [[ "$lane" == "model-download" ]]; then
-    pull_ios_model_download_diagnostics "$device" "$out/model-download-diagnostics" \
+    required_step_run "$step_ledger" model-download-diagnostics \
+      pull_ios_model_download_diagnostics "$device" "$out/model-download-diagnostics" \
       || die "could not collect or validate compact model-download diagnostics (see $out/model-download-diagnostics-pull.log)"
   fi
 
-  snapshot_ios_crashes "$out/crashes-after" \
-    || die "could not establish the post-run iPhone crash snapshot"
-  new_crashes="$(comm -13 "$out/crashes-before/hashes.txt" "$out/crashes-after/hashes.txt" || true)"
-  [[ -z "$new_crashes" ]] || { printf '%s\n' "$new_crashes" >"$out/new-crashes.txt"; die "new iPhone crash payload detected"; }
+  required_step_run "$step_ledger" crash-delta check_ios_crash_delta \
+    || die "could not establish a clean post-run iPhone crash delta"
   write_build_provenance "$IOS_DERIVED/last-build.json" \
     "scripts/ui_test.sh ios $lane" VocelloiOSUI Release "id=$device" arm64 \
     O automatic "$IOS_DERIVED" "$QVOICE_XCODE_SOURCE_PACKAGES"
   write_build_provenance "$out/last-build.json" \
     "scripts/ui_test.sh ios $lane" VocelloiOSUI Release "id=$device" arm64 \
     O automatic "$IOS_DERIVED" "$QVOICE_XCODE_SOURCE_PACKAGES"
-  [[ "$lane" != "benchmark" ]] || validate_ios_benchmark \
+  [[ "$lane" != "benchmark" ]] || required_step_run "$step_ledger" \
+    benchmark-validation validate_ios_benchmark \
     || die "iOS benchmark telemetry gate failed"
 fi
 
@@ -575,7 +590,8 @@ write_run_metadata passed "$finished_at" 0
 run_finalized=1
 
 if [[ "$lane" == "benchmark" ]]; then
-  if ! history_record="$(python3 "$ROOT_DIR/scripts/benchmark_history.py" record --artifact-dir "$out")"; then
+  if ! history_record="$(required_step_run "$step_ledger" history-publication \
+      python3 "$ROOT_DIR/scripts/benchmark_history.py" record --artifact-dir "$out")"; then
     die "benchmark passed, but history publication failed; evidence is preserved in $out (repair: python3 scripts/benchmark_history.py record --artifact-dir '$out')"
   fi
   note "tracked benchmark record → $history_record"
@@ -584,11 +600,17 @@ fi
 # Keep the most recent passing result for each platform/lane only after this
 # run is durably marked as passed (and, for benchmarks, after history
 # publication). Cleanup failure must not rewrite an otherwise valid UI verdict.
+retention_status=0
 if "$ROOT_DIR/scripts/clean_build_caches.sh" --prune-ui-results --ui-keep 1 \
     >"$out/result-retention.log" 2>&1; then
   note "pruned superseded XCUITest results (latest passing result retained per platform/lane)"
 else
+  retention_status=1
   warn "could not prune superseded XCUITest results (see $out/result-retention.log)"
 fi
+required_step_record "$step_ledger" result-retention "$retention_status"
+
+required_steps_finalize "$step_ledger" \
+  || die "$platform $lane required-step ledger did not pass"
 
 note "$platform $lane PASS · $out"

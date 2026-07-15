@@ -25,7 +25,7 @@ enum GenerateCommand {
 
     /// Run a request, and when it's streaming, drain `engine.events` on a side task
     /// to record the engine first-chunk latency (TTFC, ms) and chunk count. Consumes
-    /// to the terminal chunk so the `.unbounded` macOS stream isn't left with buffered
+    /// through the terminal event so the bounded macOS stream isn't left with buffered
     /// events; does NOT render chunks (no live playback). Shared by `generate --stream`
     /// and the `bench --ttfc` probe.
     @MainActor
@@ -34,27 +34,18 @@ enum GenerateCommand {
     ) async throws -> (result: GenerationResult, firstChunkMS: Double?, chunkCount: Int?) {
         let submitWall = Date()
         let wantedID = request.generationID
-        let streamTask: Task<StreamObservation, Never>? = request.shouldStream ? {
-            let events = runtime.engine.events
+        let streamTask: Task<StreamObservation, Never>? = request.shouldStream && wantedID != nil ? {
+            let events = runtime.engine.events(for: wantedID!)
             return Task.detached(priority: .utility) {
                 var firstChunkMS: Double?
                 var count = 0
-                var started = false
                 for await event in events {
                     switch event {
                     case .chunk(let chunk):
-                        // `engine.events` is a long-lived process-wide stream; in a
-                        // multi-generation run (e.g. bench) it carries chunks from
-                        // earlier generations — match ours by generationID.
-                        if let wantedID, chunk.generationID != wantedID { continue }
                         if firstChunkMS == nil { firstChunkMS = Date().timeIntervalSince(submitWall) * 1000 }
-                        started = true
                         count += 1
-                        if chunk.isFinal { return StreamObservation(firstChunkMS: firstChunkMS, chunkCount: count) }
-                    case .completed, .failed:
-                        // Only our own completion (after our chunks) ends the drain;
-                        // stale terminal events from earlier generations are ignored.
-                        if started { return StreamObservation(firstChunkMS: firstChunkMS, chunkCount: count) }
+                    case .completed, .cancelled, .failed:
+                        return StreamObservation(firstChunkMS: firstChunkMS, chunkCount: count)
                     default:
                         continue
                     }
@@ -63,7 +54,13 @@ enum GenerateCommand {
             }
         }() : nil
 
-        let result = try await runtime.engine.generate(request)
+        let result: GenerationResult
+        do {
+            result = try await runtime.engine.generate(request)
+        } catch {
+            if let streamTask { _ = await streamTask.value }
+            throw error
+        }
         var firstChunkMS: Double?
         var chunkCount: Int?
         if let streamTask {

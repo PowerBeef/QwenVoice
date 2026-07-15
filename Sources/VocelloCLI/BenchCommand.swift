@@ -179,8 +179,11 @@ enum BenchCommand {
         }
 
         // Bench isolates memory from inline preview PCM (no UI consumer) and must
-        // drain the macOS `.unbounded` engine.events stream during streaming takes.
-        setenv("QWENVOICE_STREAMING_PREVIEW_DATA", "off", 1)
+        // drain the bounded macOS engine.events stream during streaming takes.
+        try installRuntimeDebugOverride(
+            key: "QWENVOICE_STREAMING_PREVIEW_DATA",
+            value: "off"
+        )
 
         let runID = args.string("run-id") ?? "macos-engine-\(Self.utcRunTimestamp())-\(UUID().uuidString.lowercased().prefix(8))"
         setenv("QVOICE_MAC_BENCH_RUN_ID", runID, 1)
@@ -193,7 +196,10 @@ enum BenchCommand {
         // before the device class is first resolved (i.e. before bootstrap).
         if let tier = args.string("force-class") {
             let canonical = try canonicalForceClass(tier)
-            setenv("QWENVOICE_FORCE_MEMORY_CLASS", canonical, 1)
+            try installRuntimeDebugOverride(
+                key: "QWENVOICE_FORCE_MEMORY_CLASS",
+                value: canonical
+            )
             note("forcing memory class: \(canonical)")
         }
 
@@ -241,15 +247,13 @@ enum BenchCommand {
             hasDeliveryCells: !deliveryItems.isEmpty
         )
 
-        let dataDir = CLIPaths.dataDirectory(override: args.string("data-dir"))
-        if telemetryOff, args.string("data-dir") == nil,
-           ProcessInfo.processInfo.environment["QWENVOICE_APP_SUPPORT_DIR"]?.isEmpty != false {
-            // Use the debug-isolated model store without enabling TelemetryGate via QWENVOICE_DEBUG.
-            setenv("QWENVOICE_APP_SUPPORT_DIR", Self.defaultDebugDataDir().path, 1)
-        }
-        let resolvedDataDir = telemetryOff && args.string("data-dir") == nil
-            ? CLIPaths.dataDirectory(override: nil)
-            : dataDir
+        // Bench path isolation is independent of telemetry. In particular,
+        // `--telemetry off` must not resolve the default through production
+        // `~/Library/Application Support/QwenVoice` and clear its diagnostics.
+        let resolvedDataDir = LocalBenchmarkDataPolicy.resolvedDataDirectory(
+            explicitOverride: args.string("data-dir"),
+            applicationSupportBase: Self.applicationSupportBaseDirectory()
+        )
         if !args.flag("keep") {
             try clearDiagnosticsIfSafe(dataDir: resolvedDataDir, force: args.flag("force"))
         }
@@ -533,7 +537,7 @@ enum BenchCommand {
         let result: GenerationResult
         var firstChunkMS: Double?
         if shouldStream {
-            // Drain engine.events so the macOS unbounded stream does not retain preview/chunk
+            // Drain engine.events so the bounded macOS stream does not retain preview/chunk
             // events across matrix takes (see GenerateCommand.generateObservingFirstChunk).
             let (genResult, observedFirstChunkMS, _) = try await GenerateCommand.generateObservingFirstChunk(runtime, request)
             result = genResult
@@ -893,28 +897,41 @@ enum BenchCommand {
 
     /// Debug-isolated Application Support folder (models + diagnostics) without
     /// lighting TelemetryGate via `QWENVOICE_DEBUG`.
-    private static func defaultDebugDataDir() -> URL {
-        let base = FileManager.default
+    private static func applicationSupportBaseDirectory() -> URL {
+        FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: (NSHomeDirectory() as NSString)
                 .appendingPathComponent("Library/Application Support"), isDirectory: true)
-        return base.appendingPathComponent("QwenVoice-Debug", isDirectory: true)
+    }
+
+    /// Install a benchmark-only production-affecting override through the
+    /// same explicit master gate used by the app. Reading the value back
+    /// through `RuntimeDebugGate` prevents a silently inert benchmark setup.
+    private static func installRuntimeDebugOverride(
+        key: String,
+        value: String
+    ) throws {
+        guard setenv("QWENVOICE_DEBUG", "1", 1) == 0,
+              setenv(key, value, 1) == 0,
+              RuntimeDebugGate.value(for: key) == value else {
+            throw CLIError("failed to install the requested benchmark runtime override")
+        }
     }
 
     /// The shipped app's real (non-debug) data dir — never auto-cleared.
     private static func realAppDataDir() -> URL {
-        let base = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: (NSHomeDirectory() as NSString)
-                .appendingPathComponent("Library/Application Support"), isDirectory: true)
-        return base.appendingPathComponent("QwenVoice", isDirectory: true)
+        applicationSupportBaseDirectory().appendingPathComponent("QwenVoice", isDirectory: true)
     }
 
     /// Clear this run's diagnostics, but refuse to wipe the shipped app's real
     /// data dir unless --force (bench forces QWENVOICE_DEBUG=1 so the default
     /// resolves to QwenVoice-Debug; this guards an explicit --data-dir <real>).
     private static func clearDiagnosticsIfSafe(dataDir: URL, force: Bool) throws {
-        if !force, dataDir.standardizedFileURL.path == realAppDataDir().standardizedFileURL.path {
+        if !LocalBenchmarkDataPolicy.mayClearDiagnostics(
+            in: dataDir,
+            productionDataDirectory: realAppDataDir(),
+            force: force
+        ) {
             throw CLIError("refusing to clear diagnostics in the real app data dir (\(dataDir.path)); pass --keep to append or --force to override")
         }
         // Start clean so the aggregate reflects only this run.

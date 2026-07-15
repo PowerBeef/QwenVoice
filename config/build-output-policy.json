@@ -35,7 +35,7 @@
       "id": "swiftpm-mlx-audio-runtime",
       "path": "build/cache/swiftpm/mlx-audio-runtime",
       "class": "cache",
-      "owner": "Vendored MLX Audio runtime SwiftPM commands",
+      "owner": "Owned Vocello Qwen3 Core SwiftPM commands",
       "cleanup": "aggressive",
       "retention": "Persistent package-specific SwiftPM scratch cache",
       "env": "QVOICE_SWIFTPM_RUNTIME_CACHE"
@@ -149,6 +149,15 @@
       "env": "QVOICE_ARTIFACTS_DIAGNOSTICS"
     },
     {
+      "id": "artifacts-project-health",
+      "path": "build/artifacts/project-health",
+      "class": "artifact",
+      "owner": "Generated project-health inventory and release-readiness diagnostics",
+      "cleanup": "routine",
+      "retention": "Local detailed reports are disposable; the compact reproducible snapshot is tracked under docs",
+      "env": "QVOICE_ARTIFACTS_PROJECT_HEALTH"
+    },
+    {
       "id": "symbols-macos",
       "path": "build/artifacts/symbols/macos",
       "class": "artifact",
@@ -239,8 +248,8 @@
       "destination": "build/cache/xcode/macos"
     },
     {
-      "id": "legacy-vendored-swiftpm-cache",
-      "source": "third_party_patches/mlx-audio-swift/.build",
+      "id": "owned-runtime-local-swiftpm-cache",
+      "source": "Packages/VocelloQwen3Core/.build",
       "destination": "build/cache/swiftpm/mlx-audio-runtime"
     },
     {
@@ -551,7 +560,8 @@
       "build/xctrace-cpu-signpost-probe",
       "build/xctrace-instrument-probe",
       "build/xctrace-signpost-probe",
-      "third_party_patches/mlx-audio-swift/.build"
+      "third_party_patches/mlx-audio-swift/.build",
+      "Packages/VocelloQwen3Core/.build"
     ],
     "retiredFragments": [
       "$BUILD_DIR/DerivedData",

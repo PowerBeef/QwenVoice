@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 TEST_ROOTS = {
-    "Qwen3RuntimeTests": Path("third_party_patches/mlx-audio-swift/Tests/Qwen3RuntimeTests"),
+    "Qwen3RuntimeTests": Path("Packages/VocelloQwen3Core/Tests/Qwen3RuntimeTests"),
     "VocelloCoreTests": Path("Tests/VocelloCoreTests"),
     "VocelloEngineIntegrationTests": Path("Tests/VocelloEngineIntegrationTests"),
 }

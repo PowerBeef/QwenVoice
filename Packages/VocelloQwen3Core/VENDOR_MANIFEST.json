@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 3,
+  "componentID": "vocello-qwen3-core",
+  "component": "Vocello Qwen3 Core",
+  "owner": "backend-mlx",
+  "path": "Packages/VocelloQwen3Core",
+  "packageIdentity": "MLXAudio",
+  "maintenanceModel": "owned-monorepo-runtime",
+  "repositoryReviewBaseCommit": "4e05f6fd458cb58fc92bbdd52c72072fbc2bc360",
+  "contracts": {
+    "lineage": "LINEAGE.json",
+    "compatibility": "COMPATIBILITY.json",
+    "capabilities": "RUNTIME_CAPABILITIES.json",
+    "ownership": "OWNERSHIP.json",
+    "currentInventory": "CURRENT_INVENTORY.json",
+    "relocationInventory": "RELOCATION_INVENTORY.json",
+    "facadeAPIBaseline": "FACADE_API_BASELINE.json",
+    "semanticDeltas": "PATCHES.json",
+    "origins": "ORIGINS.md",
+    "notices": "NOTICES.md"
+  },
+  "historicalEvidence": {
+    "upstreamBaseline": "UPSTREAM_BASELINE.json"
+  },
+  "products": [
+    "VocelloQwen3Core",
+    "MLXAudioCore",
+    "MLXAudioCodecs",
+    "MLXAudioTTS"
+  ],
+  "targets": [
+    "VocelloQwen3Core",
+    "MLXAudioCore",
+    "MLXAudioCodecs",
+    "MLXAudioTTS",
+    "Qwen3RuntimeTests"
+  ],
+  "retainedSurface": [
+    "Qwen3-TTS 12 Hz Custom Voice, Voice Design, and Voice Clone",
+    "Mimi transformer, convolution, quantization, and SEANet primitives",
+    "Vocello-owned preparation, streaming, clone-artifact, telemetry, and memory behavior"
+  ],
+  "omittedSurface": [
+    "STT, STS, VAD, LID, G2P, UI, and generic tool products",
+    "non-Qwen TTS model families",
+    "non-Mimi codec families",
+    "repository-owned Python inference runtime"
+  ]
+}

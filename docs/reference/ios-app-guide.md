@@ -70,6 +70,10 @@ mode segments, composer, and primary action; there is no hidden screen-presence 
 | Design | `studioChip_voiceBrief` → brief editor · `studioChip_delivery` · `studioChip_language` |
 | Clone | `studioChip_reference` → record or saved voice · `studioChip_language` |
 
+Clone also exposes `voiceCloning_consentAcknowledgment`. Generate remains unavailable until the
+user acknowledges consent. The optional transcript selects transcript-backed conditioning; no
+transcript selects the separate audio-only x-vector path.
+
 ### Bottom sheets — `Sources/iOS/Sheets/IOSBottomSheets.swift`
 
 Sheets are separate overlays, so **inside-sheet elements keep their own identifiers**
@@ -112,6 +116,9 @@ Search `historySearchField`; clear menu `historyClearMenu` → `historyClearKeep
 `historyRow_<id>`, tap area `historyRowTap_<id>` (opens player), menu `historyRowMenu_<id>`
 (Play/Save/Delete), delete-confirm `historyRowDeleteConfirm_<id>`. Grouped by Today /
 Yesterday / Previous 7/30 Days / Earlier.
+
+Database failures are typed and fail closed. The error state does not masquerade as empty History;
+destructive actions remain disabled until `historyRetryButton` completes a successful read.
 
 ### Settings tab — `Sources/iOS/IOSSettingsViews.swift`
 
@@ -202,7 +209,10 @@ Generate rather than Install. Destructive install/cancel/delete actions are outs
 - **Voice Cloning** — supply a reference clip by recording in-app on this iPhone or importing a
   WAV, MP3, AIFF, or M4A file. A neighboring `.txt` file can prefill an imported clip's transcript;
   recordings can use on-device speech recognition. Enrollment saves an app-owned reference and
-  hands it directly to Clone. Saved voices from the Voices tab are reusable references. Clone
+  hands it directly to Clone. The transcript is optional: its presence selects transcript-backed
+  conditioning, while an empty transcript uses the genuine audio-only x-vector path. The visible
+  `voiceCloning_consentAcknowledgment` must be enabled before Generate. Saved voices from the Voices
+  tab are reusable references. Clone
   cannot take a separate delivery instruction on current checkpoints — pick a reference clip that
   already carries the delivery you want.
 

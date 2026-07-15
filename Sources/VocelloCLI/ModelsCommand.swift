@@ -99,9 +99,18 @@ enum ModelsCommand {
         }
 
         let targetDir = descriptor.installDirectory(in: ctx.modelsDirectory)
-        let repo = descriptor.huggingFaceRepo
-        let revision = descriptor.huggingFaceRevision ?? "main"
-        note("Installing \(modelID) from \(repo) (revision \(revision.prefix(7))\u{2026})")
+        let catalog = try ProductionModelCatalog(
+            contentsOf: CLIRuntime.locateProductionCatalogURL()
+        )
+        let artifact = try catalog.artifactMatchingMacOSDescriptor(
+            folder: descriptor.folder,
+            repo: descriptor.huggingFaceRepo,
+            revision: descriptor.huggingFaceRevision,
+            artifactVersion: descriptor.artifactVersion,
+            estimatedDownloadBytes: descriptor.estimatedDownloadBytes,
+            requiredRelativePaths: descriptor.requiredRelativePaths
+        )
+        note("Installing \(modelID) from \(artifact.repo) (revision \(artifact.revision.prefix(7))\u{2026})")
 
         let diagnostics = ModelDownloadDiagnosticsStore(
             directory: ctx.modelsDirectory
@@ -118,11 +127,17 @@ enum ModelsCommand {
                 let eta = progress.estimatedSecondsRemaining.map { " · ETA \(max(1, Int($0.rounded())))s" } ?? ""
                 noteVerbose("  \(progress.phase.rawValue) · \(pct)% · \(humanBytes(progress.downloadedBytes))/\(humanBytes(progress.totalBytes)) · \(speed)\(eta)")
             },
-            transferMetricsHandler: { diagnostics.record(metrics: $0) }
+            transferMetricsHandler: { diagnostics.record(metrics: $0) },
+            artifactURLPolicy: catalog.downloadURLPolicy
         )
 
         do {
-            try await downloader.downloadRepo(repo: repo, revision: revision, to: targetDir)
+            try await downloader.downloadFiles(
+                artifact.downloadFiles,
+                repo: artifact.repo,
+                revision: artifact.revision,
+                to: targetDir
+            )
             diagnostics.recordSuccess(
                 expectedBytes: descriptor.estimatedDownloadBytes ?? directorySize(targetDir)
             )

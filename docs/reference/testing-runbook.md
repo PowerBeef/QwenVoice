@@ -75,6 +75,47 @@ validators own exact take counts/order plus matching telemetry, History/database
 audio-QC proof. The runner owns app/device identity and crash deltas. Smoke intentionally stops at
 its visible journey, History assertion, and crash check rather than claiming benchmark evidence.
 
+## Fail-closed orchestration
+
+The macOS gate and release-readiness command, the iOS gate, and every XCUITest lane write an
+untracked `required-steps.json` beside their other run artifacts. The expected steps come from
+`config/orchestration-contract.json`; final PASS is impossible while a required step is failed,
+missing, duplicated, interrupted, or unknown. Optional retention cleanup cannot replace a failed
+validator result.
+
+The deterministic negative suite forces every declared required step to fail in isolation:
+
+```sh
+python3 -m unittest scripts.tests.test_required_step_ledger
+```
+
+Fault injection is test-only and requires both `QWENVOICE_TEST_ORCHESTRATION_FAULTS=1` and an exact
+`QWENVOICE_TEST_FAIL_REQUIRED_STEP=<workflow>:<step>` selector. Normal workflows never enable it.
+
+Release-candidate orchestration adds a stricter boundary. Its schema-v2 release evidence captures a
+clean full-tree source identity, requires the platform steps to run as managed subprocesses in one
+invocation using the command templates in `config/orchestration-contract.json`, and packages the
+ledger plus step manifests into hashed `release-verification.json`. A successful substitute such as
+`true` cannot mint a required-step result. Contract-declared step outputs are hashed when the managed
+command completes and rechecked during evidence creation, so a verifier summary cannot be replaced
+between verification and publication. The iOS candidate first runs `scripts/macos_test.sh gate`
+and the generic physical-device SDK compile as its managed `platform-readiness` step, then requires
+the archive/IPA identity and signing summary described in `ios-appstore-submission.md`.
+The six-hour freshness rule applies when creating a candidate; offline verification of the copied
+bundle rechecks identity, structure, outcomes, and digests without pretending the original clock is
+still current.
+
+For an inventory of direct tests, unsafe-concurrency annotations, canonical hardware evidence, and
+path-based evidence freshness, generate the local project-health report:
+
+```sh
+python3 scripts/project_health.py report --output build/artifacts/project-health/current
+```
+
+The compact tracked snapshot is [`../project-health.md`](../project-health.md). It is an engineering
+inventory, not a test result or release-readiness verdict; it never makes physical-device evidence
+an ordinary development gate.
+
 ## CI and release
 
 Ordinary CI builds app targets and runs deterministic checks; it neither compiles nor executes the

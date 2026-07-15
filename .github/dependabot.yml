@@ -1,0 +1,45 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/Toronto"
+    labels: ["dependencies", "ci"]
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  - package-ecosystem: "npm"
+    directory: "/website"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:30"
+      timezone: "America/Toronto"
+    labels: ["dependencies", "website"]
+    open-pull-requests-limit: 5
+    groups:
+      website-runtime:
+        dependency-type: "production"
+        patterns: ["*"]
+      website-development:
+        dependency-type: "development"
+        patterns: ["*"]
+
+  # The independently governed Qwen runtime is the repository's SwiftPM package root.
+  - package-ecosystem: "swift"
+    directory: "/Packages/VocelloQwen3Core"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "10:00"
+      timezone: "America/Toronto"
+    labels: ["dependencies", "backend"]
+    open-pull-requests-limit: 3
+    groups:
+      mlx-runtime:
+        patterns: ["mlx-*"]

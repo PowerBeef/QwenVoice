@@ -1,20 +1,26 @@
-# Maintaining the Vocello Qwen3 audio runtime
+# Maintaining Vocello Qwen3 Core
 
-The source under `third_party_patches/mlx-audio-swift/` is an owned, specialized product runtime,
-not a thin patch stack. Its physical path remains unchanged to avoid needless package and project
-churn.
+The source under `Packages/VocelloQwen3Core/` is an owned, specialized product runtime, not a thin
+patch stack. The package moved from `third_party_patches/mlx-audio-swift/` because that path
+misrepresented its first-party ownership. Product sources now consume the stable
+`VocelloQwen3Core` facade, while the legacy package, product, target, module, and public API
+identities remain available behind it for implementation compatibility. The migration therefore
+changed both location and the application dependency boundary without changing synthesis or
+persistent identities. See the
+[`owned Qwen3 runtime ADR`](../decisions/owned-qwen3-runtime-monorepo.md).
 
 ## Authority
 
 Use these sources in order:
 
 1. Runtime source and deterministic tests.
-2. `VENDOR_MANIFEST.json` for provenance/package scope.
-3. `PATCHES.json` for semantic deltas, state, evidence, and upstream disposition.
-4. `PERFORMANCE.md` and the Qwen/Mimi subsystem guides for design narrative.
-5. Historical audits only for dated research context.
+2. `LINEAGE.json`, `COMPATIBILITY.json`, and `OWNERSHIP.json` for provenance and boundaries.
+3. `RUNTIME_CAPABILITIES.json` for current behavior and evidence.
+4. `UPSTREAM_BASELINE.json` and `PATCHES.json` for historical upstream comparison.
+5. `PERFORMANCE.md` and the Qwen/Mimi subsystem guides for design narrative.
+6. Historical audits only for dated research context.
 
-`QwenVoiceCore` owns application engine coordination. The vendor package owns Qwen3 model loading,
+`QwenVoiceCore` owns application engine coordination. The core package owns Qwen3 model loading,
 sampling, streaming, Mimi decoding, and clone artifacts. `QwenVoiceBackendCore` is the narrow
 app-owned policy/provenance vocabulary between those layers; it is not an MLX re-export target.
 
@@ -23,16 +29,16 @@ app-owned policy/provenance vocabulary between those layers; it is not an MLX re
 Direct edits are appropriate when a change belongs to the Qwen3/MLXAudio implementation rather
 than app coordination. Keep the change focused and:
 
-- add or update a stable `PATCHES.json` entry;
-- identify state as active, diagnostic, dormant, rejected, shared, superseded, or removed;
+- add or update a stable `RUNTIME_CAPABILITIES.json` entry;
+- identify capability state as production, diagnostic, internal, or retired;
 - name source files, deterministic tests, and current documentation;
 - attach a tracked benchmark record for measured performance claims, or explicitly mark the
   evidence historical, diagnostic, or unmeasured;
-- record upstream disposition and removal criteria;
+- preserve immutable origin lineage and record upstream review separately;
 - preserve VoiceOver-independent product behavior, typed completion, cancellation, output, and
   memory contracts.
 
-Do not mass-format, add a nested `.git`, create a vendor-local `.build`, or replace the snapshot
+Do not mass-format, add a nested `.git`, create a package-local `.build`, or replace the snapshot
 with a fresh upstream tree. Direct SwiftPM work must use
 `--scratch-path build/cache/swiftpm/mlx-audio-runtime`.
 
@@ -49,16 +55,16 @@ with a fresh upstream tree. Direct SwiftPM work must use
 - Decoder partitioning, reset, and timing instrumentation must not change the waveform.
 
 Details and test references live in `PERFORMANCE.md`, `CLONE_ARTIFACT_FORMAT.md`, and
-`PATCHES.json`.
+`RUNTIME_CAPABILITIES.json`.
 
 ## Selective upstream intake
 
 Use a separate branch and an explicit upstream checkout:
 
 1. Review the desired upstream commit against the recorded import baseline.
-2. Run `python3 scripts/vendor_runtime_contract.py rebuild-baseline --upstream-dir PATH` only when
-   intentionally changing the recorded import baseline.
-3. Port selected changes as isolated commits and update the manifest/ledger.
+2. Never rebuild the immutable import inventory merely to record a newer review point.
+3. Port selected changes as isolated commits and update the capability contract. Rebuild the
+   baseline only for an explicitly approved new import lineage.
 4. Regenerate the Xcode project when products or dependencies change.
 5. Run:
 
@@ -76,9 +82,9 @@ they are not required for documentation-only or ordinary deterministic publishin
 ## Review checklist
 
 - [ ] The change belongs in the lower-level runtime.
-- [ ] `PATCHES.json` covers every changed vendor file.
+- [ ] `RUNTIME_CAPABILITIES.json` covers every owned runtime file.
 - [ ] Tests and documentation references exist.
 - [ ] Measured claims cite a current record or carry an explicit non-current evidence class.
-- [ ] Upstream disposition and removal criteria are current.
-- [ ] Package products and dependency pins still match `VENDOR_MANIFEST.json`.
-- [ ] Deterministic gates pass without writing `.build` inside vendored source.
+- [ ] Immutable lineage and the separate upstream review point are current.
+- [ ] Package products and dependency pins still match `COMPATIBILITY.json`.
+- [ ] Deterministic gates pass without writing `.build` inside the owned package.

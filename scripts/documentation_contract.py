@@ -31,6 +31,19 @@ SCRIPT_HELP_SURFACES = {
     "scripts/clean_build_caches.sh",
     "scripts/build.sh",
 }
+CURRENT_RUNTIME_STALE_GUIDANCE = {
+    re.compile(r"\.unbounded", re.I):
+        "current generation event streams are bounded on both platforms",
+    re.compile(r"bufferingNewest\(64\)", re.I):
+        "the current iOS generation event capacity is 96",
+    re.compile(
+        r"(?:cooperative(?:[- ]only)?\s+(?:iOS\s+)?cancel|iOS\s+cancel[^\n]{0,40}cooperative(?:[- ]only)?)",
+        re.I,
+    ):
+        "iOS cancellation now owns and awaits the active generation task",
+    re.compile(r"does not conform to `?ActiveGenerationCancellable`?", re.I):
+        "MLXTTSEngine now provides the ActiveGenerationCancellable capability",
+}
 
 
 def load_json(path: Path) -> dict:
@@ -154,7 +167,7 @@ def validate_script_references(root: Path, paths: list[Path]) -> list[str]:
 
 
 def validate_repository_paths(root: Path, paths: list[Path]) -> list[str]:
-    prefixes = ("Sources/", "Tests/", "scripts/", "config/", ".github/", ".agents/", "docs/", "benchmarks/", "website/", "third_party_patches/")
+    prefixes = ("Sources/", "Tests/", "scripts/", "config/", ".github/", ".agents/", "docs/", "benchmarks/", "website/", "Packages/")
     generated_roots: set[str] = set()
     contract_path = root / CONTRACT_PATH
     if contract_path.is_file():
@@ -179,9 +192,9 @@ def validate_repository_paths(root: Path, paths: list[Path]) -> list[str]:
             if not matches and (root / candidate).exists():
                 matches = [str(root / candidate)]
             if not matches and candidate.startswith(("Sources/", "Tests/")):
-                vendored = root / "third_party_patches/mlx-audio-swift" / candidate
-                if vendored.exists():
-                    matches = [str(vendored)]
+                runtime = root / "Packages/VocelloQwen3Core" / candidate
+                if runtime.exists():
+                    matches = [str(runtime)]
             if not matches:
                 errors.append(f"{source.relative_to(root)}: stale inline repository path {candidate}")
     return errors
@@ -244,6 +257,103 @@ def validate_optional_capabilities(root: Path, paths: list[Path]) -> list[str]:
     return errors
 
 
+def validate_current_runtime_guidance(root: Path, paths: list[Path]) -> list[str]:
+    """Reject high-risk prose that contradicts current executable contracts."""
+    errors: list[str] = []
+    for source in paths:
+        text = source.read_text(encoding="utf-8")
+        for pattern, remediation in CURRENT_RUNTIME_STALE_GUIDANCE.items():
+            match = pattern.search(text)
+            if match:
+                line = text.count("\n", 0, match.start()) + 1
+                errors.append(
+                    f"{source.relative_to(root)}:{line}: {remediation}; found {match.group(0)!r}"
+                )
+
+    architecture_path = root / "docs/ARCHITECTURE.md"
+    if architecture_path.is_file():
+        architecture = architecture_path.read_text(encoding="utf-8")
+        for required in ("bufferingNewest(256)", "bufferingNewest(96)"):
+            if required not in architecture:
+                errors.append(f"docs/ARCHITECTURE.md: missing current event-delivery contract {required}")
+        if "config/runtime-debug-knobs.json" not in architecture:
+            errors.append("docs/ARCHITECTURE.md: runtime-debug registry is missing from active architecture")
+        if "config/concurrency-safety.json" not in architecture:
+            errors.append("docs/ARCHITECTURE.md: concurrency-safety registry is missing from active architecture")
+
+    agents_path = root / "AGENTS.md"
+    if agents_path.is_file():
+        agents = agents_path.read_text(encoding="utf-8")
+        for required in ("config/runtime-debug-knobs.json", "config/concurrency-safety.json"):
+            if required not in agents:
+                errors.append(f"AGENTS.md: missing authoritative runtime contract {required}")
+
+    errors.extend(validate_model_catalog_guidance(root))
+    return errors
+
+
+def validate_model_catalog_guidance(root: Path) -> list[str]:
+    """Bind active prose and product routing to the generated catalog state."""
+    catalog_path = root / "Sources/Resources/qwenvoice_production_model_catalog.json"
+    if not catalog_path.is_file():
+        return []
+    catalog = load_json(catalog_path)
+    state = catalog.get("activationState")
+    errors: list[str] = []
+    critical_docs = (
+        "AGENTS.md",
+        ".agents/backend-mlx.md",
+        ".agents/release-qa-engineer.md",
+        "docs/ARCHITECTURE.md",
+        "docs/development-progress.md",
+        "docs/reference/model-delivery.md",
+        "docs/project-map.html",
+    )
+    if state == "staged":
+        for relative in ("docs/ARCHITECTURE.md", "docs/development-progress.md"):
+            target = root / relative
+            if not target.is_file():
+                continue
+            text = target.read_text(encoding="utf-8").lower()
+            if "staged" not in text or "quality" not in text or "pending" not in text:
+                errors.append(
+                    f"{relative}: staged catalog must state that Quality identities remain pending"
+                )
+        return errors
+    if state != "complete":
+        return ["production model catalog activationState must be staged or complete"]
+    if catalog.get("missingArtifactIdentities") not in ([], None):
+        errors.append("complete production model catalog cannot report missing artifact identities")
+    stale = re.compile(
+        r"(?:catalog[^\n]{0,100}staged|quality[^\n]{0,100}(?:remain|is|are)[^\n]{0,40}pending|"
+        r"speed[^\n]{0,80}complete[^\n]{0,80}quality[^\n]{0,80}pending)",
+        re.IGNORECASE,
+    )
+    for relative in critical_docs:
+        target = root / relative
+        if not target.is_file():
+            continue
+        text = target.read_text(encoding="utf-8")
+        if stale.search(text):
+            errors.append(f"{relative}: complete model catalog is described as staged or Quality-pending")
+        if "complete" not in text.lower():
+            errors.append(f"{relative}: active guidance does not state that the model catalog is complete")
+    for relative in (
+        "Sources/ViewModels/ModelManagerViewModel.swift",
+        "Sources/VocelloCLI/ModelsCommand.swift",
+    ):
+        target = root / relative
+        if not target.is_file():
+            continue
+        text = target.read_text(encoding="utf-8")
+        for token in ("ProductionModelCatalog", "downloadFiles"):
+            if token not in text:
+                errors.append(f"{relative}: complete catalog runtime route is missing {token}")
+        if "downloadRepo(" in text:
+            errors.append(f"{relative}: product route must not restore live repository enumeration")
+    return errors
+
+
 def _top_level_names(project: str, section: str) -> list[str]:
     start = re.search(rf"(?m)^{re.escape(section)}:\s*$", project)
     if not start:
@@ -282,13 +392,17 @@ def validate_facts(root: Path) -> list[str]:
     targets = _top_level_names(project, "targets")
     schemes = _top_level_names(project, "schemes")
     cli_template = root / "config/xcode-schemes/VocelloCLI.xcscheme.template"
-    if len(targets) != 12:
-        errors.append(f"project.yml: expected 12 targets, found {len(targets)}")
-    if len(schemes) != 4 or not cli_template.is_file():
-        errors.append("project schemes must contain four XcodeGen schemes plus the generated VocelloCLI scheme")
+    ios_logic_template = root / "config/xcode-schemes/VocelloiOSLogic.xcscheme.template"
+    if len(targets) != 13:
+        errors.append(f"project.yml: expected 13 targets, found {len(targets)}")
+    if len(schemes) != 4 or not cli_template.is_file() or not ios_logic_template.is_file():
+        errors.append(
+            "project schemes must contain four XcodeGen schemes plus the generated "
+            "VocelloCLI and VocelloiOSLogic schemes"
+        )
     architecture = (root / "docs/ARCHITECTURE.md").read_text(encoding="utf-8")
-    if "12 targets" not in architecture or "five shared schemes" not in architecture.lower():
-        errors.append("docs/ARCHITECTURE.md: target/scheme inventory must state 12 targets and five shared schemes")
+    if "13 targets" not in architecture or "six shared schemes" not in architecture.lower():
+        errors.append("docs/ARCHITECTURE.md: target/scheme inventory must state 13 targets and six shared schemes")
     if re.search(r"QwenVoiceBackendCore[^\n]{0,120}(?:Low-level MLX|MLX/audio primitives|owns model load|owns codecs)", architecture, re.I):
         errors.append("docs/ARCHITECTURE.md: BackendCore is incorrectly described as the MLX/codec implementation boundary")
     qwen = (root / "docs/reference/qwen3-tts-guide.md").read_text(encoding="utf-8")
@@ -468,6 +582,7 @@ def validate(root: Path) -> list[str]:
     errors.extend(validate_repository_paths(root, paths))
     errors.extend(validate_build_references(root, paths))
     errors.extend(validate_optional_capabilities(root, paths))
+    errors.extend(validate_current_runtime_guidance(root, paths))
     errors.extend(validate_retired_harness_terms(root, paths))
     errors.extend(validate_documented_subcommands(root, paths))
     errors.extend(validate_facts(root))

@@ -1,6 +1,6 @@
 # Mimi Codec Guide for Vocello
 
-> **Living document.** A project-specific reference for the Mimi-style neural audio codec used by Vocello's Qwen3-TTS backend. It focuses on the Qwen3-TTS speech tokenizer as vendored in `third_party_patches/mlx-audio-swift/`, with Kyutai's canonical Mimi as architectural background. When this doc disagrees with the code, the code wins — fix this file.
+> **Living document.** A project-specific reference for the Mimi-style neural audio codec used by Vocello's Qwen3-TTS backend. It focuses on the Qwen3-TTS speech tokenizer owned in `Packages/VocelloQwen3Core/`, with Kyutai's canonical Mimi as architectural background. When this doc disagrees with the code, the code wins — fix this file.
 >
 > Last reviewed: 2026-07-14. Upstream snapshot: `mlx-audio-swift` `v0.1.2` / `fcbd04d`, with Vocello-specific deltas.
 
@@ -26,11 +26,11 @@ The decoder is the quality-critical path. It receives 16 integer codes per frame
 
 **Source-of-truth hierarchy**
 
-1. `third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSSpeechTokenizer.swift`
-2. `third_party_patches/mlx-audio-swift/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSConfig.swift`
-3. `third_party_patches/mlx-audio-swift/Sources/MLXAudioCodecs/Mimi/Seanet.swift`
-4. `third_party_patches/mlx-audio-swift/Sources/MLXAudioCodecs/Mimi/Quantization.swift`
-5. `third_party_patches/mlx-audio-swift/Sources/MLXAudioCodecs/Mimi/Transformer.swift`
+1. `Packages/VocelloQwen3Core/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSSpeechTokenizer.swift`
+2. `Packages/VocelloQwen3Core/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSConfig.swift`
+3. `Packages/VocelloQwen3Core/Sources/MLXAudioCodecs/Mimi/Seanet.swift`
+4. `Packages/VocelloQwen3Core/Sources/MLXAudioCodecs/Mimi/Quantization.swift`
+5. `Packages/VocelloQwen3Core/Sources/MLXAudioCodecs/Mimi/Transformer.swift`
 6. This document and `docs/reference/qwen3-tts-guide.md` (for talker/code-predictor context).
 
 ---
@@ -163,7 +163,7 @@ The decoder has two distinct upsampling stages:
 
 ## 4. Vendored Swift implementation
 
-The implementation lives under `third_party_patches/mlx-audio-swift/`. Vocello's patch layer removed non-Qwen3 codecs and added several quality/reliability fixes, most notably around streaming state.
+The implementation lives under `Packages/VocelloQwen3Core/`. Vocello's owned runtime retains only the codec surface needed by Qwen3-TTS and adds product-specific quality and reliability behavior, most notably around streaming state.
 
 ### 4.1 File map
 

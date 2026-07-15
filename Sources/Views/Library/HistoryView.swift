@@ -33,24 +33,8 @@ private struct HistoryListItem: Identifiable, Sendable {
         self.saveVoiceConfiguration = Self.makeSaveVoiceConfiguration(for: generation)
     }
 
-    // Cached — DateFormatter construction is ~1-2 ms and this runs once per
-    // history row on every reload. Lock-protected because items are built on
-    // TWO executors: reloadHistory's Task.detached (pool thread) AND
-    // handleGenerationAppended on the MainActor — DateFormatter itself is not
-    // thread-safe, and a generation completing mid-reload would otherwise
-    // race the shared instance (2026-06-12 release-QA concurrency audit).
-    nonisolated(unsafe) private static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter
-    }()
-    private static let dateFormatterLock = NSLock()
-
     private static func formattedDate(for date: Date) -> String {
-        dateFormatterLock.lock()
-        defer { dateFormatterLock.unlock() }
-        return dateFormatter.string(from: date)
+        date.formatted(date: .abbreviated, time: .shortened)
     }
 
     private static func makeSaveVoiceConfiguration(for generation: Generation) -> SavedVoiceSheetConfiguration? {
@@ -169,6 +153,7 @@ struct HistoryView: View {
     @State private var filteredItems: [HistoryListItem] = []
     @State private var itemsRevision = 0
     @State private var searchDebounceTask: Task<Void, Never>?
+    @State private var databaseUnavailable = false
 
     var body: some View {
         content
@@ -193,6 +178,13 @@ struct HistoryView: View {
                 // to nil synchronously inside this view's update can drop
                 // the whole change.
                 Task { @MainActor in clearRequest = nil }
+                guard !databaseUnavailable else {
+                    presentActionAlert(
+                        title: "History Unavailable",
+                        message: "Retry loading History before deleting any entries. Your existing database was preserved."
+                    )
+                    return
+                }
                 guard !items.isEmpty else {
                     presentActionAlert(title: "History Is Empty", message: "There are no history entries to clear.")
                     return
@@ -255,11 +247,17 @@ struct HistoryView: View {
     private var content: some View {
         if let loadError, items.isEmpty, !isLoading {
             historyStateContainer(identifier: "history_errorState") {
-                ContentUnavailableView(
-                    "Couldn't load history",
-                    systemImage: "exclamationmark.triangle",
-                    description: Text(loadError)
-                )
+                VStack(spacing: 12) {
+                    ContentUnavailableView(
+                        "Couldn't load history",
+                        systemImage: "exclamationmark.triangle",
+                        description: Text(loadError)
+                    )
+                    Button("Retry") {
+                        reloadHistory(reopenFailedStore: true)
+                    }
+                    .accessibilityIdentifier("historyRetryButton")
+                }
             }
         } else if isLoading && items.isEmpty {
             historyStateContainer(identifier: "history_loadingState") {
@@ -294,6 +292,7 @@ struct HistoryView: View {
                     onSaveAs: {
                         exportGeneration(item)
                     },
+                    allowsDeletion: !databaseUnavailable,
                     onDelete: {
                         itemToDelete = item
                         showDeleteConfirmation = true
@@ -326,6 +325,7 @@ private extension HistoryView {
     /// constructor still does a `FileManager.fileExists` check, but
     /// only once per appended generation — not once per existing row.
     func handleGenerationAppended(_ generation: Generation) {
+        databaseUnavailable = false
         if let existingIndex = items.firstIndex(where: { $0.generation.id == generation.id && generation.id != nil }) {
             items[existingIndex] = HistoryListItem(generation: generation)
         } else {
@@ -384,7 +384,7 @@ private extension HistoryView {
         .accessibilityIdentifier(identifier)
     }
 
-    func reloadHistory() {
+    func reloadHistory(reopenFailedStore: Bool = false) {
         if loadTask != nil {
             pendingReloadAfterCurrentLoad = true
             return
@@ -411,6 +411,9 @@ private extension HistoryView {
 
             do {
                 let loadedItems = try await Task.detached(priority: .userInitiated) {
+                    if reopenFailedStore {
+                        try DatabaseService.shared.reopenIfNeeded()
+                    }
                     let generations = try DatabaseService.shared.fetchAllGenerations()
                     return generations.map(HistoryListItem.init)
                 }.value
@@ -421,6 +424,7 @@ private extension HistoryView {
                     itemsRevision &+= 1
                     HistorySessionCache.generations = loadedItems.map(\.generation)
                     loadError = nil
+                    databaseUnavailable = false
                     isLoading = false
                     finishReload(wallStart: wallStart, interval: interval)
                 }
@@ -428,6 +432,7 @@ private extension HistoryView {
             } catch {
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
+                    databaseUnavailable = true
                     if hasExistingItems {
                         presentActionAlert(
                             title: "Couldn't refresh history",
@@ -521,8 +526,10 @@ private extension HistoryView {
         do {
             try DatabaseService.shared.deleteGeneration(id: id)
         } catch {
+            databaseUnavailable = true
             return .databaseFailure(error.localizedDescription)
         }
+        databaseUnavailable = false
 
         items.removeAll { $0.id == item.id }
         itemsRevision &+= 1
@@ -571,6 +578,7 @@ private extension HistoryView {
             } catch {
                 let message = error.localizedDescription
                 await MainActor.run {
+                    databaseUnavailable = true
                     presentActionAlert(
                         title: "Clear History Error",
                         message: "Failed to clear history: \(message)"
@@ -581,6 +589,7 @@ private extension HistoryView {
 
             let failures = fileFailures
             await MainActor.run {
+                databaseUnavailable = false
                 items = []
                 itemsRevision &+= 1
                 HistorySessionCache.generations = []
@@ -639,6 +648,7 @@ private struct HistoryRowActions: View {
     let audioFileExists: Bool
     let onSaveToSavedVoices: (() -> Void)?
     let onSaveAs: () -> Void
+    let allowsDeletion: Bool
     let onDelete: () -> Void
     let itemID: String
 
@@ -668,6 +678,8 @@ private struct HistoryRowActions: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
+            .disabled(!allowsDeletion)
+            .help(allowsDeletion ? "Delete generation" : "Reload History before deleting entries")
             .accessibilityIdentifier("historyRow_delete_\(itemID)")
         }
     }
@@ -678,6 +690,7 @@ private struct HistoryRow: View {
     let onPlay: () -> Void
     let onSaveToSavedVoices: (() -> Void)?
     let onSaveAs: () -> Void
+    let allowsDeletion: Bool
     let onDelete: () -> Void
 
     @State private var isHovered = false
@@ -729,6 +742,7 @@ private struct HistoryRow: View {
                 audioFileExists: item.audioFileExists,
                 onSaveToSavedVoices: onSaveToSavedVoices,
                 onSaveAs: onSaveAs,
+                allowsDeletion: allowsDeletion,
                 onDelete: onDelete,
                 itemID: item.id
             )
