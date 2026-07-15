@@ -216,7 +216,8 @@
         "source-provenance",
         "crash-baseline",
         "xcuitest",
-        "crash-delta"
+        "crash-delta",
+        "smoke-diagnostics"
       ],
       "optionalSteps": ["result-retention"]
     },
