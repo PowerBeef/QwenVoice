@@ -129,6 +129,136 @@ public enum GenerationSemantics {
         }
     }
 
+    /// Immutable installed-model identity that contributes learned weights to
+    /// a reusable clone prompt. This deliberately carries only privacy-safe
+    /// contract identifiers and the installed integrity-manifest digest; local
+    /// model paths never participate in prompt identity.
+    struct ClonePromptModelArtifactIdentity: Hashable, Sendable {
+        let repository: String
+        let revision: String
+        let artifactVersion: String
+        let integrityManifestDigest: String
+
+        init?(
+            repository: String?,
+            revision: String?,
+            artifactVersion: String?,
+            integrityManifestDigest: String?
+        ) {
+            let normalizedRepository = repository?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let normalizedRevision = revision?
+                .trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+            let normalizedArtifactVersion = artifactVersion?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let normalizedDigest = integrityManifestDigest?
+                .trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+            let lowercaseHex = CharacterSet(charactersIn: "0123456789abcdef")
+            guard !normalizedRepository.isEmpty,
+                  normalizedRevision.count == 40,
+                  normalizedRevision.unicodeScalars.allSatisfy(lowercaseHex.contains),
+                  !normalizedArtifactVersion.isEmpty,
+                  normalizedDigest.count == 64,
+                  normalizedDigest.unicodeScalars.allSatisfy(lowercaseHex.contains) else {
+                return nil
+            }
+            self.repository = normalizedRepository
+            self.revision = normalizedRevision
+            self.artifactVersion = normalizedArtifactVersion
+            self.integrityManifestDigest = normalizedDigest
+        }
+
+        init?(modelRuntimeIdentity: ModelRuntimeIdentity) {
+            self.init(
+                repository: modelRuntimeIdentity.modelRepository,
+                revision: modelRuntimeIdentity.huggingFaceRevision,
+                artifactVersion: modelRuntimeIdentity.artifactVersion,
+                integrityManifestDigest: modelRuntimeIdentity.integrityManifestDigest
+            )
+        }
+
+        var canonicalSerialization: String {
+            GenerationSemantics.canonicalIdentitySerialization(
+                namespace: "clone-prompt-model-artifact",
+                components: [
+                    repository,
+                    revision,
+                    artifactVersion,
+                    integrityManifestDigest,
+                ]
+            )
+        }
+    }
+
+    /// Complete semantic identity for a reusable clone prompt.
+    ///
+    /// A clone reference alone is not sufficient: the learned speaker
+    /// embedding also depends on the model runtime contract and the speaker
+    /// feature frontend that produced it. Persisted artifacts store
+    /// `runtimeContractSignature` in their existing runtime-profile metadata
+    /// field, while the actor-owned prompt LRU uses this whole value directly.
+    struct ClonePromptIdentity: Hashable, Sendable {
+        let referenceIdentity: CloneReferenceIdentity
+        let language: String
+        let modelArtifactIdentity: ClonePromptModelArtifactIdentity
+        let qwenRuntimeProfileSignature: String?
+        let speakerFeatureVersion: String
+
+        init(
+            referenceIdentity: CloneReferenceIdentity,
+            language: String?,
+            modelArtifactIdentity: ClonePromptModelArtifactIdentity,
+            qwenRuntimeProfileSignature: String?,
+            speakerFeatureVersion: String
+        ) {
+            self.referenceIdentity = referenceIdentity
+            self.modelArtifactIdentity = modelArtifactIdentity
+            let normalizedLanguage = (language ?? "auto")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            self.language = normalizedLanguage.isEmpty ? "auto" : normalizedLanguage
+            let normalizedRuntimeSignature = qwenRuntimeProfileSignature?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            self.qwenRuntimeProfileSignature = normalizedRuntimeSignature?.isEmpty == false
+                ? normalizedRuntimeSignature
+                : nil
+            self.speakerFeatureVersion = speakerFeatureVersion
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        var runtimeContractSerialization: String {
+            GenerationSemantics.canonicalIdentitySerialization(
+                namespace: "clone-prompt-runtime-contract",
+                components: [
+                    modelArtifactIdentity.canonicalSerialization,
+                    qwenRuntimeProfileSignature ?? "",
+                    speakerFeatureVersion,
+                ]
+            )
+        }
+
+        var runtimeContractSignature: String {
+            "qv-clone-prompt-runtime-v2-\(GenerationSemantics.canonicalIdentityDigest(runtimeContractSerialization))"
+        }
+
+        var canonicalSerialization: String {
+            GenerationSemantics.canonicalIdentitySerialization(
+                namespace: "clone-prompt",
+                components: [
+                    referenceIdentity.canonicalSerialization,
+                    language,
+                    runtimeContractSignature,
+                ]
+            )
+        }
+
+        var digest: String {
+            GenerationSemantics.canonicalIdentityDigest(canonicalSerialization)
+        }
+
+        var cacheKey: String { "qv-clone-prompt-v1-\(digest)" }
+    }
+
     /// Typed identity for the three semantically distinct prewarm scopes.
     public enum PrewarmIdentity: Hashable, Sendable {
         case model(modelID: String, mode: GenerationMode)

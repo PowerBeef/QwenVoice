@@ -133,15 +133,17 @@ Failed cells, missing typed telemetry/model identity, or a publication error lea
 registry unchanged; the untracked artifact directory retains the idempotent repair command.
 Passing the diagnostic cohort prints its verdict locally and intentionally creates no record.
 
-### Validation and diagnostic snapshot (through 2026-07-14)
+### Validation and diagnostic snapshot (through 2026-07-16)
 
 The table below is preserved as dated operational evidence; it is not the current acceptance
 state. Current PASS evidence must exist in `benchmarks/runs/language/` and appear in generated
 `benchmarks/HISTORY.md`, while the active resume status lives in
 [`../development-progress.md`](../development-progress.md). The current tracked registry contains
-a clean physical-iPhone quick PASS record covering the seven EN/FR cells, plus historical macOS
-hint-only records. Full Phase 3 multilingual acceptance still requires a clean 19-cell iPhone run
-with all 18 output-gated cells passing after the DE/ES/ZH/JA Speech-asset bootstrap.
+a clean physical-iPhone quick PASS record covering the seven EN/FR cells, historical macOS
+hint-only records, and the exploratory full PASS described below. Run
+`ios-speech-assets-20260716-164115-e8b16d82` resolved `de_DE`, `es_ES` (for requested `es_419`),
+`ja_JP`, and `zh_CN`; every DictationTranscriber asset and Vocello's legacy on-device recognition
+gate passed. That result establishes prerequisites only.
 
 | Run | Subset | Hint gate | Output gate | Notes |
 | --- | --- | --- | --- | --- |
@@ -152,6 +154,7 @@ with all 18 output-gated cells passing after the DE/ES/ZH/JA Speech-asset bootst
 | `ios-lang-cohort-20260714-143612-f5e99664` | bounded DE/ZH/JA diagnostic | **6/6 PASS** | **6/6 PASS** | Retry-free validator/corpus-v2 confirmation after adding CJK punctuation to the deterministic pause budget. Diagnostic only; no history record was published. |
 | `ios-lang-bench-20260714-145013-304721d6` | full | **19/19 PASS** | **13/18 FAIL** | Corpus-v2 evidence localized remaining fixed-seed failures to French Custom and all three German paths. No history record was published. |
 | `ios-lang-bench-20260714-153252-d2a3eea5` | full | **not evaluated** | **not evaluated** | Intentionally interrupted while take 7 was launching after six completed takes. No final gates or history record exist; this local partial run is not acceptance evidence. |
+| `ios-lang-bench-20260716-164248-1ecf8361` | full | **19/19 PASS** | **18/18 PASS** | Fresh physical-iPhone corpus-v2 acceptance with zero diagnostic failures and three-pass locale-locked ASR. `passedWithWarnings` for accepted Spanish Custom written-output/dropout evidence and soft memory trims; tracked as exploratory because the runtime worktree was dirty. |
 
 Negative control `custom-fr-text-en-pinned` is **hint-only** (`skipOutputVerification`) — pinned
 English hint is sent, but synthesis still speaks French for a French script today.
@@ -161,9 +164,10 @@ stricter validator correlation, and CJK-aware punctuation pause accounting addre
 exposed by the July 14 attempts. The bounded DE/ZH/JA cohort confirms those paths. Four subsequent
 retry-free cohorts exercised the revised French and German scripts at the exact normal-matrix seeds:
 French Custom pinned/Auto and Design all passed strict QC with zero WER, while German Custom
-pinned/Auto and Design passed strict QC at approximately 0.138 WER. Those six diagnostic takes do
-not replace a full run. The later partial full run was intentionally stopped and cannot be resumed
-or promoted, so the next acceptance attempt must start a fresh 19-cell run from a clean committed
+pinned/Auto and Design passed strict QC at approximately 0.138 WER. The later partial full run was
+intentionally stopped and cannot be resumed or promoted. The July 16 fresh full run reproduced
+those results inside the complete 19-cell matrix and passed every automated gate; because it was
+recorded from a dirty worktree, a future clean comparable baseline must start from a committed
 revision. A failed, incomplete, or diagnostic run correctly creates no tracked history and cannot
 be replaced by this dated table or a listening judgment.
 

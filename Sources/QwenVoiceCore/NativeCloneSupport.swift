@@ -120,8 +120,8 @@ actor NativePreparedCloneConditioningCache {
     private var normalizedReferenceLRUKeys: [NormalizedReferenceIdentity] = []
     private var decodedReferenceAudioCache: [DecodedReferenceIdentity: DecodedReferenceAudio] = [:]
     private var decodedReferenceAudioLRUKeys: [DecodedReferenceIdentity] = []
-    private var voiceClonePromptCache: [GenerationSemantics.CloneReferenceIdentity: CachedVoiceClonePrompt] = [:]
-    private var voiceClonePromptLRUKeys: [GenerationSemantics.CloneReferenceIdentity] = []
+    private var voiceClonePromptCache: [GenerationSemantics.ClonePromptIdentity: CachedVoiceClonePrompt] = [:]
+    private var voiceClonePromptLRUKeys: [GenerationSemantics.ClonePromptIdentity] = []
 
     init(capacity: Int = NativeMemoryPolicyResolver.cloneCacheCapacity()) {
         self.capacity = max(capacity, 0)
@@ -277,24 +277,38 @@ actor NativePreparedCloneConditioningCache {
         model: UnsafeSpeechGenerationModel,
         voicesDirectory: URL?,
         language: String? = nil,
-        qwenRuntimeProfileSignature: String? = nil
+        modelRuntimeIdentity: ModelRuntimeIdentity
     ) throws -> ResolvedCloneConditioning {
         guard model.supportsOptimizedVoiceClone,
               conditioning.voiceClonePrompt == nil else {
             return conditioning
         }
 
-        let cacheKey = conditioning.internalIdentity
         let conditioningMode = conditioning.conditioningMode.normalized
         let creationContract = NativeClonePromptCreationContract(
             conditioningMode: conditioningMode
+        )
+        guard let modelArtifactIdentity = GenerationSemantics.ClonePromptModelArtifactIdentity(
+            modelRuntimeIdentity: modelRuntimeIdentity
+        ) else {
+            throw MLXTTSEngineError.modelUnavailable(
+                "The selected model is missing immutable clone-prompt artifact provenance."
+            )
+        }
+        let promptIdentity = GenerationSemantics.ClonePromptIdentity(
+            referenceIdentity: conditioning.internalIdentity,
+            language: language,
+            modelArtifactIdentity: modelArtifactIdentity,
+            qwenRuntimeProfileSignature: modelRuntimeIdentity.runtimeProfileSignature,
+            speakerFeatureVersion: VocelloQwen3ClonePrompt.speakerFeatureVersion
         )
         let artifactMetadata = clonePromptArtifactMetadata(
             modelID: modelID,
             conditioning: conditioning,
             language: language,
             xVectorOnlyMode: creationContract.xVectorOnlyMode,
-            qwenRuntimeProfileSignature: qwenRuntimeProfileSignature
+            modelArtifactIdentity: modelArtifactIdentity,
+            clonePromptRuntimeSignature: promptIdentity.runtimeContractSignature
         )
         let artifactDirectory = clonePromptArtifactDirectory(
             voicesDirectory: voicesDirectory,
@@ -312,7 +326,7 @@ actor NativePreparedCloneConditioningCache {
                     from: artifactDirectory,
                     expectedMetadata: artifactMetadata
                 )
-                cacheVoiceClonePrompt(prompt, for: cacheKey)
+                cacheVoiceClonePrompt(prompt, for: promptIdentity)
                 return conditioning.withVoiceClonePrompt(
                     prompt,
                     cacheHit: true,
@@ -327,8 +341,8 @@ actor NativePreparedCloneConditioningCache {
             }
         }
 
-        if let cached = voiceClonePromptCache[cacheKey] {
-            touchVoiceClonePrompt(cacheKey)
+        if let cached = voiceClonePromptCache[promptIdentity] {
+            touchVoiceClonePrompt(promptIdentity)
             return conditioning.withVoiceClonePrompt(
                 cached.prompt,
                 cacheHit: true,
@@ -357,7 +371,7 @@ actor NativePreparedCloneConditioningCache {
         let promptWithMetadata = prompt.withArtifactMetadata(
             artifactMetadata.fillingCreatedAtIfNeeded()
         )
-        cacheVoiceClonePrompt(promptWithMetadata, for: cacheKey)
+        cacheVoiceClonePrompt(promptWithMetadata, for: promptIdentity)
         if let artifactDirectory {
             try writeVoiceClonePrompt(promptWithMetadata, to: artifactDirectory)
         }
@@ -520,7 +534,7 @@ actor NativePreparedCloneConditioningCache {
 
     private func cacheVoiceClonePrompt(
         _ prompt: VocelloQwen3ClonePrompt,
-        for key: GenerationSemantics.CloneReferenceIdentity
+        for key: GenerationSemantics.ClonePromptIdentity
     ) {
         voiceClonePromptCache[key] = CachedVoiceClonePrompt(prompt: prompt)
         touchVoiceClonePrompt(key)
@@ -535,7 +549,7 @@ actor NativePreparedCloneConditioningCache {
         }
     }
 
-    private func touchVoiceClonePrompt(_ key: GenerationSemantics.CloneReferenceIdentity) {
+    private func touchVoiceClonePrompt(_ key: GenerationSemantics.ClonePromptIdentity) {
         voiceClonePromptLRUKeys.removeAll { $0 == key }
         voiceClonePromptLRUKeys.append(key)
     }
@@ -842,17 +856,22 @@ actor NativePreparedCloneConditioningCache {
         conditioning: ResolvedCloneConditioning,
         language: String?,
         xVectorOnlyMode: Bool,
-        qwenRuntimeProfileSignature: String?
+        modelArtifactIdentity: GenerationSemantics.ClonePromptModelArtifactIdentity,
+        clonePromptRuntimeSignature: String
     ) -> VocelloQwen3CloneArtifactMetadata {
         let normalizedLanguage = Self.normalizedClonePromptLanguage(language)
         return VocelloQwen3CloneArtifactMetadata(
             modelID: modelID,
+            modelRepository: modelArtifactIdentity.repository,
+            modelRevision: modelArtifactIdentity.revision,
+            modelArtifactVersion: modelArtifactIdentity.artifactVersion,
+            modelIntegrityManifestDigest: modelArtifactIdentity.integrityManifestDigest,
             language: normalizedLanguage,
             sourceAudioFingerprint: conditioning.normalizedReference.fingerprint,
             transcriptHash: conditioning.resolvedTranscript.map(Self.sha256Hex(text:)),
             hasTranscript: conditioning.resolvedTranscript != nil,
             xVectorOnlyMode: xVectorOnlyMode,
-            runtimeProfileSignature: qwenRuntimeProfileSignature
+            runtimeProfileSignature: clonePromptRuntimeSignature
         )
     }
 

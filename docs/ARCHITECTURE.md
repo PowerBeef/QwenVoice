@@ -404,6 +404,13 @@ codes, and transcript identity; audio-only mode persists a genuine speaker-embed
 x-vector prompt. Those modes never share cache or artifact identity. Capacities per tier come
 from `NativeMemoryPolicyResolver.cloneCacheCapacity(...)`.
 
+Speaker embeddings use the official Qwen magnitude-mel contract, not the shared Whisper-style mel
+helper. The runtime validates finite canonical `float32 [1, D]` storage against the decoded speaker
+encoder and talker dimensions, then casts only the prefix slot to the talker's compute dtype. The
+prompt identity includes the model repository, pinned revision, artifact version, installed
+integrity-manifest digest, runtime-profile signature, and speaker-feature version. Changed weights
+or an algorithm change therefore cannot reuse an older in-memory or persisted embedding.
+
 ### 4.9 Cancellation
 
 `MLXTTSEngine` admits one model-mutating operation at a time and conforms to

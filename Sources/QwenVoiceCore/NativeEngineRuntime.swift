@@ -611,7 +611,7 @@ actor NativeEngineRuntime {
                 model: model,
                 voicesDirectory: voicesDirectory,
                 language: cloneLanguage,
-                qwenRuntimeProfileSignature: loadResult.stringFlags["qwen3_runtime_profile_signature"]
+                modelRuntimeIdentity: loadResult.modelRuntimeIdentity
             )
             cloneConditioning = conditioning
             mlxMemorySnapshots["after_clone_conditioning"] = NativeMemoryPolicyResolver.snapshot()
@@ -867,7 +867,7 @@ actor NativeEngineRuntime {
             model: model,
             voicesDirectory: voicesDirectory,
             language: cloneLanguage,
-            qwenRuntimeProfileSignature: loadResult.stringFlags["qwen3_runtime_profile_signature"]
+            modelRuntimeIdentity: loadResult.modelRuntimeIdentity
         )
         try ensureActiveClonePrimeToken(token)
 
@@ -940,7 +940,7 @@ actor NativeEngineRuntime {
                     ),
                     resolvedCloneTranscript: conditioning.resolvedTranscript
                 ),
-                qwenRuntimeProfileSignature: loadResult.stringFlags["qwen3_runtime_profile_signature"]
+                modelRuntimeIdentity: loadResult.modelRuntimeIdentity
             )
         } catch {
             return

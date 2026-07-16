@@ -142,10 +142,12 @@ contains a one-way digest rather than the leaf itself. Production and absolute d
 retain the historical bundle-scoped session identifier, so private paths cannot create arbitrary
 URLSession namespaces.
 
-That proof predates redirect-policy enforcement. The next explicitly requested isolated iPhone
-delivery proof must therefore confirm that the provider's live redirect chain remains within the
-declared `huggingface.co`/`hf.co` boundary. This deferred live check does not block deterministic
-development publication, and it must not be represented as passed from the earlier artifact.
+Post-policy physical-iPhone run `ios-xcui-model-download-20260716-163359-61377762` repeated the
+complete lifecycle. Expected and wire bytes both equaled 2,312,057,897, with zero retries or
+duplicate bytes, one accepted redirect per artifact inside the declared provider boundary, HTTP/3
+plus HTTP/1.1, nominal thermal state, final integrity, visible isolated cleanup, and canonical model
+state preserved. This single transfer remains lifecycle evidence rather than a concurrency tuning
+experiment. A comparable post-catalog macOS/CLI live proof remains outstanding and nonblocking.
 
 ## Tuning policy
 

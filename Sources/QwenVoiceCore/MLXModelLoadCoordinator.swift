@@ -6,6 +6,7 @@ import CryptoKit
 
 struct NativeModelLoadResult: Sendable {
     let model: UnsafeSpeechGenerationModel
+    let modelRuntimeIdentity: ModelRuntimeIdentity
     let didLoad: Bool
     let capabilityProfile: NativeLoadCapabilityProfile
     let qwen3Capabilities: Qwen3TTSModelCapabilities
@@ -199,6 +200,7 @@ actor MLXModelLoadCoordinator: MLXModelCoordinating {
     private(set) var loadedDescriptor: ModelAssetDescriptor?
     private(set) var loadedCapabilityProfile: NativeLoadCapabilityProfile?
     private(set) var loadedModel: UnsafeSpeechGenerationModel?
+    private(set) var loadedModelRuntimeIdentity: ModelRuntimeIdentity?
     private(set) var prewarmedIdentityKeys: Set<String> = []
 
     init(
@@ -227,21 +229,18 @@ actor MLXModelLoadCoordinator: MLXModelCoordinating {
            loadedDescriptor.id == id,
            let loadedCapabilityProfile,
            loadedCapabilityProfile.canServe(capabilityProfile),
-           let loadedModel {
+           let loadedModel,
+           let loadedModelRuntimeIdentity {
             return NativeModelLoadResult(
                 model: loadedModel,
+                modelRuntimeIdentity: loadedModelRuntimeIdentity,
                 didLoad: false,
                 capabilityProfile: loadedCapabilityProfile,
                 qwen3Capabilities: try Self.requiredQwen3Capabilities(for: loadedDescriptor),
                 timingsMS: [:],
                 booleanFlags: [:],
                 stringFlags: (preparedMetadataByDescriptorID[loadedDescriptor.id]?.qwenRuntimeProfile.diagnosticStringFlags() ?? [:])
-                    .merging(
-                        modelIdentityFlags(
-                            for: loadedDescriptor,
-                            runtimeProfile: preparedMetadataByDescriptorID[loadedDescriptor.id]?.qwenRuntimeProfile
-                        )
-                    ) { _, identity in identity }
+                    .merging(Self.modelIdentityFlags(for: loadedModelRuntimeIdentity)) { _, identity in identity }
             )
         }
 
@@ -252,6 +251,12 @@ actor MLXModelLoadCoordinator: MLXModelCoordinating {
                 "Model '\(descriptor.name)' is unavailable or incomplete."
             )
         }
+
+        let modelRuntimeIdentity = try makeModelRuntimeIdentity(
+            for: descriptor,
+            runtimeProfile: nil,
+            capabilityProfile: capabilityProfile
+        )
 
         let previousLoadedModelID = loadedDescriptor?.id
         if loadedDescriptor != nil {
@@ -345,9 +350,23 @@ actor MLXModelLoadCoordinator: MLXModelCoordinating {
         timingsMS["cache_prepare"] = cachePrepareMS
         timingsMS["mlx_model_load"] = modelLoadMS
 
+        let resolvedModelRuntimeIdentity = ModelRuntimeIdentity(
+            resolvedModelID: modelRuntimeIdentity.resolvedModelID,
+            modelVariant: modelRuntimeIdentity.modelVariant,
+            modelRepository: modelRuntimeIdentity.modelRepository,
+            huggingFaceRevision: modelRuntimeIdentity.huggingFaceRevision,
+            artifactVersion: modelRuntimeIdentity.artifactVersion,
+            quantization: Self.telemetryQuantization(
+                for: preparedCacheResult.metadata.qwenRuntimeProfile.quantizationTier
+            ),
+            integrityManifestDigest: modelRuntimeIdentity.integrityManifestDigest,
+            runtimeProfileSignature: preparedCacheResult.metadata.qwenRuntimeProfile.validationSignature,
+            nativeLoadCapabilityProfile: capabilityProfile.rawValue
+        )
         loadedDescriptor = descriptor
         loadedCapabilityProfile = capabilityProfile
         loadedModel = model
+        loadedModelRuntimeIdentity = resolvedModelRuntimeIdentity
         prewarmedIdentityKeys.removeAll()
         var booleanFlags = model.loadDiagnosticBooleanFlags
         booleanFlags["prepared_model_cache_hit"] = preparedCacheResult.reusedPreparedCache
@@ -391,18 +410,14 @@ actor MLXModelLoadCoordinator: MLXModelCoordinating {
 
         return NativeModelLoadResult(
             model: model,
+            modelRuntimeIdentity: resolvedModelRuntimeIdentity,
             didLoad: true,
             capabilityProfile: capabilityProfile,
             qwen3Capabilities: try Self.requiredQwen3Capabilities(for: descriptor),
             timingsMS: timingsMS,
             booleanFlags: booleanFlags,
             stringFlags: preparedCacheResult.metadata.qwenRuntimeProfile.diagnosticStringFlags()
-                .merging(
-                    modelIdentityFlags(
-                        for: descriptor,
-                        runtimeProfile: preparedCacheResult.metadata.qwenRuntimeProfile
-                    )
-                ) { _, identity in identity }
+                .merging(Self.modelIdentityFlags(for: resolvedModelRuntimeIdentity)) { _, identity in identity }
         )
     }
 
@@ -441,6 +456,7 @@ actor MLXModelLoadCoordinator: MLXModelCoordinating {
         loadedDescriptor = nil
         loadedCapabilityProfile = nil
         loadedModel = nil
+        loadedModelRuntimeIdentity = nil
         prewarmedIdentityKeys.removeAll()
         Memory.clearCache()
     }
@@ -452,37 +468,77 @@ actor MLXModelLoadCoordinator: MLXModelCoordinating {
         return descriptor
     }
 
-    /// Privacy-safe, typed-telemetry inputs for the exact resolved artifact.
-    /// Only stable contract identifiers and a digest of the integrity manifest
-    /// leave this coordinator; local model paths never do.
-    private func modelIdentityFlags(
+    /// Privacy-safe typed provenance for the exact installed artifact. Clone
+    /// prompt reuse consumes this same value as telemetry so the two contracts
+    /// cannot drift. Local model paths never leave this coordinator.
+    private func makeModelRuntimeIdentity(
         for descriptor: ModelAssetDescriptor,
-        runtimeProfile: Qwen3TTSRuntimeProfile?
-    ) -> [String: String] {
+        runtimeProfile: Qwen3TTSRuntimeProfile?,
+        capabilityProfile: NativeLoadCapabilityProfile
+    ) throws -> ModelRuntimeIdentity {
         let model = descriptor.model
-        let quantization = Self.telemetryQuantization(
-            for: runtimeProfile?.quantizationTier ?? .unknown
-        )
-        var flags = [
-            "model_identity_repository": model.huggingFaceRepo,
-            "model_identity_revision": model.huggingFaceRevision ?? "main",
-            "model_identity_artifact_version": model.artifactVersion,
-            "model_identity_quantization": quantization,
-        ]
-        if let variant = model.variants.first(where: {
+        guard let revision = model.huggingFaceRevision,
+              revision.count == 40,
+              !model.artifactVersion.isEmpty else {
+            throw MLXTTSEngineError.modelUnavailable(
+                "Model '\(descriptor.name)' is missing immutable artifact provenance."
+            )
+        }
+        let variant = model.variants.first(where: {
             $0.folder == model.folder
                 && $0.huggingFaceRepo == model.huggingFaceRepo
                 && $0.huggingFaceRevision == model.huggingFaceRevision
                 && $0.artifactVersion == model.artifactVersion
-        }) {
-            flags["model_identity_variant"] = variant.id
-        }
+        })
         let manifestURL = modelAssetStore.localRoot(for: descriptor)
             .appendingPathComponent(ModelAssetIntegrityManifest.filename, isDirectory: false)
-        if let data = try? Data(contentsOf: manifestURL, options: .mappedIfSafe) {
-            flags["model_identity_integrity_manifest_digest"] = SHA256.hash(data: data)
-                .map { String(format: "%02x", $0) }
-                .joined()
+        let data: Data
+        do {
+            data = try Data(contentsOf: manifestURL, options: .mappedIfSafe)
+        } catch {
+            throw MLXTTSEngineError.modelUnavailable(
+                "Model '\(descriptor.name)' is missing its installed integrity manifest."
+            )
+        }
+        let integrityManifestDigest = SHA256.hash(data: data)
+            .map { String(format: "%02x", $0) }
+            .joined()
+        return ModelRuntimeIdentity(
+            resolvedModelID: descriptor.id,
+            modelVariant: variant?.id,
+            modelRepository: model.huggingFaceRepo,
+            huggingFaceRevision: revision,
+            artifactVersion: model.artifactVersion,
+            quantization: Self.telemetryQuantization(
+                for: runtimeProfile?.quantizationTier ?? .unknown
+            ),
+            integrityManifestDigest: integrityManifestDigest,
+            runtimeProfileSignature: runtimeProfile?.validationSignature,
+            nativeLoadCapabilityProfile: capabilityProfile.rawValue
+        )
+    }
+
+    private static func modelIdentityFlags(
+        for identity: ModelRuntimeIdentity
+    ) -> [String: String] {
+        var flags: [String: String] = [:]
+        if let repository = identity.modelRepository {
+            flags["model_identity_repository"] = repository
+        }
+        if let revision = identity.huggingFaceRevision {
+            flags["model_identity_revision"] = revision
+        }
+        if let artifactVersion = identity.artifactVersion {
+            flags["model_identity_artifact_version"] = artifactVersion
+        }
+        if let quantization = identity.quantization {
+            flags["model_identity_quantization"] = quantization
+        }
+        if let variant = identity.modelVariant {
+            flags["model_identity_variant"] = variant
+        }
+        if let digest = identity.integrityManifestDigest {
+            flags["model_identity_integrity_manifest_digest"] = digest
         }
         return flags
     }

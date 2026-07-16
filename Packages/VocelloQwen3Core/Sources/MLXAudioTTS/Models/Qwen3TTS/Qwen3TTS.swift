@@ -523,9 +523,35 @@ private actor Qwen3TTSPreparedComponentCache {
     }
 }
 
+enum Qwen3TTSReferenceAudio {
+    /// Accepts only the three mono layouts used by the Qwen clone contract and
+    /// returns one canonical `[1, T]` batch. Never selects or truncates a batch
+    /// or channel implicitly.
+    static func canonicalMonoBatch(_ audio: MLXArray) throws -> MLXArray {
+        let shape = audio.shape
+        let canonical: MLXArray
+        if shape.count == 1, shape[0] > 0 {
+            canonical = audio.expandedDimensions(axis: 0)
+        } else if shape.count == 2, shape[0] == 1, shape[1] > 0 {
+            canonical = audio
+        } else if shape.count == 3, shape[0] == 1, shape[1] == 1, shape[2] > 0 {
+            canonical = audio.squeezed(axis: 1)
+        } else {
+            throw AudioGenerationError.invalidInput(
+                "Qwen speaker reference audio must be mono with shape [T], [1, T], or [1, 1, T]."
+            )
+        }
+        return canonical
+    }
+}
+
 public struct Qwen3TTSVoiceClonePrompt: @unchecked Sendable {
     public struct ArtifactMetadata: Codable, Hashable, Sendable {
         public let modelID: String?
+        public let modelRepository: String?
+        public let modelRevision: String?
+        public let modelArtifactVersion: String?
+        public let modelIntegrityManifestDigest: String?
         public let language: String?
         public let sourceAudioFingerprint: String?
         public let transcriptHash: String?
@@ -536,6 +562,10 @@ public struct Qwen3TTSVoiceClonePrompt: @unchecked Sendable {
 
         public init(
             modelID: String? = nil,
+            modelRepository: String? = nil,
+            modelRevision: String? = nil,
+            modelArtifactVersion: String? = nil,
+            modelIntegrityManifestDigest: String? = nil,
             language: String? = nil,
             sourceAudioFingerprint: String? = nil,
             transcriptHash: String? = nil,
@@ -545,6 +575,10 @@ public struct Qwen3TTSVoiceClonePrompt: @unchecked Sendable {
             createdAt: String? = nil
         ) {
             self.modelID = modelID
+            self.modelRepository = modelRepository
+            self.modelRevision = modelRevision
+            self.modelArtifactVersion = modelArtifactVersion
+            self.modelIntegrityManifestDigest = modelIntegrityManifestDigest
             self.language = language
             self.sourceAudioFingerprint = sourceAudioFingerprint
             self.transcriptHash = transcriptHash
@@ -556,6 +590,22 @@ public struct Qwen3TTSVoiceClonePrompt: @unchecked Sendable {
 
         public func matches(_ expected: ArtifactMetadata) -> Bool {
             if let expectedModelID = expected.modelID, modelID != expectedModelID { return false }
+            if let expectedRepository = expected.modelRepository,
+               modelRepository != expectedRepository {
+                return false
+            }
+            if let expectedRevision = expected.modelRevision,
+               modelRevision != expectedRevision {
+                return false
+            }
+            if let expectedArtifactVersion = expected.modelArtifactVersion,
+               modelArtifactVersion != expectedArtifactVersion {
+                return false
+            }
+            if let expectedManifestDigest = expected.modelIntegrityManifestDigest,
+               modelIntegrityManifestDigest != expectedManifestDigest {
+                return false
+            }
             if let expectedLanguage = expected.language, language != expectedLanguage { return false }
             if let expectedFingerprint = expected.sourceAudioFingerprint,
                sourceAudioFingerprint != expectedFingerprint {
@@ -584,6 +634,10 @@ public struct Qwen3TTSVoiceClonePrompt: @unchecked Sendable {
             guard createdAt == nil else { return self }
             return ArtifactMetadata(
                 modelID: modelID,
+                modelRepository: modelRepository,
+                modelRevision: modelRevision,
+                modelArtifactVersion: modelArtifactVersion,
+                modelIntegrityManifestDigest: modelIntegrityManifestDigest,
                 language: language,
                 sourceAudioFingerprint: sourceAudioFingerprint,
                 transcriptHash: transcriptHash,
@@ -597,6 +651,7 @@ public struct Qwen3TTSVoiceClonePrompt: @unchecked Sendable {
 
     public struct Manifest: Codable, Sendable {
         public let schemaVersion: Int
+        public let speakerFeatureVersion: String
         public let refText: String?
         public let xVectorOnlyMode: Bool
         public let iclMode: Bool
@@ -616,7 +671,10 @@ public struct Qwen3TTSVoiceClonePrompt: @unchecked Sendable {
         public let files: [String: ArtifactFileIntegrity]
     }
 
-    public static let schemaVersion = 2
+    /// Schema 3 makes the speaker-feature algorithm part of every persisted
+    /// artifact, including low-level loads without app-owned metadata.
+    public static let schemaVersion = 3
+    public static let speakerFeatureVersion = Qwen3TTSSpeakerMelFrontend.featureVersion
     public static let integritySchemaVersion = 1
     public static let integrityFilename = "integrity.json"
     public let refCodes: MLXArray?
@@ -657,9 +715,20 @@ public struct Qwen3TTSVoiceClonePrompt: @unchecked Sendable {
         let fileManager = FileManager.default
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
 
+        let validatedSpeakerEmbedding: MLXArray? = if let speakerEmbedding {
+            try Self.validateSpeakerEmbedding(
+                speakerEmbedding,
+                expectedDimension: speakerEmbedding.ndim == 2 ? speakerEmbedding.dim(1) : -1,
+                allowOfficialVectorShape: false
+            )
+        } else {
+            nil
+        }
+
         let metadata = (artifactMetadata ?? self.artifactMetadata)?.fillingCreatedAtIfNeeded()
         let manifest = Manifest(
             schemaVersion: Self.schemaVersion,
+            speakerFeatureVersion: Self.speakerFeatureVersion,
             refText: refText,
             xVectorOnlyMode: xVectorOnlyMode,
             iclMode: iclMode,
@@ -681,8 +750,8 @@ public struct Qwen3TTSVoiceClonePrompt: @unchecked Sendable {
             try fileManager.removeItem(at: refCodesURL)
         }
 
-        if let speakerEmbedding {
-            try MLX.save(arrays: ["speaker_embedding": speakerEmbedding], url: speakerEmbeddingURL)
+        if let validatedSpeakerEmbedding {
+            try MLX.save(arrays: ["speaker_embedding": validatedSpeakerEmbedding], url: speakerEmbeddingURL)
         } else if fileManager.fileExists(atPath: speakerEmbeddingURL.path) {
             try fileManager.removeItem(at: speakerEmbeddingURL)
         }
@@ -696,11 +765,11 @@ public struct Qwen3TTSVoiceClonePrompt: @unchecked Sendable {
                 array: refCodes
             )
         }
-        if let speakerEmbedding {
+        if let validatedSpeakerEmbedding {
             integrityFiles["speaker_embedding.safetensors"] = try Self.integrity(
                 for: speakerEmbeddingURL,
                 tensorKey: "speaker_embedding",
-                array: speakerEmbedding
+                array: validatedSpeakerEmbedding
             )
         }
         let integrityManifest = IntegrityManifest(
@@ -758,6 +827,11 @@ public struct Qwen3TTSVoiceClonePrompt: @unchecked Sendable {
                 "Unsupported Qwen3 clone prompt artifact version: \(manifest.schemaVersion)"
             )
         }
+        guard manifest.speakerFeatureVersion == speakerFeatureVersion else {
+            throw AudioGenerationError.modelNotInitialized(
+                "Qwen3 clone prompt speaker-feature version no longer matches the runtime."
+            )
+        }
         if let expectedMetadata,
            manifest.artifactMetadata?.matches(expectedMetadata) != true {
             throw AudioGenerationError.modelNotInitialized(
@@ -773,11 +847,20 @@ public struct Qwen3TTSVoiceClonePrompt: @unchecked Sendable {
             from: refCodesURL,
             expected: integrity.files["ref_codes.safetensors"]
         )
-        let speakerEmbedding = try Self.loadSingleArray(
+        let loadedSpeakerEmbedding = try Self.loadSingleArray(
             named: "speaker_embedding",
             from: speakerEmbeddingURL,
             expected: integrity.files["speaker_embedding.safetensors"]
         )
+        let speakerEmbedding: MLXArray? = if let loadedSpeakerEmbedding {
+            try Self.validateSpeakerEmbedding(
+                loadedSpeakerEmbedding,
+                expectedDimension: loadedSpeakerEmbedding.ndim == 2 ? loadedSpeakerEmbedding.dim(1) : -1,
+                allowOfficialVectorShape: false
+            )
+        } else {
+            nil
+        }
 
         if manifest.xVectorOnlyMode, speakerEmbedding == nil {
             throw AudioGenerationError.modelNotInitialized(
@@ -801,6 +884,43 @@ public struct Qwen3TTSVoiceClonePrompt: @unchecked Sendable {
             iclMode: manifest.iclMode,
             artifactMetadata: manifest.artifactMetadata
         )
+    }
+
+    static func validateSpeakerEmbedding(
+        _ embedding: MLXArray,
+        expectedDimension: Int,
+        allowOfficialVectorShape: Bool
+    ) throws -> MLXArray {
+        guard expectedDimension > 0 else {
+            throw AudioGenerationError.invalidInput(
+                "Qwen speaker embedding dimension must be positive."
+            )
+        }
+        guard embedding.dtype == .float32 else {
+            throw AudioGenerationError.invalidInput(
+                "Qwen speaker embedding must use float32 storage."
+            )
+        }
+
+        let canonical: MLXArray
+        if embedding.shape == [1, expectedDimension] {
+            canonical = embedding
+        } else if allowOfficialVectorShape, embedding.shape == [expectedDimension] {
+            canonical = embedding.reshaped(1, expectedDimension)
+        } else {
+            throw AudioGenerationError.invalidInput(
+                "Qwen speaker embedding must have shape [1, \(expectedDimension)]."
+            )
+        }
+
+        let allFinite = isFinite(canonical).all()
+        eval(canonical, allFinite)
+        guard allFinite.item(Bool.self) else {
+            throw AudioGenerationError.invalidInput(
+                "Qwen speaker embedding contains a non-finite value."
+            )
+        }
+        return canonical
     }
 
     private static func loadSingleArray(
@@ -1874,7 +1994,12 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             )
         }
 
-        let speakerEmbedding = extractSpeakerEmbedding(refAudio)
+        let speakerEmbedding = try extractSpeakerEmbedding(refAudio)
+        if xVectorOnlyMode, speakerEmbedding == nil {
+            throw AudioGenerationError.modelNotInitialized(
+                "Qwen3 x-vector clone prompt creation requires an initialized speaker encoder."
+            )
+        }
         let refCodes: MLXArray?
         if iclMode {
             guard let speechTokenizer, speechTokenizer.hasEncoder else {
@@ -1882,12 +2007,8 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
                     "Qwen3 clone prompt creation requires an initialized speech tokenizer encoder."
                 )
             }
-            var refAudioForEncoder = refAudio
-            if refAudio.ndim == 1 {
-                refAudioForEncoder = refAudio.reshaped(1, 1, refAudio.dim(0))
-            } else if refAudio.ndim == 2 {
-                refAudioForEncoder = refAudio.reshaped(1, refAudio.dim(0), refAudio.dim(1))
-            }
+            let monoBatch = try Qwen3TTSReferenceAudio.canonicalMonoBatch(refAudio)
+            let refAudioForEncoder = monoBatch.expandedDimensions(axis: 1)
             refCodes = try speechTokenizer.encode(refAudioForEncoder)
         } else {
             refCodes = nil
@@ -1959,7 +2080,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
            let refText,
            speechTokenizer.hasEncoder
         {
-            let speakerEmbedding = extractSpeakerEmbedding(refAudio)
+            let speakerEmbedding = try extractSpeakerEmbedding(refAudio)
             inputEmbedsInit = try prepareICLGenerationInputs(
                 text: text,
                 refAudio: refAudio,
@@ -2573,7 +2694,7 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         } else if let refAudio,
            let refText,
            speechTokenizer.hasEncoder {
-            let speakerEmbedding = extractSpeakerEmbedding(refAudio)
+            let speakerEmbedding = try extractSpeakerEmbedding(refAudio)
             let prepared = try prepareICLGenerationInputs(
                 text: text,
                 refAudio: refAudio,
@@ -3430,12 +3551,8 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         refCodes: MLXArray,
         targetTokenCount: Int
     ) {
-        var refAudioForEncoder = refAudio
-        if refAudio.ndim == 1 {
-            refAudioForEncoder = refAudio.reshaped(1, 1, refAudio.dim(0))
-        } else if refAudio.ndim == 2 {
-            refAudioForEncoder = refAudio.reshaped(1, refAudio.dim(0), refAudio.dim(1))
-        }
+        let monoBatch = try Qwen3TTSReferenceAudio.canonicalMonoBatch(refAudio)
+        let refAudioForEncoder = monoBatch.expandedDimensions(axis: 1)
         guard let speechTokenizer else {
             throw AudioGenerationError.modelNotInitialized("Speech tokenizer not loaded")
         }
@@ -3560,7 +3677,14 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
             MLXArray([Int32(talkerConfig.codecPadId), Int32(talkerConfig.codecBosId)]).reshaped(1, 2)
         )
         if let speakerEmbedding {
-            let speakerEmbed = speakerEmbedding.reshaped(1, 1, -1)
+            let canonicalSpeakerEmbedding = try Qwen3TTSVoiceClonePrompt.validateSpeakerEmbedding(
+                speakerEmbedding,
+                expectedDimension: talkerConfig.hiddenSize,
+                allowOfficialVectorShape: true
+            )
+            let speakerEmbed = canonicalSpeakerEmbedding
+                .asType(codecPrefixEmbed.dtype)
+                .reshaped(1, 1, talkerConfig.hiddenSize)
             codecPrefixEmbed = concatenated([codecPrefixEmbed, speakerEmbed, codecPrefixSuffix], axis: 1)
         } else {
             codecPrefixEmbed = concatenated([codecPrefixEmbed, codecPrefixSuffix], axis: 1)
@@ -3697,18 +3821,24 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         let codecPrefixSuffix = talker.getInputEmbeddings()(
             MLXArray([Int32(talkerConfig.codecPadId), Int32(talkerConfig.codecBosId)]).reshaped(1, 2)
         )
-        let reshapedSpeakerEmbedding: MLXArray
-        if speakerEmbedding.ndim == 1 {
-            reshapedSpeakerEmbedding = speakerEmbedding.reshaped(1, 1, speakerEmbedding.dim(0))
-        } else if speakerEmbedding.ndim == 2 {
-            reshapedSpeakerEmbedding = speakerEmbedding.reshaped(1, speakerEmbedding.dim(0), speakerEmbedding.dim(1))
-        } else {
-            reshapedSpeakerEmbedding = speakerEmbedding
-        }
-        codecPrefixEmbed = concatenated([codecPrefixEmbed, reshapedSpeakerEmbedding, codecPrefixSuffix], axis: 1)
+        let canonicalSpeakerEmbedding = try Qwen3TTSVoiceClonePrompt.validateSpeakerEmbedding(
+            speakerEmbedding,
+            expectedDimension: talkerConfig.hiddenSize,
+            allowOfficialVectorShape: true
+        )
+        let speakerSlot = canonicalSpeakerEmbedding
+            .asType(codecPrefixEmbed.dtype)
+            .reshaped(1, 1, talkerConfig.hiddenSize)
+        codecPrefixEmbed = concatenated([codecPrefixEmbed, speakerSlot, codecPrefixSuffix], axis: 1)
 
         let assistantPrefix = "<|im_start|>assistant\n"
-        let assistantPrefixIDs = MLXArray(tokenizer.encode(text: assistantPrefix).map(Int32.init)).reshaped(1, -1)
+        let assistantTokens = tokenizer.encode(text: assistantPrefix)
+        guard assistantTokens.count == 3 else {
+            throw AudioGenerationError.modelNotInitialized(
+                "Qwen assistant prefix tokenization no longer matches the pinned three-token contract."
+            )
+        }
+        let assistantPrefixIDs = MLXArray(assistantTokens.map(Int32.init)).reshaped(1, -1)
         let roleEmbed = talker.textProjection(talker.getTextEmbeddings()(assistantPrefixIDs))
 
         let padCount = codecPrefixEmbed.dim(1) - 2
@@ -3727,48 +3857,31 @@ public final class Qwen3TTSModel: Module, SpeechGenerationModel, Qwen3OptimizedS
         return (prefix, false)
     }
 
-    func extractSpeakerEmbedding(_ refAudio: MLXArray) -> MLXArray? {
+    func extractSpeakerEmbedding(_ refAudio: MLXArray) throws -> MLXArray? {
         guard let speakerEncoder else { return nil }
 
-        let rawAudio: MLXArray
-        if refAudio.ndim == 1 {
-            rawAudio = refAudio.reshaped(1, refAudio.dim(0))
-        } else if refAudio.ndim == 2 {
-            if refAudio.dim(0) == 1 {
-                rawAudio = refAudio
-            } else {
-                rawAudio = refAudio[0 ..< 1]
-            }
-        } else if refAudio.ndim == 3, refAudio.dim(1) == 1 {
-            let squeezed = refAudio[0..., 0...]
-            if squeezed.dim(0) == 1 {
-                rawAudio = squeezed
-            } else {
-                rawAudio = squeezed[0 ..< 1]
-            }
-        } else {
-            return nil
-        }
+        let rawAudio = try Qwen3TTSReferenceAudio.canonicalMonoBatch(refAudio)
 
-        let batchSize = rawAudio.dim(0)
-        var mels = [MLXArray]()
-        mels.reserveCapacity(batchSize)
-
-        for batch in 0 ..< batchSize {
-            let waveform = rawAudio[batch]
-            let mel = computeMelSpectrogram(
-                audio: waveform,
-                sampleRate: speakerEncoder.config.sampleRate,
-                nFft: 1024,
-                hopLength: 256,
-                nMels: 128
+        guard speakerEncoder.config.sampleRate == Qwen3TTSSpeakerMelFrontend.sampleRate,
+              speakerEncoder.config.melDim == Qwen3TTSSpeakerMelFrontend.melBinCount else {
+            throw AudioGenerationError.modelNotInitialized(
+                "Qwen speaker encoder configuration does not match the owned speaker-feature frontend."
             )
-            mels.append(mel)
+        }
+        if let talkerConfig = config.talkerConfig,
+           speakerEncoder.config.encDim != talkerConfig.hiddenSize {
+            throw AudioGenerationError.modelNotInitialized(
+                "Qwen speaker embedding dimension does not match the talker hidden size."
+            )
         }
 
-        let stackedMels = stacked(mels, axis: 0)
-        let embedding = speakerEncoder(stackedMels)
-        return embedding
+        let features = try Qwen3TTSSpeakerMelFrontend()(rawAudio)
+        let embedding = speakerEncoder(features).asType(.float32)
+        return try Qwen3TTSVoiceClonePrompt.validateSpeakerEmbedding(
+            embedding,
+            expectedDimension: speakerEncoder.config.encDim,
+            allowOfficialVectorShape: true
+        )
     }
 
     func prepareGenerationInputs(

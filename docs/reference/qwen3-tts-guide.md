@@ -242,6 +242,10 @@ This is the recommended way to create a reusable, styled character voice:
 3. Use the Base model's `generate_voice_clone(voice_clone_prompt=...)` for all subsequent lines.
 
 Vocello caches the resulting clone prompt on disk and in memory to avoid recomputing it for every generation.
+The speaker encoder uses Qwen's own 24 kHz magnitude-mel frontend rather than the generic
+Whisper-style mel helper: reflect padding, periodic Hann, 1024-point FFT, 256-sample hop, 128
+Slaney-scale/Slaney-normalized bands, and natural-log scaling. Embeddings must be finite
+`float32 [1, D]` tensors matching the decoded encoder and talker dimensions.
 
 For a focused physical-device semantic check, `scripts/ios_device.sh clone-conditioning` runs the
 canonical saved reference twice in one process: first with its explicit transcript and prepared
@@ -372,7 +376,9 @@ Implemented in `Sources/QwenVoiceCore/NativeCloneSupport.swift`.
      produces a speaker-embedding-only prompt.
    - Priming and direct generation consume the same typed prompt. The prompt is cached in memory
      and persisted under `voicesDirectory`, keyed by model ID, reference fingerprint,
-     conditioning mode, language, and transcript hash when present.
+     conditioning mode, language, transcript hash when present, pinned model revision, artifact
+     version, installed integrity-manifest digest, runtime profile, and speaker-feature algorithm
+     version. Changed weights or a frontend/runtime change invalidates both cache tiers.
    - Re-use the same prompt across multiple generations to avoid recomputing speaker features.
 
 ---

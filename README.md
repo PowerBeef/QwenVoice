@@ -94,7 +94,7 @@ Storage locations and deletion behavior are documented in [`docs/reference/priva
 
 | | |
 | --- | --- |
-| ![Vocello Studio running on iPhone](docs/screenshots/vocello-ios-studio.png) | The iPhone app uses the same local Qwen3-TTS and MLX foundation with an iPhone-specific in-process runtime. It provides Custom Voice, Voice Design, Voice Cloning, recording and Files import, local history, and the memory-conscious Speed models. On-device generation, physical-iPhone XCUITest, and an optional signed archive/TestFlight lane are implemented. Public distribution still requires the maintainer-owned App Store Connect release process. The fresh full multilingual physical-iPhone acceptance run remains an engineering checkpoint, not a claim that blocks ordinary development or packaging. |
+| ![Vocello Studio running on iPhone](docs/screenshots/vocello-ios-studio.png) | The iPhone app uses the same local Qwen3-TTS and MLX foundation with an iPhone-specific in-process runtime. It provides Custom Voice, Voice Design, Voice Cloning, recording and Files import, local history, and the memory-conscious Speed models. On-device generation, physical-iPhone XCUITest, and an optional signed archive/TestFlight lane are implemented. A fresh full multilingual physical-iPhone run passed all 19 hint/QC and 18 output gates with policy-accepted warnings; its exploratory record is excluded from clean performance trends. Public distribution still requires the maintainer-owned App Store Connect release process. |
 
 Current implementation and acceptance status: [`docs/development-progress.md`](docs/development-progress.md).
 

@@ -148,6 +148,27 @@
       "removalCriteria": "Remove only after a compatible upstream format supports atomic persistence and strict integrity."
     },
     {
+      "id": "CLONE-002",
+      "title": "Official Qwen speaker-feature frontend, mono-audio, and artifact-version contract",
+      "category": "clone-conditioning",
+      "state": "active",
+      "files": [
+        "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
+        "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSSpeakerMelFrontend.swift",
+        "Sources/VocelloQwen3Core/LoadedModel.swift"
+      ],
+      "tests": [
+        "Tests/Qwen3RuntimeTests/Qwen3CloneArtifactIntegrityTests.swift",
+        "Tests/Qwen3RuntimeTests/Qwen3SpeakerMelFrontendTests.swift"
+      ],
+      "documentation": ["CLONE_ARTIFACT_FORMAT.md", "PERFORMANCE.md"],
+      "evidenceClass": "diagnostic",
+      "benchmarkRecordIDs": [],
+      "upstreamDisposition": "upstreamable",
+      "upstreamEquivalentCommit": null,
+      "removalCriteria": "Remove only after the runtime dependency provides numerically equivalent official Qwen speaker features, strict mono reference-audio normalization, validated embeddings, and version-bound artifact invalidation."
+    },
+    {
       "id": "CONC-001",
       "title": "Single-owner generation gate and cancellation transfer",
       "category": "concurrency",

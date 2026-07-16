@@ -19,6 +19,21 @@ unified-memory peaks.
 Cold-load evidence must include the model-loading lifecycle boundaries. A warm generation is not
 evidence that the loader or prepared-state trust path is correct.
 
+## Clone conditioning
+
+The speaker encoder does not consume the generic Whisper-style mel helper. Clone conditioning uses
+the official Qwen frontend contract: reflect padding, a periodic Hann window, magnitude STFT,
+Slaney mel scale and normalization, and natural-log features. Extracted embeddings are materialized,
+validated as finite `float32 [1, D]`, and bound to the decoded encoder/talker dimension before they
+enter either transcript-backed or x-vector-only generation. They are cast to the talker compute
+dtype only at prefix construction.
+
+The prompt identity includes the model repository, pinned revision, artifact version, installed
+integrity-manifest digest, runtime topology, and speaker-feature algorithm version. Changed weights,
+frontend code, or runtime profile therefore cannot hit an older in-memory entry or persisted clone
+artifact. This is especially important for x-vector-only mode because no reference acoustic codes
+can compensate for a malformed speaker embedding.
+
 ## Sampling and the hot loop
 
 The talker uses the official effective generation parameters. The subtalker/Code Predictor

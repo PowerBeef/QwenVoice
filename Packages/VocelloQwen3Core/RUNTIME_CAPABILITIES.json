@@ -73,13 +73,19 @@
     },
     {
       "id": "clone-artifacts",
-      "title": "Verified persistent clone conditioning artifacts",
+      "title": "Official mono speaker conditioning and version-bound verified clone artifacts",
       "state": "production",
-      "sourcePatterns": ["Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift"],
-      "testPatterns": ["Tests/Qwen3RuntimeTests/Qwen3CloneArtifactIntegrityTests.swift"],
-      "documentation": ["CLONE_ARTIFACT_FORMAT.md"],
-      "evidenceClass": "static",
-      "upstreamDeltaIDs": ["CLONE-001"]
+      "sourcePatterns": [
+        "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
+        "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSSpeakerMelFrontend.swift"
+      ],
+      "testPatterns": [
+        "Tests/Qwen3RuntimeTests/Qwen3CloneArtifactIntegrityTests.swift",
+        "Tests/Qwen3RuntimeTests/Qwen3SpeakerMelFrontendTests.swift"
+      ],
+      "documentation": ["CLONE_ARTIFACT_FORMAT.md", "PERFORMANCE.md"],
+      "evidenceClass": "diagnostic",
+      "upstreamDeltaIDs": ["CLONE-001", "CLONE-002"]
     },
     {
       "id": "runtime-tests",

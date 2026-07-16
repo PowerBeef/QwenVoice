@@ -19,7 +19,11 @@
   one-shot critical-memory diagnostic, requires typed `memory_pressure` cancellation to complete
   before `fullUnload`, and proves the same engine surface can complete a subsequent generation.
   Pulled run-scoped diagnostics own the pressure-event ordering verdict; unknown toggle values fail
-  closed and are never tapped. The first fresh PASS for this expanded smoke contract remains pending.
+  closed and are never tapped. Physical-iPhone run
+  `ios-xcui-smoke-20260716-172350-2c6828e1` passed the expanded contract: the visible user
+  cancellation and typed critical-memory cancellation both terminated without entering History,
+  `fullUnload` followed the pressure cancellation, and the same engine completed and persisted the
+  recovery generation.
 - Generation ownership is now explicit across all hosts. Both platform streams are bounded
   (`bufferingNewest(256)` on macOS, `bufferingNewest(96)` on iOS) and every yield outcome is
   measured. `ActiveGenerationCoordinator` admits one active task, carries typed user,
@@ -42,8 +46,10 @@
   clone takes in one physical-iPhone app/engine process: the canonical transcript-backed saved
   voice followed by an exact sidecar-free audio copy using genuine x-vector-only conditioning. It
   validates distinct prompt identities, typed runtime flags, output/ASR, telemetry-v8 memory, app
-  correlation, crash delta, and scratch cleanup, then writes local evidence only. The first fresh
-  on-device PASS for the current overhaul remains pending.
+  correlation, crash delta, and scratch cleanup, then writes local evidence only. Local run
+  `ios-clone-conditioning-20260716-162518-ea8e8989` passed both conditioning modes with strict
+  output/ASR, memory, correlation, crash, and cleanup checks. It intentionally published no
+  benchmark-history record.
 - No preview/browser-mirror route, invisible accessibility state marker, alternate UI driver,
   coordinate bridge, or hidden UI bootstrap belongs in the shippable app.
 - Model delivery uses one shared integrity/atomic-install implementation. iPhone now owns one
@@ -56,8 +62,10 @@
   temporary 2.31 GB install, while the physical-iPhone test preserved monotonic progress across
   backgrounding, termination, and relaunch, installed with exact wire bytes and no retry, then
   deleted the isolated model through visible Settings. No connection or chunking default changed.
-  That proof predates the current redirect-policy enforcement and cannot be reused as live evidence
-  for the new redirect boundary.
+  Post-policy run `ios-xcui-model-download-20260716-163359-61377762` refreshed the physical-iPhone
+  proof: expected and wire bytes both equaled 2,312,057,897, with zero retries or duplicates, one
+  accepted provider redirect, HTTP/3 plus HTTP/1.1, nominal thermal state, final integrity, visible
+  isolated cleanup, and all canonical model states preserved.
 - iOS model cancellation now treats its ledger writes as authorization barriers. The coordinator
   durably records cancel intent and the deleted tombstone before task/staging destruction or a
   deleted UI state; a storage failure preserves recoverable state and cannot become a queued request
@@ -66,8 +74,8 @@
   artifacts, with exact pinned revisions, sizes, and per-file SHA-256 identities. macOS and CLI now
   use the bundled fail-closed `downloadFiles` route instead of live repository enumeration; iOS
   retains its one-session background lifecycle over the same exact artifact contract. Static
-  validation passes, while fresh isolated Mac/iPhone post-cutover delivery evidence remains an
-  explicit deferred quality task.
+  validation and fresh isolated iPhone post-cutover evidence pass. A comparable isolated macOS/CLI
+  post-cutover proof remains an explicit deferred quality task.
 - Benchmark evidence now uses collision-resistant run IDs, atomic run-scoped manifests, and a
   privacy-safe PASS-only registry. `benchmarks/HISTORY.md` is generated from canonical JSON records;
   raw telemetry, audio, screenshots, traces, and `.xcresult` bundles remain untracked.
@@ -190,9 +198,11 @@ explicit macOS fixture repair/bootstrap step.
   signed-artifact verification, and release evidence. Public iOS distribution still requires
   maintainer-owned distribution credentials, the App Store Connect record and metadata, screenshots,
   and submission.
-- The 2026-07-14 attended Speech-asset bootstrap resolved and installed the supported DE/ES/JA/ZH
-  DictationTranscriber modules, and fresh `SFSpeechRecognizer` instances passed Vocello's legacy
-  on-device gate. The clean seven-cell EN/FR quick language record is tracked. The first post-asset
+- The 2026-07-16 Speech-asset verification resolved the requested locales to installed `de_DE`,
+  `es_ES` (for `es_419`), `ja_JP`, and `zh_CN` DictationTranscriber modules; fresh
+  `SFSpeechRecognizer` instances also passed Vocello's legacy on-device gate. This is prerequisite
+  evidence, not a language-generation verdict. The clean seven-cell EN/FR quick language record is
+  tracked. The first post-asset
   full attempt passed the 19/19 hint gate but failed the output gate; it correctly published no
   history. That run exposed an out-of-range language-score producer bug plus genuine accuracy
   failures under the original short corpus. The strict validator, version-2 corpus/matrix, and
@@ -204,9 +214,13 @@ explicit macOS fixture repair/bootstrap step.
   retry-free exact-canonical-seed cohorts with strict QC and all 6/6 output checks. The subsequent
   full run `ios-lang-bench-20260714-153252-d2a3eea5` was intentionally interrupted while take 7
   was launching after six takes had completed. It produced no final hint/output gates and no
-  history record, so it is non-authoritative local evidence and must not be resumed or published.
-  A future session must start a fresh 19-cell, 18-output physical-iPhone acceptance run from the
-  committed corpus at or after checkpoint `eaf9d751`.
+  history record, so it remains non-authoritative local evidence and must not be resumed or
+  published. Fresh run `ios-lang-bench-20260716-164248-1ecf8361` then completed the immutable full
+  plan with 19/19 hint/QC rows, 18/18 output-gated rows, zero diagnostic failures, and three-pass
+  locale-locked on-device ASR. Its status is `passedWithWarnings` for the accepted Spanish Custom
+  written-output/dropout warning and soft memory trims. It is tracked as `exploratory` because the
+  owned-runtime worktree was dirty; it proves the exact recorded fingerprint but is excluded from
+  clean comparison trends.
 - Clean canonical macOS and iPhone schema-v2 UI baselines are complete. Rerun either canonical
   matrix after a relevant engine, model, compiler, toolchain, or performance change rather than for
   documentation-only revisions. Explicit quality runs remain independent from ordinary publishing
@@ -216,11 +230,12 @@ explicit macOS fixture repair/bootstrap step.
   to their exact source, toolchain, model, and hardware identities; new product changes require
   proportionate fresh evidence rather than reuse of local raw artifacts.
 - The records above remain valid for their recorded commits; they do not prove the current runtime
-  overhaul. Fresh physical-iPhone/live-model evidence remains deferred for typed cancellation
-  (including memory-pressure cancellation), the new two-take clone-conditioning acceptance lane,
-  the redirect-enforced model route after catalog completion, and the fresh full 19-cell language
-  run. These explicit quality tasks remain nonblocking for deterministic source publication,
-  packaging, and release artifact preservation.
+  overhaul. Fresh physical-iPhone/live-model evidence now passes for typed user and memory-pressure
+  cancellation, the two-take Clone proof, redirect-enforced isolated iPhone delivery, Speech
+  prerequisites, and the full 19-cell language run, each bound to its recorded worktree
+  fingerprint. Comparable post-catalog macOS/CLI delivery evidence remains deferred. These explicit
+  quality tasks remain nonblocking for deterministic source publication, packaging, and release
+  artifact preservation.
 
 ## Resume rule
 

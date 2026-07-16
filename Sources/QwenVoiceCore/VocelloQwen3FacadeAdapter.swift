@@ -28,7 +28,7 @@ extension ModelAssetDescriptor {
                 modelID: model.id,
                 repositoryID: model.huggingFaceRepo,
                 revision: model.huggingFaceRevision ?? "main",
-                artifactVersion: version
+                artifactVersion: model.artifactVersion
             ),
             preparedDirectory: directory,
             modelType: modelType,

@@ -64,6 +64,37 @@
       "remaining": []
     },
     {
+      "id": "SPEAKER",
+      "runtimeCapabilityID": "clone-artifacts",
+      "title": "Official Qwen speaker-feature parity and finite canonical embeddings",
+      "source": "Packages/VocelloQwen3Core/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSSpeakerMelFrontend.swift",
+      "tests": [
+        "Qwen3RuntimeTests/Qwen3SpeakerMelFrontendTests/testContractConstantsMatchQwenSpeakerFrontend",
+        "Qwen3RuntimeTests/Qwen3SpeakerMelFrontendTests/testPeriodicHannWindowUsesQwenConvention",
+        "Qwen3RuntimeTests/Qwen3SpeakerMelFrontendTests/testDeterministicBatchProducesFiniteTimeMajorFeatures",
+        "Qwen3RuntimeTests/Qwen3SpeakerMelFrontendTests/testInvalidShapesAndShortAudioFailWithoutTrapping",
+        "Qwen3RuntimeTests/Qwen3SpeakerMelFrontendTests/testSpeakerEmbeddingValidationCanonicalizesOfficialVectorShape",
+        "Qwen3RuntimeTests/Qwen3SpeakerMelFrontendTests/testSpeakerEmbeddingValidationRejectsMalformedValues"
+      ],
+      "status": "implemented",
+      "remaining": []
+    },
+    {
+      "id": "CLONE-ID",
+      "title": "Clone prompt memory and disk identities include model-artifact, runtime, and speaker-feature contracts",
+      "source": "Sources/QwenVoiceCore/NativeCloneSupport.swift",
+      "tests": [
+        "VocelloCoreTests/CloneConditioningContractTests/testClonePromptIdentityInvalidatesForSpeakerFrontendAndRuntimeChanges",
+        "VocelloCoreTests/CloneConditioningContractTests/testClonePromptIdentityInvalidatesForEachModelArtifactField",
+        "VocelloCoreTests/CloneConditioningContractTests/testClonePromptModelArtifactIdentityFailsClosedWithoutImmutableFields",
+        "VocelloCoreTests/CloneConditioningContractTests/testClonePromptIdentityNormalizesLanguageAndEmptyRuntimeSignature",
+        "VocelloCoreTests/CloneConditioningContractTests/testClonePromptIdentityIncludesLanguage",
+        "Qwen3RuntimeTests/Qwen3CloneArtifactIntegrityTests/testExpectedModelArtifactIdentityRejectsEachChangedField"
+      ],
+      "status": "implemented",
+      "remaining": []
+    },
+    {
       "id": "M3",
       "title": "Typed telemetry v8 memory evidence, legacy compatibility, privacy, disabled work, and measured overhead",
       "source": "Sources/QwenVoiceCore/GenerationTelemetryRecord.swift",

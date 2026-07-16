@@ -163,6 +163,10 @@ public struct VocelloQwen3GenerationCompletion: Sendable {
 
 public struct VocelloQwen3CloneArtifactMetadata: Codable, Hashable, Sendable {
     public let modelID: String?
+    public let modelRepository: String?
+    public let modelRevision: String?
+    public let modelArtifactVersion: String?
+    public let modelIntegrityManifestDigest: String?
     public let language: String?
     public let sourceAudioFingerprint: String?
     public let transcriptHash: String?
@@ -173,6 +177,10 @@ public struct VocelloQwen3CloneArtifactMetadata: Codable, Hashable, Sendable {
 
     public init(
         modelID: String? = nil,
+        modelRepository: String? = nil,
+        modelRevision: String? = nil,
+        modelArtifactVersion: String? = nil,
+        modelIntegrityManifestDigest: String? = nil,
         language: String? = nil,
         sourceAudioFingerprint: String? = nil,
         transcriptHash: String? = nil,
@@ -182,6 +190,10 @@ public struct VocelloQwen3CloneArtifactMetadata: Codable, Hashable, Sendable {
         createdAt: String? = nil
     ) {
         self.modelID = modelID
+        self.modelRepository = modelRepository
+        self.modelRevision = modelRevision
+        self.modelArtifactVersion = modelArtifactVersion
+        self.modelIntegrityManifestDigest = modelIntegrityManifestDigest
         self.language = language
         self.sourceAudioFingerprint = sourceAudioFingerprint
         self.transcriptHash = transcriptHash
@@ -195,6 +207,10 @@ public struct VocelloQwen3CloneArtifactMetadata: Codable, Hashable, Sendable {
         guard createdAt == nil else { return self }
         return Self(
             modelID: modelID,
+            modelRepository: modelRepository,
+            modelRevision: modelRevision,
+            modelArtifactVersion: modelArtifactVersion,
+            modelIntegrityManifestDigest: modelIntegrityManifestDigest,
             language: language,
             sourceAudioFingerprint: sourceAudioFingerprint,
             transcriptHash: transcriptHash,
@@ -208,6 +224,10 @@ public struct VocelloQwen3CloneArtifactMetadata: Codable, Hashable, Sendable {
     fileprivate var compatibilityValue: Qwen3TTSVoiceClonePrompt.ArtifactMetadata {
         Qwen3TTSVoiceClonePrompt.ArtifactMetadata(
             modelID: modelID,
+            modelRepository: modelRepository,
+            modelRevision: modelRevision,
+            modelArtifactVersion: modelArtifactVersion,
+            modelIntegrityManifestDigest: modelIntegrityManifestDigest,
             language: language,
             sourceAudioFingerprint: sourceAudioFingerprint,
             transcriptHash: transcriptHash,
@@ -221,6 +241,10 @@ public struct VocelloQwen3CloneArtifactMetadata: Codable, Hashable, Sendable {
     fileprivate init(_ value: Qwen3TTSVoiceClonePrompt.ArtifactMetadata) {
         self.init(
             modelID: value.modelID,
+            modelRepository: value.modelRepository,
+            modelRevision: value.modelRevision,
+            modelArtifactVersion: value.modelArtifactVersion,
+            modelIntegrityManifestDigest: value.modelIntegrityManifestDigest,
             language: value.language,
             sourceAudioFingerprint: value.sourceAudioFingerprint,
             transcriptHash: value.transcriptHash,
@@ -235,6 +259,10 @@ public struct VocelloQwen3CloneArtifactMetadata: Codable, Hashable, Sendable {
 /// Opaque clone conditioning. Tensor layout and the legacy artifact reader are
 /// kept inside the owned package so product targets never depend on them.
 public struct VocelloQwen3ClonePrompt: @unchecked Sendable {
+    public static var speakerFeatureVersion: String {
+        Qwen3TTSVoiceClonePrompt.speakerFeatureVersion
+    }
+
     fileprivate let compatibilityValue: Qwen3TTSVoiceClonePrompt
 
     public var referenceText: String? { compatibilityValue.refText }

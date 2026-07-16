@@ -268,7 +268,7 @@
     },
     {
       "path": "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift",
-      "sha256": "4ad6735feddb7c43ab162d6894544ce97f0eda094c73ff159f6bb28413503c0d",
+      "sha256": "834ffd758429a9727ec7c64429ea2260083070ac27cd69bbd5190b60fe89171e",
       "upstreamStatus": "modified"
     },
     {
@@ -285,6 +285,11 @@
       "path": "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSSpeakerEncoder.swift",
       "sha256": "3d98586ab5349240768bc6c3b844a0e3042aa682d29076fd815bdc4ba5798284",
       "upstreamStatus": "identical"
+    },
+    {
+      "path": "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSSpeakerMelFrontend.swift",
+      "sha256": "63295b007f55277f64ea9cb8597febb0ab27d1b34ba9680be86650f6d6b25cec",
+      "upstreamStatus": "added"
     },
     {
       "path": "Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTSSpeechTokenizer.swift",
@@ -333,7 +338,7 @@
     },
     {
       "path": "Sources/VocelloQwen3Core/LoadedModel.swift",
-      "sha256": "a09e338dfb6735ff1f6655752f5572e4277379a0bf3605b65c4bdd702a33de44",
+      "sha256": "8c449c6aad082d71f582b38b9c5a83248e0833b38120b1f06379fc72034d2fb1",
       "upstreamStatus": "added"
     },
     {
@@ -343,7 +348,7 @@
     },
     {
       "path": "Tests/Qwen3RuntimeTests/Qwen3CloneArtifactIntegrityTests.swift",
-      "sha256": "d4c02be247ef1816682eed15da95a8ad0f5a1b2966e2d51156c8da56653a851a",
+      "sha256": "18bc52ffd95885a8d596e18a57f5b85ee647eba40d82403d72abb6350e4b46e8",
       "upstreamStatus": "added"
     },
     {
@@ -354,6 +359,11 @@
     {
       "path": "Tests/Qwen3RuntimeTests/Qwen3GenerationGateTests.swift",
       "sha256": "ffd4969bb548b0e0d7419c1eb5b3fc10fabfc7ae3d17a32a4edbad4e5090a503",
+      "upstreamStatus": "added"
+    },
+    {
+      "path": "Tests/Qwen3RuntimeTests/Qwen3SpeakerMelFrontendTests.swift",
+      "sha256": "eb8b71159d53e04dbbfca9f3d7298e239349d82f9ed177f168df756e05fb47dd",
       "upstreamStatus": "added"
     },
     {
@@ -377,11 +387,11 @@
     "Examples/**"
   ],
   "summary": {
-    "added": 15,
+    "added": 17,
     "identical": 37,
     "modified": 21,
     "removed": 0,
-    "retained": 73
+    "retained": 75
   },
   "upstreamBaselineSHA256": "08099111586a931f12b8d259938963ccdc8385d21009701779fea2ceb847c1c2"
 }

@@ -1,6 +1,8 @@
+import CryptoKit
 import Foundation
 import MLX
 @testable import MLXAudioTTS
+@testable import VocelloQwen3Core
 import XCTest
 
 final class Qwen3CloneArtifactIntegrityTests: XCTestCase {
@@ -11,7 +13,13 @@ final class Qwen3CloneArtifactIntegrityTests: XCTestCase {
 
         try prompt.write(to: directory)
         let loaded = try Qwen3TTSVoiceClonePrompt.load(from: directory)
+        let manifest = try JSONDecoder().decode(
+            Qwen3TTSVoiceClonePrompt.Manifest.self,
+            from: Data(contentsOf: directory.appendingPathComponent("manifest.json"))
+        )
 
+        XCTAssertEqual(manifest.schemaVersion, 3)
+        XCTAssertEqual(manifest.speakerFeatureVersion, "qwen-speaker-mel-v1")
         XCTAssertEqual(loaded.refCodes?.shape, [1, 2, 2])
         XCTAssertEqual(loaded.refCodes?.dtype, .int32)
         XCTAssertEqual(loaded.refCodes?.asArray(Int32.self), [1, 2, 3, 4])
@@ -134,7 +142,7 @@ final class Qwen3CloneArtifactIntegrityTests: XCTestCase {
             xVectorOnlyMode: true, iclMode: false
         ).write(to: xVector)
         try Qwen3TTSVoiceClonePrompt(
-            refCodes: nil, speakerEmbedding: MLXArray([Float(1)]), refText: nil,
+            refCodes: nil, speakerEmbedding: MLXArray([Float(1)]).reshaped(1, 1), refText: nil,
             xVectorOnlyMode: false, iclMode: true
         ).write(to: icl)
         XCTAssertThrowsError(try Qwen3TTSVoiceClonePrompt.load(from: xVector))
@@ -182,6 +190,109 @@ final class Qwen3CloneArtifactIntegrityTests: XCTestCase {
         )
     }
 
+    func testExpectedRuntimeContractSignatureRejectsStaleArtifact() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let staleMetadata = Qwen3TTSVoiceClonePrompt.ArtifactMetadata(
+            modelID: "pro_clone_speed",
+            language: "english",
+            sourceAudioFingerprint: "fixture-audio",
+            transcriptHash: nil,
+            hasTranscript: false,
+            xVectorOnlyMode: true,
+            qwen3RuntimeProfileSignature: "qv-clone-prompt-runtime-v2-stale"
+        )
+        let prompt = Qwen3TTSVoiceClonePrompt(
+            refCodes: nil,
+            speakerEmbedding: MLXArray([Float(0.25), -0.5, 0.75]).reshaped(1, 3),
+            refText: nil,
+            xVectorOnlyMode: true,
+            iclMode: false,
+            artifactMetadata: staleMetadata
+        )
+        try prompt.write(to: directory)
+
+        let currentMetadata = Qwen3TTSVoiceClonePrompt.ArtifactMetadata(
+            modelID: "pro_clone_speed",
+            language: "english",
+            sourceAudioFingerprint: "fixture-audio",
+            transcriptHash: nil,
+            hasTranscript: false,
+            xVectorOnlyMode: true,
+            qwen3RuntimeProfileSignature: "qv-clone-prompt-runtime-v2-current"
+        )
+
+        XCTAssertThrowsError(
+            try Qwen3TTSVoiceClonePrompt.load(
+                from: directory,
+                expectedMetadata: currentMetadata
+            )
+        )
+    }
+
+    func testExpectedModelArtifactIdentityRejectsEachChangedField() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let baseline = artifactMetadata()
+        try Qwen3TTSVoiceClonePrompt(
+            refCodes: nil,
+            speakerEmbedding: MLXArray([Float(0.25), -0.5, 0.75]).reshaped(1, 3),
+            refText: nil,
+            xVectorOnlyMode: true,
+            iclMode: false,
+            artifactMetadata: baseline
+        ).write(to: directory)
+
+        let changedIdentities = [
+            artifactMetadata(modelRepository: "other/model"),
+            artifactMetadata(modelRevision: String(repeating: "b", count: 40)),
+            artifactMetadata(modelArtifactVersion: "artifact-v2"),
+            artifactMetadata(modelIntegrityManifestDigest: String(repeating: "b", count: 64)),
+        ]
+        for expected in changedIdentities {
+            XCTAssertThrowsError(
+                try Qwen3TTSVoiceClonePrompt.load(
+                    from: directory,
+                    expectedMetadata: expected
+                )
+            )
+        }
+
+        XCTAssertNoThrow(
+            try Qwen3TTSVoiceClonePrompt.load(
+                from: directory,
+                expectedMetadata: baseline
+            )
+        )
+    }
+
+    func testSchemaTwoArtifactFailsClosedThroughLowLevelAndFacadeReaders() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try tensorPrompt(refText: "legacy").write(to: directory)
+
+        try rewriteManifest(in: directory) { manifest in
+            manifest["schemaVersion"] = 2
+            manifest.removeValue(forKey: "speakerFeatureVersion")
+        }
+
+        XCTAssertThrowsError(try Qwen3TTSVoiceClonePrompt.load(from: directory))
+        XCTAssertThrowsError(try VocelloQwen3ClonePrompt.load(from: directory))
+    }
+
+    func testCurrentSchemaRejectsMismatchedSpeakerFeatureVersionUnconditionally() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try tensorPrompt(refText: "stale-frontend").write(to: directory)
+
+        try rewriteManifest(in: directory) { manifest in
+            manifest["speakerFeatureVersion"] = "legacy-generic-mel"
+        }
+
+        XCTAssertThrowsError(try Qwen3TTSVoiceClonePrompt.load(from: directory))
+        XCTAssertThrowsError(try VocelloQwen3ClonePrompt.load(from: directory))
+    }
+
     private func tensorPrompt(refText: String) -> Qwen3TTSVoiceClonePrompt {
         Qwen3TTSVoiceClonePrompt(
             refCodes: MLXArray([Int32(1), 2, 3, 4]).reshaped(1, 2, 2),
@@ -190,6 +301,65 @@ final class Qwen3CloneArtifactIntegrityTests: XCTestCase {
             xVectorOnlyMode: false,
             iclMode: true
         )
+    }
+
+    private func artifactMetadata(
+        modelRepository: String = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit",
+        modelRevision: String = String(repeating: "a", count: 40),
+        modelArtifactVersion: String = "artifact-v1",
+        modelIntegrityManifestDigest: String = String(repeating: "a", count: 64)
+    ) -> Qwen3TTSVoiceClonePrompt.ArtifactMetadata {
+        Qwen3TTSVoiceClonePrompt.ArtifactMetadata(
+            modelID: "pro_clone_speed",
+            modelRepository: modelRepository,
+            modelRevision: modelRevision,
+            modelArtifactVersion: modelArtifactVersion,
+            modelIntegrityManifestDigest: modelIntegrityManifestDigest,
+            language: "english",
+            sourceAudioFingerprint: "fixture-audio",
+            hasTranscript: false,
+            xVectorOnlyMode: true,
+            qwen3RuntimeProfileSignature: "qv-clone-prompt-runtime-v2-fixture"
+        )
+    }
+
+    private func rewriteManifest(
+        in directory: URL,
+        transform: (inout [String: Any]) -> Void
+    ) throws {
+        let manifestURL = directory.appendingPathComponent("manifest.json")
+        var manifest = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL)) as? [String: Any]
+        )
+        transform(&manifest)
+        let manifestData = try JSONSerialization.data(
+            withJSONObject: manifest,
+            options: [.prettyPrinted, .sortedKeys]
+        )
+        try manifestData.write(to: manifestURL, options: .atomic)
+
+        let integrityURL = directory.appendingPathComponent(Qwen3TTSVoiceClonePrompt.integrityFilename)
+        let decoder = JSONDecoder()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let integrity = try decoder.decode(
+            Qwen3TTSVoiceClonePrompt.IntegrityManifest.self,
+            from: Data(contentsOf: integrityURL)
+        )
+        var files = integrity.files
+        files["manifest.json"] = .init(
+            byteCount: manifestData.count,
+            sha256: SHA256.hash(data: manifestData).map { String(format: "%02x", $0) }.joined(),
+            tensorKey: nil,
+            shape: nil,
+            dataType: nil
+        )
+        try encoder.encode(
+            Qwen3TTSVoiceClonePrompt.IntegrityManifest(
+                schemaVersion: Qwen3TTSVoiceClonePrompt.integritySchemaVersion,
+                files: files
+            )
+        ).write(to: integrityURL, options: .atomic)
     }
 
     private func temporaryDirectory() -> URL {

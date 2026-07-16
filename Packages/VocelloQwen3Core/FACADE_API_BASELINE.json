@@ -155,6 +155,10 @@
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let finishReason: VocelloQwen3GenerationFinishReason",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public struct VocelloQwen3CloneArtifactMetadata: Codable, Hashable, Sendable",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let modelID: String?",
+    "Sources/VocelloQwen3Core/LoadedModel.swift::public let modelRepository: String?",
+    "Sources/VocelloQwen3Core/LoadedModel.swift::public let modelRevision: String?",
+    "Sources/VocelloQwen3Core/LoadedModel.swift::public let modelArtifactVersion: String?",
+    "Sources/VocelloQwen3Core/LoadedModel.swift::public let modelIntegrityManifestDigest: String?",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let language: String?",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let sourceAudioFingerprint: String?",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let transcriptHash: String?",
@@ -162,9 +166,10 @@
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let xVectorOnlyMode: Bool?",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let runtimeProfileSignature: String?",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let createdAt: String?",
-    "Sources/VocelloQwen3Core/LoadedModel.swift::public init( modelID: String? = nil, language: String? = nil, sourceAudioFingerprint: String? = nil, transcriptHash: String? = nil, hasTranscript: Bool? = nil, xVectorOnlyMode: Bool? = nil, runtimeProfileSignature: String? = nil, createdAt: String? = nil )",
+    "Sources/VocelloQwen3Core/LoadedModel.swift::public init( modelID: String? = nil, modelRepository: String? = nil, modelRevision: String? = nil, modelArtifactVersion: String? = nil, modelIntegrityManifestDigest: String? = nil, language: String? = nil, sourceAudioFingerprint: String? = nil, transcriptHash: String? = nil, hasTranscript: Bool? = nil, xVectorOnlyMode: Bool? = nil, runtimeProfileSignature: String? = nil, createdAt: String? = nil )",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public func fillingCreatedAtIfNeeded() -> Self",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public struct VocelloQwen3ClonePrompt: @unchecked Sendable",
+    "Sources/VocelloQwen3Core/LoadedModel.swift::public static var speakerFeatureVersion: String",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public var referenceText: String?",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public var xVectorOnlyMode: Bool",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public var inContextLearningMode: Bool",
@@ -219,7 +224,7 @@
     },
     {
       "path": "Sources/VocelloQwen3Core/LoadedModel.swift",
-      "sha256": "a09e338dfb6735ff1f6655752f5572e4277379a0bf3605b65c4bdd702a33de44"
+      "sha256": "8c449c6aad082d71f582b38b9c5a83248e0833b38120b1f06379fc72034d2fb1"
     },
     {
       "path": "Sources/VocelloQwen3Core/Runtime.swift",

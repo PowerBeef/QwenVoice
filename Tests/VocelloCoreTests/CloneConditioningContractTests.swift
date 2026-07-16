@@ -119,6 +119,158 @@ final class CloneConditioningContractTests: XCTestCase {
         XCTAssertNotEqual(left.cacheKey, right.cacheKey)
     }
 
+    func testClonePromptIdentityInvalidatesForSpeakerFrontendAndRuntimeChanges() throws {
+        let reference = GenerationSemantics.internalCloneReferenceIdentity(
+            modelID: "pro_clone_speed",
+            normalizedReferencePath: "reference.wav",
+            referenceFingerprint: "audio-digest",
+            conditioningMode: .xVectorOnly
+        )
+        let baseline = GenerationSemantics.ClonePromptIdentity(
+            referenceIdentity: reference,
+            language: "English",
+            modelArtifactIdentity: try clonePromptModelArtifactIdentity(),
+            qwenRuntimeProfileSignature: "runtime-a",
+            speakerFeatureVersion: "qwen-speaker-mel-v1"
+        )
+        let changedFrontend = GenerationSemantics.ClonePromptIdentity(
+            referenceIdentity: reference,
+            language: "English",
+            modelArtifactIdentity: try clonePromptModelArtifactIdentity(),
+            qwenRuntimeProfileSignature: "runtime-a",
+            speakerFeatureVersion: "qwen-speaker-mel-v2"
+        )
+        let changedRuntime = GenerationSemantics.ClonePromptIdentity(
+            referenceIdentity: reference,
+            language: "English",
+            modelArtifactIdentity: try clonePromptModelArtifactIdentity(),
+            qwenRuntimeProfileSignature: "runtime-b",
+            speakerFeatureVersion: "qwen-speaker-mel-v1"
+        )
+
+        XCTAssertNotEqual(baseline.runtimeContractSignature, changedFrontend.runtimeContractSignature)
+        XCTAssertNotEqual(baseline.runtimeContractSignature, changedRuntime.runtimeContractSignature)
+        XCTAssertNotEqual(baseline.cacheKey, changedFrontend.cacheKey)
+        XCTAssertNotEqual(baseline.cacheKey, changedRuntime.cacheKey)
+    }
+
+    func testClonePromptIdentityInvalidatesForEachModelArtifactField() throws {
+        let reference = GenerationSemantics.internalCloneReferenceIdentity(
+            modelID: "pro_clone_speed",
+            normalizedReferencePath: "reference.wav",
+            referenceFingerprint: "audio-digest",
+            conditioningMode: .xVectorOnly
+        )
+        let baselineArtifact = try clonePromptModelArtifactIdentity()
+        let changedArtifacts = [
+            try clonePromptModelArtifactIdentity(repository: "other/model"),
+            try clonePromptModelArtifactIdentity(revision: String(repeating: "b", count: 40)),
+            try clonePromptModelArtifactIdentity(artifactVersion: "artifact-v2"),
+            try clonePromptModelArtifactIdentity(integrityDigest: String(repeating: "b", count: 64)),
+        ]
+        let baseline = GenerationSemantics.ClonePromptIdentity(
+            referenceIdentity: reference,
+            language: "english",
+            modelArtifactIdentity: baselineArtifact,
+            qwenRuntimeProfileSignature: "runtime",
+            speakerFeatureVersion: "qwen-speaker-mel-v1"
+        )
+
+        for changedArtifact in changedArtifacts {
+            let changed = GenerationSemantics.ClonePromptIdentity(
+                referenceIdentity: reference,
+                language: "english",
+                modelArtifactIdentity: changedArtifact,
+                qwenRuntimeProfileSignature: "runtime",
+                speakerFeatureVersion: "qwen-speaker-mel-v1"
+            )
+            XCTAssertNotEqual(baseline.runtimeContractSignature, changed.runtimeContractSignature)
+            XCTAssertNotEqual(baseline.cacheKey, changed.cacheKey)
+        }
+    }
+
+    func testClonePromptModelArtifactIdentityFailsClosedWithoutImmutableFields() {
+        XCTAssertNil(GenerationSemantics.ClonePromptModelArtifactIdentity(
+            repository: "mlx-community/model",
+            revision: "main",
+            artifactVersion: "artifact-v1",
+            integrityManifestDigest: String(repeating: "a", count: 64)
+        ))
+        XCTAssertNil(GenerationSemantics.ClonePromptModelArtifactIdentity(
+            repository: "mlx-community/model",
+            revision: String(repeating: "a", count: 40),
+            artifactVersion: "artifact-v1",
+            integrityManifestDigest: nil
+        ))
+    }
+
+    func testClonePromptIdentityNormalizesLanguageAndEmptyRuntimeSignature() throws {
+        let reference = GenerationSemantics.internalCloneReferenceIdentity(
+            modelID: "pro_clone_speed",
+            normalizedReferencePath: "reference.wav",
+            referenceFingerprint: "audio-digest",
+            conditioningMode: .transcriptBacked("Reference words.")
+        )
+        let normalized = GenerationSemantics.ClonePromptIdentity(
+            referenceIdentity: reference,
+            language: " English ",
+            modelArtifactIdentity: try clonePromptModelArtifactIdentity(),
+            qwenRuntimeProfileSignature: " ",
+            speakerFeatureVersion: " qwen-speaker-mel-v1 "
+        )
+        let canonical = GenerationSemantics.ClonePromptIdentity(
+            referenceIdentity: reference,
+            language: "english",
+            modelArtifactIdentity: try clonePromptModelArtifactIdentity(),
+            qwenRuntimeProfileSignature: nil,
+            speakerFeatureVersion: "qwen-speaker-mel-v1"
+        )
+
+        XCTAssertEqual(normalized, canonical)
+        XCTAssertEqual(normalized.cacheKey, canonical.cacheKey)
+        XCTAssertTrue(normalized.runtimeContractSignature.hasPrefix("qv-clone-prompt-runtime-v2-"))
+    }
+
+    func testClonePromptIdentityIncludesLanguage() throws {
+        let reference = GenerationSemantics.internalCloneReferenceIdentity(
+            modelID: "pro_clone_speed",
+            normalizedReferencePath: "reference.wav",
+            referenceFingerprint: "audio-digest",
+            conditioningMode: .xVectorOnly
+        )
+        let english = GenerationSemantics.ClonePromptIdentity(
+            referenceIdentity: reference,
+            language: "english",
+            modelArtifactIdentity: try clonePromptModelArtifactIdentity(),
+            qwenRuntimeProfileSignature: "runtime",
+            speakerFeatureVersion: "qwen-speaker-mel-v1"
+        )
+        let french = GenerationSemantics.ClonePromptIdentity(
+            referenceIdentity: reference,
+            language: "french",
+            modelArtifactIdentity: try clonePromptModelArtifactIdentity(),
+            qwenRuntimeProfileSignature: "runtime",
+            speakerFeatureVersion: "qwen-speaker-mel-v1"
+        )
+
+        XCTAssertNotEqual(english.cacheKey, french.cacheKey)
+        XCTAssertEqual(english.runtimeContractSignature, french.runtimeContractSignature)
+    }
+
+    private func clonePromptModelArtifactIdentity(
+        repository: String = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit",
+        revision: String = String(repeating: "a", count: 40),
+        artifactVersion: String = "artifact-v1",
+        integrityDigest: String = String(repeating: "a", count: 64)
+    ) throws -> GenerationSemantics.ClonePromptModelArtifactIdentity {
+        try XCTUnwrap(GenerationSemantics.ClonePromptModelArtifactIdentity(
+            repository: repository,
+            revision: revision,
+            artifactVersion: artifactVersion,
+            integrityManifestDigest: integrityDigest
+        ))
+    }
+
     func testPrewarmIdentityCannotAliasAcrossDelimiterContainingFields() {
         let left = GenerationSemantics.PrewarmIdentity.customRequest(
             modelID: "model|custom",
