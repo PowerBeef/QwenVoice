@@ -165,6 +165,12 @@ from schema-v2 memory trends.
 |---|---|---|---|---|---|---:|---|---|---|---|
 | 2026-07-14 | [`ios-xcui-benchmark-20260714-105423-4dddee2f`](runs/ui-generation/ios-xcui-benchmark-20260714-105423-4dddee2f.json) | focused | focused | passedWithWarnings | qualified-with-warnings | 5 | `4b79bb497f1b` | `fc0fc2887412` | baseline | ios-v2-focused |
 
+## ui-generation / macos / mac-mini-m2-8gb / config `161b2fa90d9f`
+
+| completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |
+|---|---|---|---|---|---|---:|---|---|---|---|
+| 2026-07-16 | [`macos-xcui-benchmark-20260716-181853-b4c2e299`](runs/ui-generation/macos-xcui-benchmark-20260716-181853-b4c2e299.json) | canonical | canonical | passedWithWarnings | qualified-with-warnings | 29 | `9a8da8745939` | `161b2fa90d9f` | baseline | owned-core-final-9a8da87-macos |
+
 ## ui-generation / macos / mac-mini-m2-8gb / config `4a5bd9c374be`
 
 | completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |
