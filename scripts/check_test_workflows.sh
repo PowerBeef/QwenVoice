@@ -24,6 +24,7 @@ for required_policy_surface in \
   scripts/evidence_impact.py \
   scripts/vendor_runtime_contract.py \
   scripts/supply_chain_contract.py \
+  scripts/swift_dependency_snapshot.py \
   scripts/release_evidence.py \
   scripts/release_sbom.py \
   scripts/required_step_ledger.py \
@@ -40,6 +41,7 @@ for required_policy_surface in \
   scripts/tests/test_evidence_impact.py \
   scripts/tests/test_vendor_runtime_contract.py \
   scripts/tests/test_supply_chain_contract.py \
+  scripts/tests/test_swift_dependency_snapshot.py \
   scripts/tests/test_release_evidence.py \
   scripts/tests/test_required_step_ledger.py \
   scripts/tests/test_project_health.py \
@@ -586,6 +588,8 @@ python3 -m unittest \
   scripts.tests.test_required_step_ledger \
   scripts.tests.test_project_health \
   scripts.tests.test_vendor_runtime_contract \
+  scripts.tests.test_supply_chain_contract \
+  scripts.tests.test_swift_dependency_snapshot \
   scripts.tests.test_build_routing_contract \
   scripts.tests.test_clean_build_caches \
   scripts.tests.test_profile_trace_retention \

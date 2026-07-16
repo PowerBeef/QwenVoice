@@ -83,6 +83,92 @@ def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def resolved_pin_descriptors(payload: bytes | str | dict) -> dict[str, dict] | None:
+    try:
+        if isinstance(payload, bytes):
+            document = json.loads(payload.decode("utf-8"))
+        elif isinstance(payload, str):
+            document = json.loads(payload)
+        else:
+            document = payload
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    pins = document.get("pins") if isinstance(document, dict) else None
+    if not isinstance(pins, list):
+        return None
+    descriptors: dict[str, dict] = {}
+    for pin in pins:
+        identity = pin.get("identity") if isinstance(pin, dict) else None
+        kind = pin.get("kind") if isinstance(pin, dict) else None
+        location = pin.get("location") if isinstance(pin, dict) else None
+        state = pin.get("state") if isinstance(pin, dict) else None
+        if (
+            not isinstance(identity, str)
+            or not identity
+            or not isinstance(kind, str)
+            or not kind
+            or not isinstance(location, str)
+            or not location
+            or not isinstance(state, dict)
+        ):
+            return None
+        if identity in descriptors:
+            return None
+        descriptors[identity] = {
+            "kind": kind,
+            "location": location,
+            "state": state,
+        }
+    return descriptors
+
+
+def benchmark_neutral_dependency_errors(
+    package_contract: dict,
+    pin_descriptors: dict[str, dict] | None,
+) -> list[str]:
+    neutral = package_contract.get("benchmarkNeutralResolvedDependencies", {})
+    if not isinstance(neutral, dict):
+        return ["COMPATIBILITY benchmark-neutral dependency contract must be an object"]
+    if pin_descriptors is None:
+        return ["owned runtime Package.resolved is invalid"]
+    errors: list[str] = []
+    direct = set(package_contract.get("directDependencies", {}))
+    for identity, reason in neutral.items():
+        if not isinstance(identity, str) or not identity:
+            errors.append("benchmark-neutral dependency identity must be non-empty")
+            continue
+        if identity not in pin_descriptors:
+            errors.append(f"benchmark-neutral dependency is absent from the lock: {identity}")
+        if identity in direct:
+            errors.append(f"direct runtime dependency cannot be benchmark-neutral: {identity}")
+        if not isinstance(reason, str) or not reason.strip():
+            errors.append(f"benchmark-neutral dependency requires a reason: {identity}")
+    return errors
+
+
+def benchmark_dependency_projection(
+    package_contract: dict,
+    pin_descriptors: dict[str, dict] | None,
+) -> dict[str, dict] | None:
+    if pin_descriptors is None:
+        return None
+    neutral = package_contract.get("benchmarkNeutralResolvedDependencies", {})
+    if not isinstance(neutral, dict):
+        return None
+    projection: dict[str, dict] = {}
+    for identity in sorted(pin_descriptors):
+        descriptor = pin_descriptors[identity]
+        projection[identity] = (
+            {
+                "kind": descriptor["kind"],
+                "location": descriptor["location"],
+            }
+            if identity in neutral
+            else descriptor
+        )
+    return projection
+
+
 def scoped_files(root: Path, patterns: tuple[str, ...] = BASELINE_SCOPE) -> list[Path]:
     return sorted(
         path
@@ -388,7 +474,7 @@ def benchmark_record_matches_sources(
         or source.get("fingerprintsMatch") is not True
     ):
         return False
-    impact_patterns = list(dict.fromkeys([*source_patterns, "Package.swift", "Package.resolved"]))
+    impact_patterns = list(dict.fromkeys([*source_patterns, "Package.swift"]))
     paths = [
         path
         for path in expanded(runtime, impact_patterns)
@@ -422,7 +508,36 @@ def benchmark_record_matches_sources(
         )
         if historical is None or historical != current.read_bytes():
             return False
-    return True
+    package_contract = load_json(runtime / COMPATIBILITY_NAME).get("package", {})
+    current_pin_descriptors = resolved_pin_descriptors(
+        (runtime / "Package.resolved").read_bytes()
+    )
+    historical_lock = next(
+        (
+            blob
+            for candidate in (
+                RUNTIME_RELATIVE / "Package.resolved",
+                LEGACY_RUNTIME_RELATIVE / "Package.resolved",
+            )
+            if (blob := git_blob(repo_root, commit, candidate)) is not None
+        ),
+        None,
+    )
+    if historical_lock is None:
+        return False
+    current_projection = benchmark_dependency_projection(
+        package_contract,
+        current_pin_descriptors,
+    )
+    historical_projection = benchmark_dependency_projection(
+        package_contract,
+        resolved_pin_descriptors(historical_lock),
+    )
+    return (
+        current_projection is not None
+        and historical_projection is not None
+        and current_projection == historical_projection
+    )
 
 
 def capability_benchmark_is_fresh(
@@ -748,6 +863,12 @@ def validate(repo_root: Path) -> list[str]:
     for dependency, version in package_contract.get("directDependencies", {}).items():
         if dependency not in package or f'"{version}"' not in package:
             errors.append(f"Package.swift dependency pin missing or stale: {dependency} {version}")
+    errors.extend(
+        benchmark_neutral_dependency_errors(
+            package_contract,
+            resolved_pin_descriptors((runtime / "Package.resolved").read_bytes()),
+        )
+    )
     for product in package_contract.get("products", []):
         if f'.library(name: "{product}"' not in package:
             errors.append(f"Package.swift product missing: {product}")

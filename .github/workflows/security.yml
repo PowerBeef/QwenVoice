@@ -34,6 +34,61 @@ jobs:
         with:
           fail-on-severity: high
 
+  swift-dependency-submission:
+    name: Submit Swift dependency graph
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Generate deterministic Swift dependency snapshot
+        run: |
+          set -euo pipefail
+          python3 scripts/swift_dependency_snapshot.py \
+            --sha "$GITHUB_SHA" \
+            --ref "$GITHUB_REF" \
+            --job-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --job-url "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            > "$RUNNER_TEMP/swift-dependency-snapshot.json"
+
+      - name: Submit Swift dependency snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/${GITHUB_REPOSITORY}/dependency-graph/snapshots" \
+            --input "$RUNNER_TEMP/swift-dependency-snapshot.json"
+
+  npm-advisory-audit:
+    name: npm advisory audit (scheduled)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Select pinned Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.15.0
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Select pinned npm
+        run: npm install --global npm@11.12.1
+
+      - name: Audit locked website dependencies
+        run: npm --prefix website audit --package-lock-only --audit-level=high
+
   codeql:
     name: CodeQL (${{ matrix.language }})
     if: github.event_name != 'pull_request'

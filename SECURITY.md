@@ -12,6 +12,20 @@ public macOS release. Older releases and development snapshots are not supported
 | Older releases and beta snapshots | No |
 | iPhone builds distributed outside an official project channel | No |
 
+## Dependency monitoring
+
+Dependabot monitors the repository's GitHub Actions, website npm lock, and owned Swift package
+declarations. The security workflow also submits privacy-safe dependency snapshots from both
+tracked SwiftPM resolution files after changes land on `main`, on the weekly security schedule,
+and when run manually. These snapshots make the root Xcode workspace and the owned Qwen3 runtime
+visible to GitHub's dependency graph and advisory matching without uploading source, credentials,
+absolute paths, or local device data.
+
+Pull requests receive dependency-diff review for newly introduced high-severity findings. A
+separate website lock audit runs only on the weekly security schedule or manual dispatch; it is not
+an ordinary commit, pull-request, or release-packaging gate. Release SBOM generation continues to
+use the committed lock files as its authoritative input.
+
 ## Report a vulnerability privately
 
 Do not open a public issue for a suspected vulnerability or include user data, credentials, model

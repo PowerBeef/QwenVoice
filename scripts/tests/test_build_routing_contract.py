@@ -116,6 +116,17 @@ class BuildRoutingContractTests(unittest.TestCase):
             with self.subTest(identity=identity):
                 self.assertEqual(state, xcode_pins[identity])
 
+        swift_nio = runtime_pins.get("swift-nio")
+        self.assertIsNotNone(swift_nio, "owned runtime lock must include swift-nio")
+        swift_nio_version = tuple(
+            int(component) for component in swift_nio["version"].split(".")
+        )
+        self.assertGreaterEqual(
+            swift_nio_version,
+            (2, 100, 0),
+            "swift-nio must retain the 2.100.0 security baseline",
+        )
+
         macos = self.text("scripts/macos_test.sh")
         self.assertGreaterEqual(macos.count("--force-resolved-versions"), 3)
 

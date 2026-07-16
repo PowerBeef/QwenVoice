@@ -135,10 +135,12 @@
         ".github/workflows/security.yml",
         "scripts/release_evidence.py",
         "scripts/release_sbom.py",
+        "scripts/swift_dependency_snapshot.py",
         "scripts/supply_chain_contract.py"
       ],
       "testGlobs": [
         "scripts/tests/test_release_evidence.py",
+        "scripts/tests/test_swift_dependency_snapshot.py",
         "scripts/tests/test_supply_chain_contract.py"
       ],
       "hardwarePlatforms": ["macos"]

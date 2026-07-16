@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import importlib.util
+import json
 import subprocess
 import sys
 import tempfile
@@ -278,7 +279,12 @@ class VendorRuntimeContractTests(unittest.TestCase):
         def blob_with_dependency_drift(repo_root: Path, commit: str, path: Path) -> bytes | None:
             blob = git_blob(repo_root, commit, path)
             if path.name == "Package.resolved" and blob is not None:
-                return blob + b"\n"
+                payload = json.loads(blob)
+                for pin in payload["pins"]:
+                    if pin["identity"] == "mlx-swift":
+                        pin["state"]["revision"] = "0" * 40
+                        break
+                return json.dumps(payload, sort_keys=True).encode("utf-8")
             return blob
 
         with mock.patch.object(MODULE, "git_blob", side_effect=blob_with_dependency_drift):
@@ -290,6 +296,101 @@ class VendorRuntimeContractTests(unittest.TestCase):
                     eligible[0],
                 )
             )
+
+    def test_benchmark_neutral_security_dependency_drift_preserves_evidence(self) -> None:
+        runtime = ROOT / MODULE.RUNTIME_RELATIVE
+        records = MODULE.benchmark_records(ROOT)
+        record = records["macos-xcui-benchmark-20260716-181853-b4c2e299"]
+        git_blob = MODULE.git_blob
+
+        def blob_with_neutral_drift(repo_root: Path, commit: str, path: Path) -> bytes | None:
+            blob = git_blob(repo_root, commit, path)
+            if path.name == "Package.resolved" and blob is not None:
+                payload = json.loads(blob)
+                for pin in payload["pins"]:
+                    if pin["identity"] == "swift-nio":
+                        pin["state"] = {"revision": "0" * 40, "version": "2.99.0"}
+                        break
+                return json.dumps(payload, sort_keys=True).encode("utf-8")
+            return blob
+
+        with mock.patch.object(MODULE, "git_blob", side_effect=blob_with_neutral_drift):
+            self.assertTrue(
+                MODULE.benchmark_record_matches_sources(
+                    ROOT,
+                    runtime,
+                    ["Sources/MLXAudioCore/ModelUtils.swift"],
+                    record,
+                )
+            )
+
+    def test_benchmark_neutral_dependency_source_drift_invalidates_evidence(self) -> None:
+        runtime = ROOT / MODULE.RUNTIME_RELATIVE
+        records = MODULE.benchmark_records(ROOT)
+        record = records["macos-xcui-benchmark-20260716-181853-b4c2e299"]
+        git_blob = MODULE.git_blob
+
+        for field, value in (
+            ("kind", "localSourceControl"),
+            ("location", "https://example.invalid/swift-nio.git"),
+        ):
+            with self.subTest(field=field):
+                def blob_with_source_drift(
+                    repo_root: Path,
+                    commit: str,
+                    path: Path,
+                ) -> bytes | None:
+                    blob = git_blob(repo_root, commit, path)
+                    if path.name == "Package.resolved" and blob is not None:
+                        payload = json.loads(blob)
+                        for pin in payload["pins"]:
+                            if pin["identity"] == "swift-nio":
+                                pin[field] = value
+                                break
+                        return json.dumps(payload, sort_keys=True).encode("utf-8")
+                    return blob
+
+                with mock.patch.object(MODULE, "git_blob", side_effect=blob_with_source_drift):
+                    self.assertFalse(
+                        MODULE.benchmark_record_matches_sources(
+                            ROOT,
+                            runtime,
+                            ["Sources/MLXAudioCore/ModelUtils.swift"],
+                            record,
+                        )
+                    )
+
+    def test_benchmark_neutral_dependency_must_resolve_and_cannot_be_direct(self) -> None:
+        runtime = ROOT / MODULE.RUNTIME_RELATIVE
+        compatibility = MODULE.load_json(runtime / MODULE.COMPATIBILITY_NAME)
+        pin_descriptors = MODULE.resolved_pin_descriptors(
+            (runtime / "Package.resolved").read_bytes()
+        )
+        self.assertEqual(
+            MODULE.benchmark_neutral_dependency_errors(
+                compatibility["package"],
+                pin_descriptors,
+            ),
+            [],
+        )
+
+        unknown = copy.deepcopy(compatibility["package"])
+        unknown["benchmarkNeutralResolvedDependencies"]["missing-package"] = "transport only"
+        self.assertTrue(
+            any(
+                "absent from the lock" in error
+                for error in MODULE.benchmark_neutral_dependency_errors(unknown, pin_descriptors)
+            )
+        )
+
+        direct = copy.deepcopy(compatibility["package"])
+        direct["benchmarkNeutralResolvedDependencies"]["mlx-swift"] = "not permitted"
+        self.assertTrue(
+            any(
+                "direct runtime dependency cannot be benchmark-neutral" in error
+                for error in MODULE.benchmark_neutral_dependency_errors(direct, pin_descriptors)
+            )
+        )
 
     def test_contract_references_cannot_escape_the_runtime_root(self) -> None:
         runtime = ROOT / MODULE.RUNTIME_RELATIVE

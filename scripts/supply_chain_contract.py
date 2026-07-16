@@ -17,6 +17,22 @@ ACTION = re.compile(
 )
 
 
+def _workflow_job(text: str, name: str) -> str:
+    match = re.search(rf"(?m)^  {re.escape(name)}:\s*$", text)
+    if not match:
+        return ""
+    next_job = re.search(r"(?m)^  [A-Za-z0-9_-]+:\s*$", text[match.end():])
+    end = match.end() + next_job.start() if next_job else len(text)
+    return text[match.start():end]
+
+
+def _job_permissions(job: str) -> list[str]:
+    match = re.search(r"(?ms)^    permissions:\s*$\n(.*?)(?=^    [A-Za-z0-9_-]+:|\Z)", job)
+    if not match:
+        return []
+    return [line.strip() for line in match.group(1).splitlines() if line.strip()]
+
+
 def _tool_output(command: list[str]) -> str:
     try:
         return subprocess.check_output(command, stderr=subprocess.STDOUT, text=True)
@@ -109,6 +125,7 @@ def validate(root: Path, installed: str | None = None) -> list[str]:
         ".github/workflows/security.yml", ".github/ISSUE_TEMPLATE/config.yml",
         ".github/ISSUE_TEMPLATE/bug_report.yml", ".github/ISSUE_TEMPLATE/feature_request.yml",
         "scripts/release_evidence.py", "scripts/release_sbom.py",
+        "scripts/swift_dependency_snapshot.py",
         "scripts/verify_ios_release_artifacts.py",
     ]
     for relative in required:
@@ -119,6 +136,49 @@ def validate(root: Path, installed: str | None = None) -> list[str]:
     for ecosystem in ("github-actions", "npm", "swift"):
         if f'package-ecosystem: "{ecosystem}"' not in dependabot:
             errors.append(f"Dependabot does not cover {ecosystem}")
+
+    security_path = root / ".github/workflows/security.yml"
+    security = security_path.read_text(encoding="utf-8") if security_path.is_file() else ""
+    if not re.search(r"(?m)^  push:\s*$\n^    branches:\s*\[main\]\s*$", security):
+        errors.append("security workflow push trigger must remain limited to main")
+    submission = _workflow_job(security, "swift-dependency-submission")
+    expected_submission_condition = (
+        "if: github.event_name == 'push' || github.event_name == 'schedule' || "
+        "github.event_name == 'workflow_dispatch'"
+    )
+    if not submission:
+        errors.append("security workflow is missing Swift dependency submission")
+    else:
+        if expected_submission_condition not in submission:
+            errors.append("Swift dependency submission must run only on main push, schedule, or manual dispatch")
+        if _job_permissions(submission) != ["contents: write"]:
+            errors.append("Swift dependency submission must have only contents:write permission")
+        for required_command in (
+            "python3 scripts/swift_dependency_snapshot.py",
+            "dependency-graph/snapshots",
+            "--input \"$RUNNER_TEMP/swift-dependency-snapshot.json\"",
+        ):
+            if required_command not in submission:
+                errors.append(f"Swift dependency submission is missing: {required_command}")
+
+    npm_audit = _workflow_job(security, "npm-advisory-audit")
+    expected_audit_condition = "if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'"
+    if not npm_audit:
+        errors.append("security workflow is missing the scheduled npm advisory audit")
+    else:
+        if expected_audit_condition not in npm_audit:
+            errors.append("npm advisory audit must run only on schedule or manual dispatch")
+        if "npm --prefix website audit --package-lock-only --audit-level=high" not in npm_audit:
+            errors.append("npm advisory audit must inspect the committed website lock at high severity")
+
+    snapshot_path = root / "scripts/swift_dependency_snapshot.py"
+    snapshot_source = snapshot_path.read_text(encoding="utf-8") if snapshot_path.is_file() else ""
+    for lock_path in (
+        "QwenVoice.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved",
+        "Packages/VocelloQwen3Core/Package.resolved",
+    ):
+        if lock_path not in snapshot_source:
+            errors.append(f"Swift dependency snapshot does not cover tracked lock: {lock_path}")
     package_path = root / "website/package.json"
     if package_path.is_file():
         package = json.loads(package_path.read_text(encoding="utf-8"))

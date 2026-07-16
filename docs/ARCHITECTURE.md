@@ -163,7 +163,7 @@ Resolved versions (`QwenVoice.xcodeproj/.../Package.resolved`):
 | **SwiftHuggingFace** | `0.9.0` | Hugging Face model download / hub client. |
 | swift-transformers | `1.1.9` | Tokenizer (transitive). |
 | swift-jinja | `2.3.5` | Chat/template formatting (transitive). |
-| swift-nio | `2.98.0` | Networking (transitive, via SwiftHuggingFace). |
+| swift-nio | `2.100.0` | Networking primitives (transitive, via SwiftHuggingFace/EventSource); minimum security baseline includes the `ByteBuffer` bounds fix. |
 | swift-crypto | `4.4.0` | Hashing (transitive). |
 | swift-collections | `1.4.1` | Deque/OrderedSet (transitive). |
 | swift-atomics | `1.3.0` | Atomics (transitive). |
