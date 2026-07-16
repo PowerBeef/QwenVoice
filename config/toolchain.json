@@ -6,8 +6,10 @@
     "xcodegen": {"version": "2.45.4", "versionCommand": ["xcodegen", "--version"]},
     "xcbeautify": {"version": "3.2.1", "versionCommand": ["xcbeautify", "--version"]},
     "ripgrep": {"version": "15.1.0", "versionCommand": ["rg", "--version"]},
-    "shellcheck": {"version": "0.11.0", "versionCommand": ["shellcheck", "--version"]},
-    "gh": {"version": "2.92.0", "versionCommand": ["gh", "--version"]}
+    "shellcheck": {"version": "0.11.0", "versionCommand": ["shellcheck", "--version"]}
+  },
+  "release": {
+    "gh": {"version": "2.95.0", "versionCommand": ["gh", "--version"]}
   },
   "website": {
     "node": {"version": "24.15.0", "versionCommand": ["node", "--version"]},

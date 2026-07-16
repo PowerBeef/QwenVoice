@@ -213,7 +213,8 @@ scripts/clean_build_caches.sh --routine
   verified before publication. Never restore a
   `release.published` trigger.
 - **Action and toolchain identities are immutable inputs.** Every external Action uses the full SHA
-  recorded in `config/toolchain.json`; native and website runners validate exact tool versions.
+  recorded in `config/toolchain.json`; native, release-publication, and website runners validate
+  exact tool versions. Keep publication-only tools out of compile/test jobs.
   Dependabot may propose updates, but the manifest and adjacent version comment change together.
 - **Catalog activation is fail closed.** All six Speed/Quality identities are exact and the generated
   production catalog is complete. macOS/CLI use the bundled `downloadFiles` route; never restore

@@ -128,7 +128,7 @@ def validate(root: Path, installed: str | None = None) -> list[str]:
                 errors.append(f"website/package.json is missing the deterministic {command} script")
 
     if installed:
-        groups = ("native", "website") if installed == "all" else (installed,)
+        groups = ("native", "release", "website") if installed == "all" else (installed,)
         for group in groups:
             for name, spec in manifest.get(group, {}).items():
                 command = spec.get("versionCommand")
@@ -150,7 +150,7 @@ def validate(root: Path, installed: str | None = None) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent)
-    parser.add_argument("--installed", choices=("native", "website", "all"))
+    parser.add_argument("--installed", choices=("native", "release", "website", "all"))
     args = parser.parse_args()
     errors = validate(args.root.resolve(), args.installed)
     if errors:

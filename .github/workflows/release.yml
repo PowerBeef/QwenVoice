@@ -22,7 +22,7 @@ name: Release
 #   - Xcode 26.6 (project.yml keeps its Xcode 26.0 compatibility declaration)
 #   - macOS 26.0 deployment target, Apple Silicon (`arch=arm64`)
 #   - SPM versions inherited from Package.resolved (committed)
-#   - exact XcodeGen, xcbeautify, ripgrep, ShellCheck, gh, action, Node, and npm versions
+#   - exact native-build, release-publication, action, Node, and npm tool versions
 #   - Developer ID signing + Apple notarization (App Store Connect API
 #     key flow — no Apple ID password footprint on CI)
 #
@@ -137,19 +137,20 @@ jobs:
 
       - name: Select Xcode 26.6
         run: |
-          sudo xcode-select -s /Applications/Xcode.app
+          sudo xcode-select -s /Applications/Xcode_26.6.app
           xcodebuild -version
           swift --version
 
       - name: Install and validate pinned release tooling
         run: |
-          brew install xcodegen xcbeautify ripgrep shellcheck gh
+          brew install xcodegen xcbeautify ripgrep shellcheck
           xcodegen --version
           xcbeautify --version
           rg --version
           shellcheck --version
           gh --version
           python3 scripts/supply_chain_contract.py --installed native
+          python3 scripts/supply_chain_contract.py --installed release
 
       - name: Verify release tag and source identity
         run: |
@@ -473,18 +474,17 @@ jobs:
 
       - name: Select Xcode 26.6
         run: |
-          sudo xcode-select -s /Applications/Xcode.app
+          sudo xcode-select -s /Applications/Xcode_26.6.app
           xcodebuild -version
           swift --version
 
       - name: Install and validate pinned tooling
         run: |
-          brew install xcodegen xcbeautify ripgrep shellcheck gh
+          brew install xcodegen xcbeautify ripgrep shellcheck
           xcodegen --version
           xcbeautify --version
           rg --version
           shellcheck --version
-          gh --version
           python3 scripts/supply_chain_contract.py --installed native
 
       - name: Cache SwiftPM dependencies
@@ -555,13 +555,13 @@ jobs:
 
       - name: Select Xcode 26.6
         run: |
-          sudo xcode-select -s /Applications/Xcode.app
+          sudo xcode-select -s /Applications/Xcode_26.6.app
           xcodebuild -version
           swift --version
 
       - name: Install and validate pinned tooling
         run: |
-          brew install xcodegen xcbeautify ripgrep shellcheck gh
+          brew install xcodegen xcbeautify ripgrep shellcheck
           python3 scripts/supply_chain_contract.py --installed native
 
       - name: Bind iOS release source and initialize required steps

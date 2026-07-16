@@ -68,8 +68,8 @@ jobs:
       - name: Select and validate native toolchain
         if: matrix.language == 'swift'
         run: |
-          sudo xcode-select -s /Applications/Xcode.app
-          brew install xcodegen xcbeautify ripgrep shellcheck gh
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          brew install xcodegen xcbeautify ripgrep shellcheck
           python3 scripts/supply_chain_contract.py --installed native
 
       - name: Build Swift targets for CodeQL

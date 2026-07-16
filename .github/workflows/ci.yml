@@ -7,8 +7,8 @@ name: CI
 #
 # Ordinary CI remains UI-free: project inputs, macOS Core/XPC/runtime tests, and compile checks.
 #
-# Toolchain identities are locked in config/toolchain.json. Homebrew installs are
-# accepted only when their observed versions match that manifest.
+# Toolchain identities are locked in config/toolchain.json. Installed tools are
+# accepted only when their observed versions match the relevant manifest group.
 
 on:
   push:
@@ -37,18 +37,17 @@ jobs:
 
       - name: Select Xcode 26.6
         run: |
-          sudo xcode-select -s /Applications/Xcode.app
+          sudo xcode-select -s /Applications/Xcode_26.6.app
           xcodebuild -version
           swift --version
 
       - name: Install deterministic tooling
         run: |
-          brew install xcodegen xcbeautify ripgrep shellcheck gh
+          brew install xcodegen xcbeautify ripgrep shellcheck
           xcodegen --version
           xcbeautify --version
           rg --version
           shellcheck --version
-          gh --version
           python3 scripts/supply_chain_contract.py --installed native
 
       - name: Cache SwiftPM dependencies
@@ -120,18 +119,17 @@ jobs:
 
       - name: Select Xcode 26.6
         run: |
-          sudo xcode-select -s /Applications/Xcode.app
+          sudo xcode-select -s /Applications/Xcode_26.6.app
           xcodebuild -version
           swift --version
 
       - name: Install deterministic tooling
         run: |
-          brew install xcodegen xcbeautify ripgrep shellcheck gh
+          brew install xcodegen xcbeautify ripgrep shellcheck
           xcodegen --version
           xcbeautify --version
           rg --version
           shellcheck --version
-          gh --version
           python3 scripts/supply_chain_contract.py --installed native
 
       - name: Regenerate Xcode project

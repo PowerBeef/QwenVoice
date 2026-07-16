@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -25,7 +26,7 @@ class SupplyChainContractTests(unittest.TestCase):
         self.sha = "a" * 40
         (self.root / "config/toolchain.json").write_text(json.dumps({
             "schemaVersion": 1,
-            "native": {}, "website": {},
+            "native": {}, "release": {}, "website": {},
             "actions": {"actions/checkout": {"version": "v4", "sha": self.sha}},
         }), encoding="utf-8")
         workflow = """on:\n  push:\n    tags: ['v*']\nsteps:\n  - name: Verify release tag and source identity\n    uses: actions/checkout@%s # v4\n  - name: Generate and validate release evidence\n  - name: Attest verified DMG provenance\n  - name: Create or reuse draft GitHub Release\n  - name: Reset draft Release assets\n    run: gh release view \"$RELEASE_TAG\" --json assets && gh release delete-asset \"$RELEASE_TAG\" stale --yes\n  - name: Upload verified assets to draft Release\n  - name: Verify downloaded Release assets\n    run: echo \"unexpected or missing draft Release assets\"\n  - name: Run process-bound iOS release readiness\n    run: python3 scripts/required_step_ledger.py run --step platform-readiness -- bash -euo pipefail -c 'scripts/macos_test.sh gate && ./scripts/build_foundation_targets.sh ios'\n  - name: Archive VocelloiOS\n  - name: Export App Store IPA\n  - name: Verify exported IPA identity and signing contract\n    run: python3 scripts/required_step_ledger.py run --step ipa-verification -- python3 scripts/verify_ios_release_artifacts.py --output ios-release-artifact-verification.json\n  - name: Generate and validate iOS release evidence\n  - name: Publish verified GitHub Release\n""" % self.sha
@@ -97,6 +98,26 @@ class SupplyChainContractTests(unittest.TestCase):
             encoding="utf-8",
         )
         self.assertTrue(any("readiness binding" in value for value in module.validate(self.root)))
+
+    def test_release_tool_validation_is_isolated_from_native_tools(self) -> None:
+        path = self.root / "config/toolchain.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["native"] = {
+            "compiler": {
+                "version": "native-expected",
+                "versionCommand": [sys.executable, "-c", "print('native-observed')"],
+            }
+        }
+        manifest["release"] = {
+            "gh": {
+                "version": "2.95.0",
+                "versionCommand": [sys.executable, "-c", "print('gh 2.95.0')"],
+            }
+        }
+        path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        self.assertEqual(module.validate(self.root, "release"), [])
+        self.assertTrue(any("compiler" in value for value in module.validate(self.root, "all")))
 
 
 if __name__ == "__main__":
