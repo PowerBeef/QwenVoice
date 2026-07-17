@@ -179,6 +179,10 @@ def validate(root: Path, installed: str | None = None) -> list[str]:
             errors.append("Swift CodeQL must retain the macos-26 ARM runner")
         if "arch -arm64 /opt/homebrew/bin/brew install xcodegen xcbeautify ripgrep shellcheck" not in codeql:
             errors.append("Swift CodeQL tooling must invoke ARM Homebrew explicitly on the macos-26 runner")
+        if "arch -arm64 /bin/bash ./scripts/build.sh build" not in codeql:
+            errors.append("Swift CodeQL must invoke the authoritative macOS build through an ARM bash")
+        if "./scripts/regenerate_project.sh" in codeql:
+            errors.append("Swift CodeQL must let build.sh own project regeneration")
 
     snapshot_path = root / "scripts/swift_dependency_snapshot.py"
     snapshot_source = snapshot_path.read_text(encoding="utf-8") if snapshot_path.is_file() else ""

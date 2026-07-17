@@ -58,6 +58,7 @@ jobs:
     runner: macos-26
     steps:
       - run: arch -arm64 /opt/homebrew/bin/brew install xcodegen xcbeautify ripgrep shellcheck
+      - run: arch -arm64 /bin/bash ./scripts/build.sh build
 """ % self.sha
         (self.root / ".github/workflows/security.yml").write_text(security, encoding="utf-8")
         (self.root / ".github/dependabot.yml").write_text(
@@ -205,6 +206,30 @@ jobs:
         self.assertTrue(any("ARM Homebrew" in value for value in module.validate(self.root)))
         path.write_text(text.replace("runner: macos-26", "runner: macos-15"), encoding="utf-8")
         self.assertTrue(any("macos-26 ARM runner" in value for value in module.validate(self.root)))
+
+    def test_swift_codeql_build_must_run_natively_without_duplicate_regeneration(self) -> None:
+        path = self.root / ".github/workflows/security.yml"
+        text = path.read_text(encoding="utf-8")
+        path.write_text(
+            text.replace(
+                "arch -arm64 /bin/bash ./scripts/build.sh build",
+                "./scripts/build.sh build",
+            ),
+            encoding="utf-8",
+        )
+        self.assertTrue(any(
+            "authoritative macOS build through an ARM bash" in value
+            for value in module.validate(self.root)
+        ))
+
+        path.write_text(
+            text.replace(
+                "arch -arm64 /bin/bash ./scripts/build.sh build",
+                "./scripts/regenerate_project.sh\n      - run: arch -arm64 /bin/bash ./scripts/build.sh build",
+            ),
+            encoding="utf-8",
+        )
+        self.assertTrue(any("build.sh own project regeneration" in value for value in module.validate(self.root)))
 
     def test_swift_dependency_snapshot_must_cover_both_tracked_locks(self) -> None:
         path = self.root / "scripts/swift_dependency_snapshot.py"

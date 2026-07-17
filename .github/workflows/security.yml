@@ -133,8 +133,12 @@ jobs:
       - name: Build Swift targets for CodeQL
         if: matrix.language == 'swift'
         run: |
-          ./scripts/regenerate_project.sh
-          ./scripts/build.sh build
+          # The CodeQL tracing shell is x86_64 even on the ARM macos-26
+          # runner. Start the authoritative build through an ARM bash so
+          # xcodebuild can select the repository's arm64-only destination.
+          # build.sh owns regeneration; invoking it separately would run the
+          # full project-input suite twice before compilation.
+          arch -arm64 /bin/bash ./scripts/build.sh build
 
       - name: Analyze
         uses: github/codeql-action/analyze@3599b3baa15b485a2e49ef411a7a4bb2452e7f93 # v3.30.5
