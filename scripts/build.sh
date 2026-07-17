@@ -12,8 +12,8 @@
 #
 # usage:
 #   scripts/build.sh build            # fast local build, no launch (alias: debug)
-#   scripts/build.sh codeql-prepare   # CI-only: prepare generated inputs/packages before tracing
-#   scripts/build.sh codeql           # CI-only: traced generic-destination arm64 build
+#   scripts/build.sh codeql-prepare   # CI-only: native dependency/Metal prebuild before tracing
+#   scripts/build.sh codeql           # CI-only: traced owned-Swift arm64 rebuild
 #   scripts/build.sh run [--logs|--telemetry|--verify|--debug]
 #   scripts/build.sh release [release.sh args...]
 #   scripts/build.sh clean
@@ -52,8 +52,8 @@ usage: scripts/build.sh <command> [options]
 
 commands:
   build                 Fast local build (-Onone). No launch. (alias: debug)
-  codeql-prepare        CI-only: prepare generated inputs and packages before CodeQL init.
-  codeql                CI-only: build arm64 through CodeQL's traced shell.
+  codeql-prepare        CI-only: prebuild dependencies and Metal before CodeQL init.
+  codeql                CI-only: rebuild owned Swift as arm64 through CodeQL's traced shell.
   run [--logs|--telemetry|--verify|--debug]
                         Build, then launch $APP_NAME.app.
   release [args...]     Run scripts/release.sh (optimized DMG) with the shared regen/SPM cache.
@@ -148,11 +148,32 @@ build_app() {
 
 cmd_codeql_prepare() {
     DESTINATION="$CODEQL_DESTINATION"
-    prepare_build_inputs
+    build_app "scripts/build.sh codeql-prepare"
+}
+
+touch_codeql_sources() {
+    local source_count
+    source_count="$(find \
+        "$ROOT_DIR/Sources" \
+        "$ROOT_DIR/Packages/VocelloQwen3Core/Sources" \
+        -type f -name '*.swift' -print | wc -l | tr -d ' ')"
+    [[ "$source_count" =~ ^[1-9][0-9]*$ ]] || {
+        echo "error: CodeQL found no owned Swift sources to rebuild" >&2
+        return 1
+    }
+    find \
+        "$ROOT_DIR/Sources" \
+        "$ROOT_DIR/Packages/VocelloQwen3Core/Sources" \
+        -type f -name '*.swift' -exec touch {} +
+    echo "==> Marked $source_count owned Swift sources for traced recompilation"
 }
 
 cmd_codeql() {
     DESTINATION="$CODEQL_DESTINATION"
+    # The native prebuild materializes MLX's Metal outputs. Only owned Swift
+    # needs to be newer for the translated CodeQL shell, whose tracer cannot
+    # execute Xcode 26's optional Metal compiler.
+    touch_codeql_sources
     build_app "scripts/build.sh codeql"
 }
 

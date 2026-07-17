@@ -233,12 +233,17 @@ def validate(root: Path, installed: str | None = None) -> list[str]:
             errors.append(message)
     codeql_prepare_function = _shell_function(build_source, "cmd_codeql_prepare")
     if 'DESTINATION="$CODEQL_DESTINATION"' not in codeql_prepare_function \
-            or "prepare_build_inputs" not in codeql_prepare_function:
-        errors.append("CodeQL preparation must select the generic destination and prepare build inputs")
+            or 'build_app "scripts/build.sh codeql-prepare"' not in codeql_prepare_function:
+        errors.append("CodeQL preparation must select the generic destination and prebuild the app natively")
     codeql_build_function = _shell_function(build_source, "cmd_codeql")
     if 'DESTINATION="$CODEQL_DESTINATION"' not in codeql_build_function \
+            or "touch_codeql_sources" not in codeql_build_function \
             or 'build_app "scripts/build.sh codeql"' not in codeql_build_function:
-        errors.append("CodeQL build must select the generic destination and reuse the authoritative app build")
+        errors.append("CodeQL build must touch owned Swift and reuse the authoritative generic-destination app build")
+    touch_function = _shell_function(build_source, "touch_codeql_sources")
+    for source_root in ("$ROOT_DIR/Sources", "$ROOT_DIR/Packages/VocelloQwen3Core/Sources"):
+        if source_root not in touch_function:
+            errors.append(f"CodeQL traced rebuild does not cover owned Swift root: {source_root}")
 
     snapshot_path = root / "scripts/swift_dependency_snapshot.py"
     snapshot_source = snapshot_path.read_text(encoding="utf-8") if snapshot_path.is_file() else ""

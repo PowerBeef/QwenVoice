@@ -134,9 +134,10 @@ jobs:
       - name: Prepare Swift CodeQL build inputs
         if: matrix.language == 'swift'
         run: |
-          # Project generation, deterministic contracts, and dependency
-          # resolution do not need extraction. Finish them before CodeQL starts
-          # tracing so the traced phase contains one compilation only.
+          # Prebuild the full graph natively so Xcode 26's optional Metal
+          # compiler materializes MLX shader outputs before CodeQL's translated
+          # tracing shell starts. The traced command below invalidates only
+          # repository-owned Swift sources.
           ./scripts/build.sh codeql-prepare
 
       - name: Initialize CodeQL
@@ -149,9 +150,9 @@ jobs:
         if: matrix.language == 'swift'
         run: |
           # CodeQL's tracing shell currently runs through Rosetta on the ARM
-          # macos-26 image. Keep compilation inside that shell so the Swift
-          # extractor sees it, while build.sh selects generic macOS and emits
-          # only arm64 products through ARCHS=arm64.
+          # macos-26 image. Keep the owned-Swift rebuild inside that shell so
+          # the extractor sees it, while reusing native Metal/dependency outputs
+          # and emitting only arm64 products through ARCHS=arm64.
           ./scripts/build.sh codeql
 
       - name: Analyze

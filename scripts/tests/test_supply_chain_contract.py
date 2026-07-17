@@ -82,10 +82,14 @@ jobs:
                 'ARCHS=arm64',
                 'cmd_codeql_prepare() {',
                 '  DESTINATION="$CODEQL_DESTINATION"',
-                '  prepare_build_inputs',
+                '  build_app "scripts/build.sh codeql-prepare"',
+                '}',
+                'touch_codeql_sources() {',
+                '  find "$ROOT_DIR/Sources" "$ROOT_DIR/Packages/VocelloQwen3Core/Sources" -name "*.swift" -exec touch {} +',
                 '}',
                 'cmd_codeql() {',
                 '  DESTINATION="$CODEQL_DESTINATION"',
+                '  touch_codeql_sources',
                 '  build_app "scripts/build.sh codeql"',
                 '}',
                 'case "${1:-}" in',
@@ -320,7 +324,22 @@ jobs:
             ),
             encoding="utf-8",
         )
-        self.assertTrue(any("CodeQL build must select" in value for value in module.validate(self.root)))
+        self.assertTrue(any("CodeQL build must touch" in value for value in module.validate(self.root)))
+
+    def test_swift_codeql_traced_build_must_invalidate_all_owned_swift(self) -> None:
+        path = self.root / "scripts/build.sh"
+        text = path.read_text(encoding="utf-8")
+        path.write_text(
+            text.replace('  touch_codeql_sources\n  build_app "scripts/build.sh codeql"', '  build_app "scripts/build.sh codeql"'),
+            encoding="utf-8",
+        )
+        self.assertTrue(any("touch owned Swift" in value for value in module.validate(self.root)))
+
+        path.write_text(
+            text.replace('"$ROOT_DIR/Packages/VocelloQwen3Core/Sources"', '"$ROOT_DIR/Packages/Other/Sources"'),
+            encoding="utf-8",
+        )
+        self.assertTrue(any("VocelloQwen3Core/Sources" in value for value in module.validate(self.root)))
 
     def test_swift_codeql_special_steps_must_remain_swift_only(self) -> None:
         path = self.root / ".github/workflows/security.yml"
