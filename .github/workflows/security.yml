@@ -114,12 +114,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@3599b3baa15b485a2e49ef411a7a4bb2452e7f93 # v3.30.5
-        with:
-          languages: ${{ matrix.language }}
-          build-mode: ${{ matrix.build-mode }}
-
       - name: Select and validate native toolchain
         if: matrix.language == 'swift'
         run: |
@@ -128,17 +122,42 @@ jobs:
           # macos-26 image. Invoke the ARM Homebrew binary explicitly so its
           # architecture guard does not reject the otherwise native runner.
           arch -arm64 /opt/homebrew/bin/brew install xcodegen xcbeautify ripgrep shellcheck
+          # Xcode 26 ships Metal as an optional component, and GitHub's fresh
+          # macos-26 images do not consistently include it. MLX compiles Metal
+          # sources, so install the component before CodeQL starts tracing.
+          if ! xcrun metal --version >/dev/null 2>&1; then
+            xcodebuild -downloadComponent metalToolchain
+          fi
+          xcrun metal --version
           python3 scripts/supply_chain_contract.py --installed native
+
+      - name: Prepare Swift CodeQL build inputs
+        if: matrix.language == 'swift'
+        run: |
+          # Prebuild the full graph natively so Xcode 26's optional Metal
+          # compiler materializes and validates MLX shader outputs in managed
+          # CI scratch before CodeQL's translated tracing shell starts. The
+          # traced command below reuses that scratch graph and invalidates only
+          # repository-owned Swift sources.
+          ./scripts/build.sh codeql-prepare
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@3599b3baa15b485a2e49ef411a7a4bb2452e7f93 # v3.30.5
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
 
       - name: Build Swift targets for CodeQL
         if: matrix.language == 'swift'
         run: |
-          # The CodeQL tracing shell is x86_64 even on the ARM macos-26
-          # runner. Start the authoritative build through an ARM bash so
-          # xcodebuild can select the repository's arm64-only destination.
-          # build.sh owns regeneration; invoking it separately would run the
-          # full project-input suite twice before compilation.
-          arch -arm64 /bin/bash ./scripts/build.sh build
+          # CodeQL's tracing shell currently runs through Rosetta on the ARM
+          # macos-26 image. Keep the owned-Swift rebuild inside that shell so
+          # the extractor sees it, while reusing native Metal/dependency outputs
+          # and emitting only arm64 products through ARCHS=arm64. The traced
+          # scratch product is analysis-only because Xcode removes the excluded
+          # Metal resource; codeql-prepare already validated the complete app in
+          # the same isolated scratch root. Neither command stages public output.
+          ./scripts/build.sh codeql
 
       - name: Analyze
         uses: github/codeql-action/analyze@3599b3baa15b485a2e49ef411a7a4bb2452e7f93 # v3.30.5

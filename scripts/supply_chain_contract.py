@@ -33,6 +33,14 @@ def _job_permissions(job: str) -> list[str]:
     return [line.strip() for line in match.group(1).splitlines() if line.strip()]
 
 
+def _shell_function(text: str, name: str) -> str:
+    match = re.search(rf"(?m)^{re.escape(name)}\(\)\s*\{{\s*$", text)
+    if not match:
+        return ""
+    end = re.search(r"(?m)^}\s*$", text[match.end():])
+    return text[match.start():match.end() + end.end()] if end else ""
+
+
 def _tool_output(command: list[str]) -> str:
     try:
         return subprocess.check_output(command, stderr=subprocess.STDOUT, text=True)
@@ -179,10 +187,154 @@ def validate(root: Path, installed: str | None = None) -> list[str]:
             errors.append("Swift CodeQL must retain the macos-26 ARM runner")
         if "arch -arm64 /opt/homebrew/bin/brew install xcodegen xcbeautify ripgrep shellcheck" not in codeql:
             errors.append("Swift CodeQL tooling must invoke ARM Homebrew explicitly on the macos-26 runner")
-        if "arch -arm64 /bin/bash ./scripts/build.sh build" not in codeql:
-            errors.append("Swift CodeQL must invoke the authoritative macOS build through an ARM bash")
+        if "xcodebuild -downloadComponent metalToolchain" not in codeql:
+            errors.append("Swift CodeQL must install Xcode 26's optional Metal Toolchain when absent")
+        if "xcrun metal --version" not in codeql:
+            errors.append("Swift CodeQL must verify the Metal compiler before initialization")
+        if not re.search(r"(?m)^\s*(?:run:\s*)?\./scripts/build\.sh codeql-prepare\s*$", codeql):
+            errors.append("Swift CodeQL must prepare generated inputs and packages before tracing")
+        if not re.search(r"(?m)^\s*(?:run:\s*)?\./scripts/build\.sh codeql\s*$", codeql):
+            errors.append("Swift CodeQL must invoke the authoritative traced build command")
+        if re.search(r"(?m)^\s*(?:run:\s*)?\./scripts/build\.sh build\s*$", codeql):
+            errors.append("Swift CodeQL must not substitute the ordinary local build command")
         if "./scripts/regenerate_project.sh" in codeql:
             errors.append("Swift CodeQL must let build.sh own project regeneration")
+        if "arch -arm64 /bin/bash ./scripts/build.sh" in codeql:
+            errors.append("Swift CodeQL compilation must remain inside the CodeQL tracing shell")
+        for step_name in ("Prepare Swift CodeQL build inputs", "Build Swift targets for CodeQL"):
+            if not re.search(
+                rf"(?m)^\s*- name: {re.escape(step_name)}\s*$\n\s+if: matrix\.language == 'swift'\s*$",
+                codeql,
+            ):
+                errors.append(f"{step_name} must remain Swift-only")
+        codeql_order = [
+            "Select and validate native toolchain",
+            "Prepare Swift CodeQL build inputs",
+            "Initialize CodeQL",
+            "Build Swift targets for CodeQL",
+            "Analyze",
+        ]
+        codeql_positions = [codeql.find(value) for value in codeql_order]
+        if any(value < 0 for value in codeql_positions) or codeql_positions != sorted(codeql_positions):
+            errors.append(
+                "Swift CodeQL must preserve toolchain -> prepare -> initialize -> traced build -> analyze ordering"
+            )
+
+    build_path = root / "scripts/build.sh"
+    build_source = build_path.read_text(encoding="utf-8") if build_path.is_file() else ""
+    for token, message in (
+        ('DESTINATION="platform=macOS,arch=arm64"', "The ordinary macOS build destination must remain explicit"),
+        ('CODEQL_DESTINATION="generic/platform=macOS"', "CodeQL must use the generic macOS destination"),
+        ('CODEQL_DERIVED_DATA="$QVOICE_SCRATCH_CI/codeql-macos"', "CodeQL must use managed CI scratch"),
+        ('CODEQL_BUILD_PHASE="none"', "Ordinary macOS builds must publish complete runnable products"),
+        ("ARCHS=arm64", "CodeQL must emit arm64 products"),
+        ("codeql-prepare)", "build.sh is missing the CodeQL preparation command"),
+        ("codeql)", "build.sh is missing the traced CodeQL build command"),
+    ):
+        if token not in build_source:
+            errors.append(message)
+    configure_function = _shell_function(build_source, "configure_codeql_build")
+    for token in (
+        'CODEQL_BUILD_PHASE="$1"',
+        'DESTINATION="$CODEQL_DESTINATION"',
+        'DERIVED_DATA="$CODEQL_DERIVED_DATA"',
+        'XCODEBUILD_APP="$DERIVED_DATA/Build/Products/Release/$APP_NAME.app"',
+    ):
+        if token not in configure_function:
+            errors.append(f"CodeQL scratch configuration is missing: {token}")
+    codeql_prepare_function = _shell_function(build_source, "cmd_codeql_prepare")
+    if "configure_codeql_build prepare" not in codeql_prepare_function \
+            or "configure_codeql_build trace" in codeql_prepare_function \
+            or 'build_app "scripts/build.sh codeql-prepare"' not in codeql_prepare_function:
+        errors.append("CodeQL preparation must build and validate the complete app in managed scratch")
+    codeql_build_function = _shell_function(build_source, "cmd_codeql")
+    if "configure_codeql_build trace" not in codeql_build_function \
+            or "touch_codeql_sources" not in codeql_build_function \
+            or 'build_app "scripts/build.sh codeql"' not in codeql_build_function:
+        errors.append(
+            "CodeQL build must select the isolated trace phase, touch owned Swift, and reuse managed scratch"
+        )
+    build_app_function = _shell_function(build_source, "build_app")
+    build_tail_position = build_app_function.find("local -a build_tail=(build)")
+    sync_condition = 'if [ "$CODEQL_BUILD_PHASE" = "none" ]; then'
+    sync_position = build_app_function.find(sync_condition)
+    build_tail_block = build_app_function[build_tail_position:sync_position]
+    if build_tail_position < 0 or sync_position < 0 \
+            or 'if [ "$CODEQL_BUILD_PHASE" = "trace" ]; then' not in build_tail_block \
+            or "build_tail=('EXCLUDED_SOURCE_FILE_NAMES=*.metal' build)" not in build_tail_block \
+            or '"${build_tail[@]}"' not in build_app_function:
+        errors.append("CodeQL Metal exclusion must remain scoped to the dedicated traced build")
+    sync_call_position = build_app_function.find('sync_dev_signing_cache "$signing_identity" "$XCODEBUILD_APP" "$APP_BUNDLE"')
+    build_position = build_app_function.find('"${build_tail[@]}"')
+    sync_guard_match = re.search(
+        re.escape(sync_condition) + r"\s*\n(?P<body>.*?)(?m:^\s*fi\s*$)",
+        build_app_function[sync_position:build_position],
+        re.DOTALL,
+    )
+    if not (
+        0 <= sync_position < sync_call_position < build_position
+        and sync_guard_match is not None
+        and 'sync_dev_signing_cache "$signing_identity" "$XCODEBUILD_APP" "$APP_BUNDLE"'
+        in sync_guard_match.group("body")
+    ):
+        errors.append("CodeQL scratch phases must not synchronize or remove the public app product")
+
+    product_position = build_app_function.find('if [ ! -d "$XCODEBUILD_APP" ]; then', build_position)
+    trace_condition = 'if [ "$CODEQL_BUILD_PHASE" = "trace" ]; then'
+    trace_position = build_app_function.find(trace_condition, product_position)
+    metallib_position = build_app_function.find('assert_mlx_metallibs "$XCODEBUILD_APP"', trace_position)
+    trace_block = build_app_function[trace_position:metallib_position]
+    if not (
+        0 <= build_position < product_position < trace_position < metallib_position
+        and 'assert_macos_bundle_arm64_only "$XCODEBUILD_APP"' in trace_block
+        and "return 0" in trace_block
+    ):
+        errors.append("CodeQL trace phase must verify an arm64 product and stop only after the traced build succeeds")
+    for prohibited in (
+        "$APP_BUNDLE", "sync_dev_signing_cache", "preserve_dsyms",
+        "write_build_provenance", "record_dev_signing_identity", "ln -s", "rm -rf",
+    ):
+        if prohibited in trace_block:
+            errors.append(f"CodeQL trace phase contains a public-product mutation: {prohibited}")
+
+    normal_arch_position = build_app_function.find(
+        'assert_macos_bundle_arm64_only "$XCODEBUILD_APP"', metallib_position
+    )
+    signing_position = build_app_function.find(
+        'assert_signing_identity "$XCODEBUILD_APP" "$signing_identity"', normal_arch_position
+    )
+    prepare_condition = 'if [ "$CODEQL_BUILD_PHASE" = "prepare" ]; then'
+    prepare_position = build_app_function.find(prepare_condition, signing_position)
+    public_position = build_app_function.find('if [ -e "$APP_BUNDLE" ]', prepare_position)
+    prepare_block = build_app_function[prepare_position:public_position]
+    if not (
+        0 <= metallib_position < normal_arch_position < signing_position < prepare_position < public_position
+        and "return 0" in prepare_block
+    ):
+        errors.append(
+            "CodeQL preparation must validate Metal, arm64, and signing before stopping ahead of public staging"
+        )
+    for prohibited in (
+        "quit_app_if_running", "preserve_dsyms", "write_build_provenance",
+        "record_dev_signing_identity", "ln -s", "rm -rf",
+    ):
+        if prohibited in prepare_block:
+            errors.append(f"CodeQL preparation contains a public-product mutation: {prohibited}")
+    if 'assert_mlx_metallibs "$XCODEBUILD_APP"' not in build_app_function:
+        errors.append("Every runnable macOS app build must verify the required app and XPC MLX Metal libraries")
+    metallib_function = _shell_function(build_source, "assert_mlx_metallibs")
+    if 'if [ ! -s "$app_bundle/$relative_path" ]; then' not in metallib_function:
+        errors.append("MLX Metal verification must fail closed for missing or empty libraries")
+    for required_path in (
+        "Contents/Resources/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib",
+        "Contents/XPCServices/QwenVoiceEngineService.xpc/Contents/Resources/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib",
+    ):
+        if required_path not in metallib_function:
+            errors.append(f"MLX Metal verification is missing required bundle path: {required_path}")
+    touch_function = _shell_function(build_source, "touch_codeql_sources")
+    for source_root in ("$ROOT_DIR/Sources", "$ROOT_DIR/Packages/VocelloQwen3Core/Sources"):
+        if source_root not in touch_function:
+            errors.append(f"CodeQL traced rebuild does not cover owned Swift root: {source_root}")
 
     snapshot_path = root / "scripts/swift_dependency_snapshot.py"
     snapshot_source = snapshot_path.read_text(encoding="utf-8") if snapshot_path.is_file() else ""
