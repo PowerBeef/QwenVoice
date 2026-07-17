@@ -1,6 +1,6 @@
 import Foundation
 @preconcurrency import QwenVoiceBackendCore
-@preconcurrency import VocelloQwen3Core
+@_spi(VocelloQwen3LegacyCompatibility) @preconcurrency import VocelloQwen3Core
 
 /// Host-boundary resolver for immutable request-local sampling policy.
 /// Environment values are read only through `RuntimeDebugGate`; the resulting

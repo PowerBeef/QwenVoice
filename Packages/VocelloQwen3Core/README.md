@@ -50,7 +50,23 @@ then uses a direct caller-isolated Qwen producer and frame-bounded suspending ch
 materialized to `[Float]` before the awaited send, so no `MLXArray` crosses a task or actor boundary;
 prepared state, coalesced progress, model terminal, bounded PCM-free diagnostics, cancellation, and
 product finalization remain independent. The old combined facade event session is a temporary
-compatibility surface and is not the target product authority.
+package-internal characterization surface and is not the target product authority. The normal
+public mutation boundary is therefore the actor. The unchanged shipping bridge imports loaded-model,
+stream, clone-artifact, load, and cache adapters through the named
+`VocelloQwen3LegacyCompatibility` SPI. That SPI is temporary, is not product authority, and does not
+imply the Phase 4 mode cutover.
+
+The actor foundation closes its inert-reservation and critical-relief lifecycle explicitly.
+Reserved, generating, and aborting states prevent open-after-abort and make duplicate aborts join
+one finalization. Typed cache-trim or full-unload relief carries the generation lease through the
+release operation and reopens critical admission only after relief completes. A rejected atomic
+relief claim clears ownership before session reconciliation so a concurrent ordinary finalizer
+cannot strand the lease.
+
+Clone prompts remain actor-owned behind epoch-bound `VocelloQwen3CloneHandle` values. The default
+retained-handle capacity is one; an explicit larger capacity uses least-recently-used eviction.
+Release is explicit and repeat-safe, a reservation keeps an already captured prompt, noncritical
+cache trim preserves valid handles, and model reload, critical trim, or full unload invalidates them.
 
 The `MLXAudioCore`, `MLXAudioCodecs`, and `MLXAudioTTS` products remain checked in for implementation
 compatibility. They may be used inside this package, but are not the application-layer dependency

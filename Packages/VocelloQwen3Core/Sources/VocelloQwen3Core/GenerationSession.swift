@@ -94,8 +94,9 @@ public struct VocelloQwen3TerminalEvent: Codable, Hashable, Sendable {
     }
 }
 
-/// Ordered public event vocabulary for a generation session.
-public enum VocelloQwen3GenerationEvent: Codable, Hashable, Sendable {
+/// Ordered internal event vocabulary retained only for package characterization
+/// while the product completes the classified-session cutover.
+enum VocelloQwen3GenerationEvent: Codable, Hashable, Sendable {
     case prepared(VocelloQwen3PreparedEvent)
     case audioChunk(VocelloQwen3AudioChunkEvent)
     case progress(VocelloQwen3ProgressEvent)
@@ -108,7 +109,7 @@ public enum VocelloQwen3GenerationEvent: Codable, Hashable, Sendable {
 ///
 /// Implementations yield ordered events, yield exactly one terminal event,
 /// finish `events`, and return that same event from `waitForTermination()`.
-public protocol VocelloQwen3GenerationSession: Sendable {
+protocol VocelloQwen3GenerationSession: Sendable {
     var id: UUID { get }
     var events: AsyncStream<VocelloQwen3GenerationEvent> { get }
 
@@ -229,9 +230,9 @@ actor VocelloQwen3TerminalState {
 /// channel is bounded and non-suspending: an undrained full buffer fails the
 /// session explicitly instead of deadlocking generation. A reserved terminal
 /// slot guarantees that completion never depends on consumer progress.
-public final class VocelloQwen3ModelGenerationSession: VocelloQwen3GenerationSession, @unchecked Sendable {
-    public let id: UUID
-    public let events: AsyncStream<VocelloQwen3GenerationEvent>
+final class VocelloQwen3ModelGenerationSession: VocelloQwen3GenerationSession, @unchecked Sendable {
+    let id: UUID
+    let events: AsyncStream<VocelloQwen3GenerationEvent>
 
     private let channel: VocelloQwen3EventChannel
     private let terminalState = VocelloQwen3TerminalState()
@@ -358,13 +359,13 @@ public final class VocelloQwen3ModelGenerationSession: VocelloQwen3GenerationSes
         }
     }
 
-    public func cancel(reason: VocelloQwen3CancellationReason) async {
+    func cancel(reason: VocelloQwen3CancellationReason) async {
         await terminalState.requestCancellation(reason)
         task.cancel()
         _ = await terminalState.wait()
     }
 
-    public func waitForTermination() async -> VocelloQwen3TerminalEvent {
+    func waitForTermination() async -> VocelloQwen3TerminalEvent {
         await terminalState.wait()
     }
 
@@ -426,7 +427,7 @@ public final class VocelloQwen3ModelGenerationSession: VocelloQwen3GenerationSes
     }
 }
 
-public extension VocelloQwen3LoadedModel {
+extension VocelloQwen3LoadedModel {
     func startGenerationSession(
         request: VocelloQwen3SynthesisRequest,
         clonePrompt: VocelloQwen3ClonePrompt? = nil,

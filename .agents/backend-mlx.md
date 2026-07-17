@@ -117,6 +117,16 @@ warning.
   shipping compatibility path from actor/session/output/telemetry/long-form/quality foundations.
   A schema-v8 row may carry the partial v9 transition projection, but that nested evidence does not
   make the complete v9 writer/merger/publication path or the actor session shipping authority.
+  The loaded-model/stream/clone/load/cache bridge is available only through
+  `@_spi(VocelloQwen3LegacyCompatibility)`; SPI access preserves the unchanged shipping
+  compatibility path and does not make the actor or classified session shipping authority. Do not
+  add a normal-public mutation surface back to `VocelloQwen3LoadedModel`.
+  Preserve the actor's explicit reserved/generating/aborting ownership: open must fail once abort
+  owns the reservation, duplicate aborts join one finalization, and typed cache-trim/full-unload
+  relief must carry the generation lease without reopening critical admission before completion.
+  Keep Clone prompt tensors actor-owned behind epoch-bound handles: default capacity one, bounded
+  LRU for explicit larger capacities, fail-closed explicit release, preservation across noncritical
+  trim, and invalidation on model reload, critical trim, or full unload.
   Task cancellation of a producer suspended on the foundation channel must continue to wake the
   pending send rather than publish or strand it.
   Never route product generation through a foundation before its mode-specific promotion gates pass.

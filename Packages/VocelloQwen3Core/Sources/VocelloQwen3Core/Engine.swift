@@ -46,6 +46,12 @@ public enum VocelloQwen3MemoryPressureLevel: String, Codable, Hashable, Sendable
     case critical
 }
 
+/// The amount of actor-owned runtime state released by a memory-relief pass.
+public enum VocelloQwen3MemoryReliefAction: String, Codable, Hashable, Sendable {
+    case cacheTrim = "cache_trim"
+    case fullUnload = "full_unload"
+}
+
 public struct VocelloQwen3MemoryPressureSnapshot: Codable, Hashable, Sendable {
     public let level: VocelloQwen3MemoryPressureLevel
     public let sequence: UInt64
@@ -93,6 +99,7 @@ public enum VocelloQwen3EngineError: Error, Equatable, Sendable {
     case audioConsumerNotClaimed
     case modelHasNotTerminated
     case admissionClosedForMemoryRelief
+    case finalizationAlreadyReleased
     case invalidCloneHandle
     case invalidConditioningDigest
 }
@@ -152,6 +159,12 @@ public struct VocelloQwen3GenerationReservation: Sendable {
 /// runs a shadow generation. The inner Qwen generation gate remains active as
 /// defense-in-depth while compatibility streams are still used.
 public actor VocelloQwen3Engine {
+    private enum GenerationLifecycle: Sendable, Equatable {
+        case reserved
+        case generating
+        case aborting
+    }
+
     private struct CloneRecord {
         let handle: VocelloQwen3CloneHandle
         let prompt: VocelloQwen3ClonePrompt
@@ -163,7 +176,9 @@ public actor VocelloQwen3Engine {
         let request: VocelloQwen3SynthesisRequest
         let clonePrompt: VocelloQwen3ClonePrompt?
         let session: VocelloQwen3ClassifiedGenerationSession
-        var opened = false
+        let abortCompletion = VocelloQwen3AbortCompletionBarrier()
+        var lifecycle: GenerationLifecycle = .reserved
+        var finalizationReliefAction: VocelloQwen3MemoryReliefAction?
         var task: Task<Void, Never>?
         var generatedTokenCount = 0
         var emittedAudioFrameCount = 0
@@ -175,6 +190,7 @@ public actor VocelloQwen3Engine {
         let leaseID: UUID
         let token: VocelloQwen3ProductFinalizationToken
         let disposition: VocelloQwen3ProductFinalizationDisposition
+        let completedReliefAction: VocelloQwen3MemoryReliefAction?
     }
 
     private var loadedModel: VocelloQwen3LoadedModel?
@@ -185,14 +201,51 @@ public actor VocelloQwen3Engine {
     private var lastFinalization: LastFinalization?
     private var pressure = VocelloQwen3MemoryPressureSnapshot()
     private var cloneRecords: [UUID: CloneRecord] = [:]
+    private var cloneRecordUseOrder: [UUID] = []
+    private let cloneHandleCapacity: Int
+    private let abortLifecycleHook: @Sendable (VocelloQwen3EngineAbortHookEvent) async -> Void
+    private let memoryReliefHook: @Sendable (VocelloQwen3MemoryReliefAction) async -> Void
+    private let finalizationReliefClaimHook: @Sendable () async -> Void
+    private let finalizationReliefRollbackHook: @Sendable () async -> Void
 
-    public init() {}
+    public init() {
+        cloneHandleCapacity = 1
+        abortLifecycleHook = { _ in }
+        memoryReliefHook = { _ in }
+        finalizationReliefClaimHook = {}
+        finalizationReliefRollbackHook = {}
+    }
+
+    public init(cloneHandleCapacity: Int) {
+        self.cloneHandleCapacity = max(1, cloneHandleCapacity)
+        abortLifecycleHook = { _ in }
+        memoryReliefHook = { _ in }
+        finalizationReliefClaimHook = {}
+        finalizationReliefRollbackHook = {}
+    }
 
     /// Deterministic package-test seam. Production always starts unloaded and
     /// reaches this state through `load(_:behavior:cachePolicy:)`.
-    init(loadedModel: VocelloQwen3LoadedModel, modelEpoch: UInt64 = 1) {
+    init(
+        loadedModel: VocelloQwen3LoadedModel,
+        modelEpoch: UInt64 = 1,
+        cloneHandleCapacity: Int = 1,
+        abortLifecycleHook: @escaping @Sendable (
+            VocelloQwen3EngineAbortHookEvent
+        ) async -> Void = { _ in },
+        memoryReliefHook: @escaping @Sendable (
+            VocelloQwen3MemoryReliefAction
+        ) async -> Void = { _ in },
+        finalizationReliefClaimHook: @escaping @Sendable () async -> Void = {},
+        finalizationReliefRollbackHook: @escaping @Sendable () async -> Void = {}
+    ) {
         self.loadedModel = loadedModel
         self.modelEpoch = modelEpoch
+        self.cloneHandleCapacity = max(1, cloneHandleCapacity)
+        self.abortLifecycleHook = abortLifecycleHook
+        self.memoryReliefHook = memoryReliefHook
+        self.finalizationReliefClaimHook = finalizationReliefClaimHook
+        self.finalizationReliefRollbackHook = finalizationReliefRollbackHook
         phase = .ready
     }
 
@@ -244,7 +297,7 @@ public actor VocelloQwen3Engine {
             try Task.checkCancellation()
             loadedModel = model
             modelEpoch &+= 1
-            cloneRecords.removeAll(keepingCapacity: false)
+            invalidateCloneHandles()
             activeOperation = nil
             phase = .ready
             return model.identity
@@ -291,7 +344,7 @@ public actor VocelloQwen3Engine {
                 capability: xVectorOnlyMode ? .decoderOnly : .encoderAndDecoder,
                 conditioningDigest: conditioningDigest
             )
-            cloneRecords[handle.id] = CloneRecord(handle: handle, prompt: prompt)
+            insertCloneRecord(CloneRecord(handle: handle, prompt: prompt))
             activeOperation = nil
             phase = .ready
             return handle
@@ -299,6 +352,21 @@ public actor VocelloQwen3Engine {
             failOperationIfCurrent(lease)
             throw error
         }
+    }
+
+    /// Releases an opaque conditioning handle without exposing its tensors.
+    /// A prompt already retained by an active reservation remains valid for
+    /// that reservation, while future lookups fail closed.
+    @discardableResult
+    public func releaseCloneHandle(_ handle: VocelloQwen3CloneHandle) -> Bool {
+        guard handle.modelEpoch == modelEpoch,
+              handle.model == loadedModel?.identity,
+              cloneRecords[handle.id]?.handle == handle else {
+            return false
+        }
+        cloneRecords.removeValue(forKey: handle.id)
+        cloneRecordUseOrder.removeAll { $0 == handle.id }
+        return true
     }
 
     /// Prepares the currently loaded model without exposing its mutable facade.
@@ -428,29 +496,49 @@ public actor VocelloQwen3Engine {
     /// Opens generation only after the product output adapter has claimed the
     /// session's mandatory audio consumer.
     public func open(_ reservationID: UUID) async throws {
-        guard var pending = pendingGeneration,
+        guard let pending = pendingGeneration,
               pending.reservationID == reservationID else {
             throw VocelloQwen3EngineError.invalidReservation
         }
-        guard !pending.opened else {
+        switch pending.lifecycle {
+        case .reserved:
+            break
+        case .generating:
             throw VocelloQwen3EngineError.reservationAlreadyOpen
+        case .aborting:
+            throw VocelloQwen3EngineError.invalidReservation
         }
         guard await pending.session.hasClaimedAudioConsumer() else {
             throw VocelloQwen3EngineError.audioConsumerNotClaimed
         }
-        try revalidate(pending.lease)
+
+        // The consumer query suspends outside this actor. Re-fetch both the
+        // reservation and its lifecycle before allowing model work to start.
+        guard var current = pendingGeneration,
+              current.reservationID == reservationID else {
+            throw VocelloQwen3EngineError.invalidReservation
+        }
+        switch current.lifecycle {
+        case .reserved:
+            break
+        case .generating:
+            throw VocelloQwen3EngineError.reservationAlreadyOpen
+        case .aborting:
+            throw VocelloQwen3EngineError.invalidReservation
+        }
+        try revalidate(current.lease)
         guard !pressure.admissionClosed else {
             throw VocelloQwen3EngineError.admissionClosedForMemoryRelief
         }
 
-        pending.opened = true
+        current.lifecycle = .generating
         phase = .generating
         let task = Task { [self] in
             await runGeneration(reservationID: reservationID)
         }
-        pending.task = task
-        pending.session.cancellation.installCancelAction { task.cancel() }
-        pendingGeneration = pending
+        current.task = task
+        current.session.cancellation.installCancelAction { task.cancel() }
+        pendingGeneration = current
     }
 
     /// Aborts an inert reservation. No model task or preparation can have
@@ -461,11 +549,25 @@ public actor VocelloQwen3Engine {
         _ reservationID: UUID,
         reason: VocelloQwen3CancellationReason = .shutdown
     ) async throws {
-        guard let pending = pendingGeneration,
-              pending.reservationID == reservationID,
-              !pending.opened else {
+        guard var pending = pendingGeneration,
+              pending.reservationID == reservationID else {
             throw VocelloQwen3EngineError.invalidReservation
         }
+        switch pending.lifecycle {
+        case .reserved:
+            pending.lifecycle = .aborting
+            pendingGeneration = pending
+            phase = .awaitingProductFinalization
+            await abortLifecycleHook(.owner)
+            try revalidateAbortingReservation(pending)
+        case .aborting:
+            await abortLifecycleHook(.joiner)
+            await pending.abortCompletion.wait()
+            return
+        case .generating:
+            throw VocelloQwen3EngineError.invalidReservation
+        }
+
         let effectiveReason: VocelloQwen3CancellationReason
         if let recordedReason = pending.session.cancellation.reason {
             effectiveReason = recordedReason
@@ -481,16 +583,26 @@ public actor VocelloQwen3Engine {
             elapsedMilliseconds: 0
         )
         await pending.session.cancelModelTerminal(terminal, reason: effectiveReason)
+        try revalidateAbortingReservation(pending)
         _ = try await pending.session.acknowledgeProductFinalization(
             generationID: pending.request.generationID,
             leaseID: pending.lease.id,
             token: pending.session.finalizationToken,
             disposition: .aborted(.runtime)
         )
-        releaseGeneration(
-            pending,
-            disposition: .aborted(.runtime)
-        )
+        guard let current = pendingGeneration,
+              current.reservationID == pending.reservationID,
+              current.lifecycle == .aborting,
+              activeOperation == pending.lease else {
+            _ = try acknowledgeAgainstLastFinalization(
+                generationID: pending.request.generationID,
+                leaseID: pending.lease.id,
+                token: pending.session.finalizationToken,
+                disposition: .aborted(.runtime)
+            )
+            return
+        }
+        await releaseGeneration(current, disposition: .aborted(.runtime))
     }
 
     /// Cancels either lifecycle state. An inert reservation is finalized and
@@ -504,11 +616,12 @@ public actor VocelloQwen3Engine {
               pending.reservationID == reservationID else {
             throw VocelloQwen3EngineError.invalidReservation
         }
-        if !pending.opened {
+        switch pending.lifecycle {
+        case .reserved, .aborting:
             try await abortReservation(reservationID, reason: reason)
-            return
+        case .generating:
+            pending.session.cancellation.request(reason)
         }
-        pending.session.cancellation.request(reason)
     }
 
     public func acknowledgeProductFinalization(
@@ -526,6 +639,9 @@ public actor VocelloQwen3Engine {
             )
         }
         guard phase == .awaitingProductFinalization else {
+            throw VocelloQwen3EngineError.modelHasNotTerminated
+        }
+        guard pending.lifecycle != .aborting else {
             throw VocelloQwen3EngineError.modelHasNotTerminated
         }
         try revalidate(pending.lease)
@@ -546,7 +662,14 @@ public actor VocelloQwen3Engine {
                 disposition: disposition
             )
         }
-        releaseGeneration(current, disposition: disposition)
+        // A concurrent atomic-relief acknowledgement owns the generation
+        // lease transfer. This acknowledgement may validate the same product
+        // result, but must not release that lease in between finalization and
+        // cache/model relief.
+        if current.finalizationReliefAction != nil {
+            return result
+        }
+        await releaseGeneration(current, disposition: disposition)
         return result
     }
 
@@ -559,7 +682,105 @@ public actor VocelloQwen3Engine {
         token: VocelloQwen3ProductFinalizationToken,
         disposition: VocelloQwen3ProductFinalizationDisposition
     ) async throws -> VocelloQwen3FinalizationAcknowledgeResult {
-        guard let pending = pendingGeneration else {
+        try await acknowledgeProductFinalizationAndRelieveMemory(
+            generationID: generationID,
+            leaseID: leaseID,
+            token: token,
+            disposition: disposition,
+            action: .cacheTrim
+        )
+    }
+
+    /// Acknowledges product finalization and transfers the existing generation
+    /// lease directly into the selected relief action. No admission window is
+    /// opened between product cleanup and cache trim or full model unload.
+    public func acknowledgeProductFinalizationAndRelieveMemory(
+        generationID: UUID,
+        leaseID: UUID,
+        token: VocelloQwen3ProductFinalizationToken,
+        disposition: VocelloQwen3ProductFinalizationDisposition,
+        action: VocelloQwen3MemoryReliefAction
+    ) async throws -> VocelloQwen3FinalizationAcknowledgeResult {
+        guard var pending = pendingGeneration else {
+            if activeOperation?.kind == .memoryRelief {
+                throw VocelloQwen3EngineError.operationInProgress(.memoryRelief)
+            }
+            let result = try acknowledgeAgainstLastFinalization(
+                generationID: generationID,
+                leaseID: leaseID,
+                token: token,
+                disposition: disposition
+            )
+            guard lastFinalization?.completedReliefAction == action else {
+                throw VocelloQwen3EngineError.finalizationAlreadyReleased
+            }
+            return result
+        }
+        guard phase == .awaitingProductFinalization else {
+            throw VocelloQwen3EngineError.modelHasNotTerminated
+        }
+        guard pending.lifecycle != .aborting else {
+            throw VocelloQwen3EngineError.modelHasNotTerminated
+        }
+        try revalidate(pending.lease)
+        if pending.finalizationReliefAction != nil {
+            throw VocelloQwen3EngineError.operationInProgress(.memoryRelief)
+        }
+        pending.finalizationReliefAction = action
+        pendingGeneration = pending
+        await finalizationReliefClaimHook()
+        let result: VocelloQwen3FinalizationAcknowledgeResult
+        do {
+            result = try await pending.session.acknowledgeProductFinalization(
+                generationID: generationID,
+                leaseID: leaseID,
+                token: token,
+                disposition: disposition
+            )
+        } catch {
+            // Claiming relief happens before the acknowledgement suspension so
+            // no concurrent finalizer can release this generation lease. A
+            // rejected identity or disposition must relinquish only that same
+            // claim; otherwise one bad acknowledgement would permanently
+            // strand the actor in awaiting-product-finalization.
+            var clearedClaim = false
+            if var current = pendingGeneration,
+               current.reservationID == pending.reservationID,
+               current.finalizationReliefAction == action,
+               activeOperation == pending.lease {
+                // Clear this exact claim before crossing another actor. An
+                // ordinary finalizer arriving after this point now owns its
+                // normal release path instead of observing stale relief
+                // ownership and returning early.
+                current.finalizationReliefAction = nil
+                pendingGeneration = current
+                clearedClaim = true
+            }
+            if clearedClaim {
+                await finalizationReliefRollbackHook()
+            }
+            let acceptedDisposition = await pending.session
+                .acceptedProductFinalizationDisposition()
+            if let acceptedDisposition,
+               let current = pendingGeneration,
+               current.reservationID == pending.reservationID,
+               current.finalizationReliefAction == nil,
+               activeOperation == pending.lease {
+                // A valid finalizer may already have crossed the session
+                // barrier while this rejected claim was visible. If it did,
+                // finish that accepted acknowledgement unless another atomic
+                // claimant has since taken ownership.
+                await releaseGeneration(
+                    current,
+                    disposition: acceptedDisposition
+                )
+            }
+            throw error
+        }
+        guard let current = pendingGeneration,
+              current.reservationID == pending.reservationID,
+              current.finalizationReliefAction == action,
+              activeOperation == pending.lease else {
             return try acknowledgeAgainstLastFinalization(
                 generationID: generationID,
                 leaseID: leaseID,
@@ -567,23 +788,14 @@ public actor VocelloQwen3Engine {
                 disposition: disposition
             )
         }
-        guard phase == .awaitingProductFinalization else {
-            throw VocelloQwen3EngineError.modelHasNotTerminated
-        }
-        try revalidate(pending.lease)
-        let result = try await pending.session.acknowledgeProductFinalization(
-            generationID: generationID,
-            leaseID: leaseID,
-            token: token,
-            disposition: disposition
-        )
-        try revalidate(pending.lease)
+        try revalidate(current.lease)
 
         lastFinalization = LastFinalization(
             generationID: generationID,
             leaseID: leaseID,
             token: token,
-            disposition: disposition
+            disposition: disposition,
+            completedReliefAction: nil
         )
         let reliefLease = VocelloQwen3RuntimeOperationLease(
             id: pending.lease.id,
@@ -595,11 +807,14 @@ public actor VocelloQwen3Engine {
         activeOperation = reliefLease
         phase = .relievingMemory
         do {
-            await VocelloQwen3Runtime.clearRuntimeCaches(isolation: self)
-            try revalidate(reliefLease)
-            activeOperation = nil
-            phase = loadedModel == nil ? .unloaded : .ready
-            completePressureReliefIfNeeded()
+            try await performMemoryRelief(action, lease: reliefLease)
+            lastFinalization = LastFinalization(
+                generationID: generationID,
+                leaseID: leaseID,
+                token: token,
+                disposition: disposition,
+                completedReliefAction: action
+            )
             return result
         } catch {
             failOperationIfCurrent(reliefLease)
@@ -611,6 +826,13 @@ public actor VocelloQwen3Engine {
     /// the runtime. Critical-pressure continuity is coordinated by the product
     /// gate until its cutover to this actor.
     public func relieveMemory() async throws {
+        try await relieveMemory(.cacheTrim)
+    }
+
+    /// Performs a typed standalone relief action. Both actions are admitted
+    /// while critical pressure is closed and reopen admission only after the
+    /// selected release has completed.
+    public func relieveMemory(_ action: VocelloQwen3MemoryReliefAction) async throws {
         let lease = try beginOperation(
             kind: .memoryRelief,
             generationID: nil,
@@ -618,11 +840,7 @@ public actor VocelloQwen3Engine {
             permitsClosedAdmission: true
         )
         do {
-            await VocelloQwen3Runtime.clearRuntimeCaches(isolation: self)
-            try revalidate(lease)
-            activeOperation = nil
-            phase = loadedModel == nil ? .unloaded : .ready
-            completePressureReliefIfNeeded()
+            try await performMemoryRelief(action, lease: lease)
         } catch {
             failOperationIfCurrent(lease)
             throw error
@@ -630,15 +848,14 @@ public actor VocelloQwen3Engine {
     }
 
     public func unload() async throws {
-        let lease = try beginOperation(kind: .unload, generationID: nil, phase: .unloading)
+        let lease = try beginOperation(
+            kind: .unload,
+            generationID: nil,
+            phase: .unloading,
+            permitsClosedAdmission: true
+        )
         do {
-            await VocelloQwen3Runtime.clearRuntimeCaches(isolation: self)
-            try revalidate(lease)
-            loadedModel = nil
-            modelEpoch &+= 1
-            cloneRecords.removeAll(keepingCapacity: false)
-            activeOperation = nil
-            phase = .unloaded
+            try await performMemoryRelief(.fullUnload, lease: lease)
         } catch {
             failOperationIfCurrent(lease)
             throw error
@@ -648,7 +865,7 @@ public actor VocelloQwen3Engine {
     private func runGeneration(reservationID: UUID) async {
         guard let pending = pendingGeneration,
               pending.reservationID == reservationID,
-              pending.opened,
+              pending.lifecycle == .generating,
               let model = loadedModel else {
             return
         }
@@ -769,7 +986,7 @@ public actor VocelloQwen3Engine {
     ) async throws {
         guard var pending = pendingGeneration,
               pending.reservationID == reservationID,
-              pending.opened else {
+              pending.lifecycle == .generating else {
             throw VocelloQwen3EngineError.staleOperation
         }
         try revalidate(pending.lease)
@@ -860,6 +1077,36 @@ public actor VocelloQwen3Engine {
         return lease
     }
 
+    private func performMemoryRelief(
+        _ action: VocelloQwen3MemoryReliefAction,
+        lease: VocelloQwen3RuntimeOperationLease
+    ) async throws {
+        await memoryReliefHook(action)
+        try revalidate(lease)
+        // Clone prompts own MLX tensors independently of runtime caches. Hard
+        // relief drops those references before clearing caches; a benign
+        // noncritical trim preserves product conditioning handles.
+        let beganAsHardRelief = action == .fullUnload || pressure.admissionClosed
+        if beganAsHardRelief {
+            invalidateCloneHandles()
+        }
+        await VocelloQwen3Runtime.clearRuntimeCaches(isolation: self)
+        try revalidate(lease)
+
+        // Critical pressure may arrive while cache clearing is suspended.
+        if !beganAsHardRelief, pressure.admissionClosed {
+            invalidateCloneHandles()
+        }
+
+        if action == .fullUnload {
+            loadedModel = nil
+            modelEpoch &+= 1
+        }
+        activeOperation = nil
+        phase = action == .fullUnload || loadedModel == nil ? .unloaded : .ready
+        completePressureReliefIfNeeded()
+    }
+
     private func validCloneRecord(
         for handle: VocelloQwen3CloneHandle
     ) -> CloneRecord? {
@@ -869,7 +1116,38 @@ public actor VocelloQwen3Engine {
               record.handle == handle else {
             return nil
         }
+        touchCloneRecord(handle.id)
         return record
+    }
+
+    private func insertCloneRecord(_ record: CloneRecord) {
+        cloneRecords[record.handle.id] = record
+        touchCloneRecord(record.handle.id)
+        while cloneRecordUseOrder.count > cloneHandleCapacity {
+            let evictedID = cloneRecordUseOrder.removeFirst()
+            cloneRecords.removeValue(forKey: evictedID)
+        }
+    }
+
+    private func touchCloneRecord(_ id: UUID) {
+        cloneRecordUseOrder.removeAll { $0 == id }
+        cloneRecordUseOrder.append(id)
+    }
+
+    private func invalidateCloneHandles() {
+        cloneRecords.removeAll(keepingCapacity: false)
+        cloneRecordUseOrder.removeAll(keepingCapacity: false)
+    }
+
+    private func revalidateAbortingReservation(
+        _ pending: PendingGeneration
+    ) throws {
+        try revalidate(pending.lease)
+        guard let current = pendingGeneration,
+              current.reservationID == pending.reservationID,
+              current.lifecycle == .aborting else {
+            throw VocelloQwen3EngineError.staleOperation
+        }
     }
 
     private func revalidate(_ lease: VocelloQwen3RuntimeOperationLease) throws {
@@ -892,16 +1170,18 @@ public actor VocelloQwen3Engine {
     private func releaseGeneration(
         _ pending: PendingGeneration,
         disposition: VocelloQwen3ProductFinalizationDisposition
-    ) {
+    ) async {
         lastFinalization = LastFinalization(
             generationID: pending.request.generationID,
             leaseID: pending.lease.id,
             token: pending.session.finalizationToken,
-            disposition: disposition
+            disposition: disposition,
+            completedReliefAction: nil
         )
         pendingGeneration = nil
         activeOperation = nil
         phase = loadedModel == nil ? .unloaded : .ready
+        await pending.abortCompletion.resolve()
     }
 
     /// The sole admission-reopen transition. It is called only after a
@@ -931,6 +1211,29 @@ public actor VocelloQwen3Engine {
             throw VocelloQwen3SessionError.conflictingFinalizationAcknowledgement
         }
         return .alreadyAcknowledged
+    }
+}
+
+enum VocelloQwen3EngineAbortHookEvent: Sendable {
+    case owner
+    case joiner
+}
+
+private actor VocelloQwen3AbortCompletionBarrier {
+    private var completed = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        if completed { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func resolve() {
+        guard !completed else { return }
+        completed = true
+        let pending = waiters
+        waiters.removeAll(keepingCapacity: false)
+        for waiter in pending { waiter.resume() }
     }
 }
 

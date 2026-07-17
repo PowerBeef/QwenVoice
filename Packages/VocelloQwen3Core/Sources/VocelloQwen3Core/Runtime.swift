@@ -44,6 +44,7 @@ public enum VocelloQwen3Runtime {
         )
     }
 
+    @_spi(VocelloQwen3LegacyCompatibility)
     public static func loadPreparedModel(
         _ bundle: VocelloQwen3PreparedModelBundle,
         loadBehavior: VocelloQwen3LoadBehavior? = nil,
@@ -80,6 +81,7 @@ public enum VocelloQwen3Runtime {
     /// Transitional adapter for existing detailed telemetry. New facade clients
     /// should use the typed overload above; arbitrary details never become part
     /// of the stable facade contract.
+    @_spi(VocelloQwen3LegacyCompatibility)
     public static func loadPreparedModel(
         _ bundle: VocelloQwen3PreparedModelBundle,
         loadBehavior: VocelloQwen3LoadBehavior? = nil,
@@ -104,17 +106,10 @@ public enum VocelloQwen3Runtime {
         )
     }
 
-    /// Compatibility validation seam retained while callers migrate to passing
-    /// memory configuration with each generation request. This deliberately
-    /// performs no process-global mutation.
-    @available(*, deprecated, message: "Pass memory configuration with each generation request.")
-    public static func apply(memoryConfiguration: VocelloQwen3MemoryConfiguration) throws {
-        _ = try memoryConfiguration.validated()
-    }
-
     /// Clears Qwen3-owned prepared, conditioning, and decoder caches after the
     /// host has proven that active generation terminated. The product controls
     /// when this lifecycle boundary is safe; cache implementation stays here.
+    @_spi(VocelloQwen3LegacyCompatibility)
     public static func clearRuntimeCaches(
         isolation: isolated (any Actor)? = #isolation
     ) async {

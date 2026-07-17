@@ -2,7 +2,7 @@ import AVFoundation
 import Combine
 import Foundation
 @preconcurrency import MLX
-@preconcurrency import VocelloQwen3Core
+@_spi(VocelloQwen3LegacyCompatibility) @preconcurrency import VocelloQwen3Core
 
 /// Engine-protocol-level error type. Adopted by every conformer of
 /// `TTSEngine` and by every throwing function on that protocol once the

@@ -13,9 +13,9 @@
       "status": "passed",
       "coreTests": 243,
       "xpcIntegrationTests": 15,
-      "ownedRuntimeTests": 89,
-      "macosBuildFinishedAt": "2026-07-17T17:25:02Z",
-      "iosDeviceSDKCompileFinishedAt": "2026-07-17T17:27:17Z"
+      "ownedRuntimeTests": 98,
+      "macosBuildFinishedAt": "2026-07-17T18:27:29Z",
+      "iosDeviceSDKCompileFinishedAt": "2026-07-17T18:30:01Z"
     },
     "promotionEvidence": "not-run-for-convergence-worktree"
   },
@@ -46,13 +46,45 @@
     "design": "compatibility-path",
     "clone": "compatibility-path"
   },
+  "phase2PublicMutationBoundary": {
+    "status": "complete-nonshipping",
+    "normalPublicMutationAuthority": "VocelloQwen3Engine",
+    "legacyShippingSPI": "VocelloQwen3LegacyCompatibility",
+    "legacyShippingSPIConsumers": [
+      "Sources/QwenVoiceCore/MLXModelLoadCoordinator.swift",
+      "Sources/QwenVoiceCore/MLXTTSEngine.swift",
+      "Sources/QwenVoiceCore/NativeCloneSupport.swift",
+      "Sources/QwenVoiceCore/NativeEngineRuntime.swift",
+      "Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift",
+      "Sources/QwenVoiceCore/UnsafeSpeechGenerationModel.swift"
+    ],
+    "consumerAllowlistEnforcement": "scripts/vendor_runtime_contract.py::LEGACY_COMPATIBILITY_SPI_CONSUMERS",
+    "combinedCompatibilitySession": "internal-package-characterization-only",
+    "actorCorrectnessClosure": {
+      "abortLifecycle": "reserved-generating-aborting-single-owner-with-duplicate-abort-join",
+      "criticalMemoryRelief": "typed-cache-trim-or-full-unload-generation-lease-transfer",
+      "admissionReopen": "after-revalidated-relief-completion-only"
+    },
+    "cloneHandleLifecycle": {
+      "defaultCapacity": 1,
+      "configuredCapacityMinimum": 1,
+      "eviction": "least-recently-used",
+      "explicitRelease": "first-release-true-repeat-release-false",
+      "activeReservationAfterRelease": "retains-captured-prompt",
+      "noncriticalCacheTrim": "preserves-handles",
+      "criticalCacheTrim": "invalidates-handles",
+      "fullUnload": "invalidates-handles-and-increments-model-epoch",
+      "modelReload": "invalidates-handles-and-increments-model-epoch"
+    },
+    "shippingAuthorityChanged": false
+  },
   "phaseStatus": {
     "characterizationContract": "partial-model-free-characterization-exact-mode-token-pcm-and-shipping-longform-fixtures-pending",
     "xpcReserveBeforeSideEffects": "implemented",
     "synchronizedPressureSnapshot": "implemented",
     "continuousCriticalReliefAdmission": "implemented-current-product-gate",
     "immutablePlans": "implemented-independent-shadow-comparison-only",
-    "engineActor": "implemented-nonshipping-load-prewarm-generation-relief-isolated-public-loaded-model-mutation-surface-remains",
+    "engineActor": "complete-nonshipping-abort-critical-full-unload-and-bounded-clone-handle-correctness-closed-legacy-shipping-bridge-spi-quarantined",
     "classifiedSessionChannels": "implemented-end-to-end-suspending-materialized-producer-foundation-not-shipping",
     "productOutputAdapter": "implemented-with-atomic-fast-qc-sink-not-cut-over",
     "modeCutover": "pending-implementation-and-focused-platform-acceptance",
@@ -66,7 +98,7 @@
     "boundedAnalyzers": "prosody-v2-shipping-persisted-wav-consolidation-pending",
     "unifiedQuality": "typed-registry-foundation-specialized-gates-ship",
     "historyV3": "pending-stable-plan-session-quality-identities",
-    "mechanicalRetirement": "deferred-until-shipping-cutovers-temporary-surfaces-remain"
+    "mechanicalRetirement": "deferred-until-shipping-cutovers-spi-and-internal-compatibility-surfaces-remain"
   },
   "constrainedTierChunkFrames": {
     "custom": { "first": 7, "later": 7 },

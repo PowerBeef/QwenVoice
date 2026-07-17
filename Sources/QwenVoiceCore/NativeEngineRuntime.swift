@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 import MLX
-@preconcurrency import VocelloQwen3Core
+@_spi(VocelloQwen3LegacyCompatibility) @preconcurrency import VocelloQwen3Core
 import OSLog
 
 enum NativeRuntimeStage: String, Codable, Sendable {

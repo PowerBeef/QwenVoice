@@ -1812,7 +1812,7 @@ scripts/macos_test.sh test
     {"title":"Acquire operation ownership","body":"MLXTTSEngine.generate enters the user-model operation gate, sets visible engine activity, and establishes cancellation and telemetry scopes.","path":"MLXTTSEngine.generate → beginUserModelOperation"},
     {"title":"Validate and load","body":"NativeEngineRuntime validates the request, resolves its always-present effective seed into a fresh request-local MLXRandom.RandomState, carries immutable sampling and memory policy, resolves the contract-backed model variant, and ensures it is loaded.","path":"NativeEngineRuntime.prepareGeneration(for:)"},
     {"title":"Build mode conditioning","body":"Custom resolves speaker and delivery; Design warms natural-language brief conditioning; Clone normalizes the reference and reuses decoded audio/prompt artifacts through NativeCloneSupport.","path":"GenerationRequest.Payload → NativeEngineRuntime / NativeCloneSupport"},
-    {"title":"Run Qwen3-TTS inference","body":"UnsafeSpeechGenerationModel enters the stable VocelloQwen3Core facade, which delegates to the owned custom, design, or clone streaming generator with the resolved language hint and sampling policy.","path":"VocelloQwen3Core → owned Qwen3-TTS 12Hz 1.7B runtime"},
+    {"title":"Run Qwen3-TTS inference","body":"UnsafeSpeechGenerationModel enters the owned VocelloQwen3Core product through the named legacy compatibility SPI, which preserves the shipping custom, design, or clone streaming bridge with the resolved language hint and sampling policy.","path":"VocelloQwen3LegacyCompatibility SPI → owned Qwen3-TTS 12Hz 1.7B runtime"},
     {"title":"Decode and quality-check PCM","body":"The owned Mimi speech tokenizer decodes tokens to PCM behind the facade. PCM16StreamLimiter and AudioQCReport track clipping, clicks, slew, dropout, and non-finite samples.","path":"VocelloQwen3Core → owned Mimi codec → PCM16StreamLimiter"},
     {"title":"Publish WAV, events, and result","body":"NativeStreamingSynthesisSession atomically writes 24 kHz mono Int16 WAV and emits ordered progress/chunk plus exactly one completed, cancelled, or failed terminal outcome. Cancellation reaches its barrier before trim, unload, or ownership release.","path":"NativeStreamingSynthesisSession.run → ActiveGenerationCoordinator"}
   ],
@@ -1956,7 +1956,7 @@ scripts/macos_test.sh test
     },
     {
       "name":"Packages/VocelloQwen3Core/","plat":"owned","desc":"First-party Qwen3-TTS core runtime with a stable VocelloQwen3Core product facade and compatibility-preserved MLXAudio implementation products.",
-      "children":[{"name":"Sources/VocelloQwen3Core/","desc":"Typed model-bundle, request-local sampling/memory, staged engine lease, classified session, terminal, cancellation, finalization, and diagnostic facade; actor/session foundations are not shipping authority yet"},{"name":"Package.swift","desc":"Exact MLX, MLXLM, and Hugging Face dependencies"}]
+      "children":[{"name":"Sources/VocelloQwen3Core/","desc":"Typed model-bundle, request-local sampling/memory, staged engine lease, bounded epoch-bound Clone handles, classified session, terminal, cancellation, finalization, and diagnostic facade; Phase 2 normal-public mutation is actor-owned as a non-shipping foundation, while the unchanged shipping bridge is quarantined behind VocelloQwen3LegacyCompatibility SPI"},{"name":"Package.swift","desc":"Exact MLX, MLXLM, and Hugging Face dependencies"}]
     },
     {
       "name":"Tests/","plat":"macOS + physical-device iOS","desc":"Core/output/telemetry tests, macOS XPC integration, and explicit UI automation.",
@@ -2161,7 +2161,7 @@ scripts/macos_test.sh test
     "Production-affecting environment overrides are registered and inert without the QWENVOICE_DEBUG master gate",
     "Every owned unchecked or unsafe concurrency declaration is registered with its safety argument",
     "The schema-v2 production catalog owns all six exact Speed/Quality identities plus verified shared-component identity; absent digests fail closed and are never inferred",
-    "Sampling and Qwen generation-memory behavior are immutable and request-local; shipping v8 rows carry only a partial v9 transition projection, while staged actor/session/complete-telemetry-v9/long-form-v4 foundations are not shipping authority",
+    "Sampling and Qwen generation-memory behavior are immutable and request-local; the legacy loaded-model shipping bridge is named SPI only; abort ownership and typed cache-trim/full-unload relief keep the actor lease continuous until finalization or critical relief completes; actor-owned Clone handles default to one retained prompt and invalidate on critical relief or unload; shipping v8 rows carry a partial v9 transition projection, while staged actor/session/complete-telemetry-v9/long-form-v4 foundations are not shipping authority",
     "Telemetry-off constructs no sampler, sink, chunk QC, or expensive derived diagnostics",
     "Benchmark history is PASS-only; HISTORY.md is generated and raw evidence stays untracked",
     "Memory-qualified history requires telemetry v8, evidence v2, at least 95% sampler coverage, and no critical pressure or memory exit",

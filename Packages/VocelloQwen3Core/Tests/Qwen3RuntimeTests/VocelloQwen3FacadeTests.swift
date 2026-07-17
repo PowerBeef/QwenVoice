@@ -1,4 +1,4 @@
-@testable import VocelloQwen3Core
+@_spi(VocelloQwen3LegacyCompatibility) @testable import VocelloQwen3Core
 import HuggingFace
 @preconcurrency import MLX
 import MLXAudioCore
@@ -793,6 +793,60 @@ final class VocelloQwen3FacadeTests: XCTestCase {
         XCTAssertNil(snapshot.activeOperation)
     }
 
+    func testAbortingReservationRejectsOpenAndDuplicateAbortJoinsFinalization() async throws {
+        let ownerGate = SuspendedEngineOperationGate()
+        let joinerGate = SuspendedEngineOperationGate()
+        let compatibilityModel = FacadeCompatibilityModel()
+        let engine = VocelloQwen3Engine(
+            loadedModel: try makeLoadedFixture(compatibilityModel: compatibilityModel),
+            abortLifecycleHook: { event in
+                switch event {
+                case .owner:
+                    await ownerGate.suspend()
+                case .joiner:
+                    await joinerGate.suspend()
+                }
+            }
+        )
+        let reservation = try await engine.reserveGeneration(
+            request: makeCustomRequest(generationID: UUID()),
+            audioCapacityFrames: 24_000
+        )
+        _ = try await reservation.session.claimAudioConsumer()
+
+        let owner = Task {
+            try await engine.abortReservation(reservation.id, reason: .shutdown)
+        }
+        await ownerGate.waitUntilEntered()
+
+        do {
+            try await engine.open(reservation.id)
+            XCTFail("an abort-owned reservation must never reopen generation")
+        } catch {
+            XCTAssertEqual(error as? VocelloQwen3EngineError, .invalidReservation)
+        }
+
+        let joiner = Task {
+            try await engine.abortReservation(reservation.id, reason: .superseded)
+        }
+        await joinerGate.waitUntilEntered()
+        var snapshot = await engine.snapshot()
+        XCTAssertEqual(snapshot.phase, .awaitingProductFinalization)
+        XCTAssertEqual(snapshot.activeOperation, reservation.lease)
+        XCTAssertNil(compatibilityModel.capturedGenerationParameters)
+
+        await joinerGate.release()
+        await ownerGate.release()
+        try await owner.value
+        try await joiner.value
+
+        let terminal = await reservation.session.waitForModelTermination()
+        XCTAssertEqual(terminal.outcome, .cancelled(.shutdown))
+        snapshot = await engine.snapshot()
+        XCTAssertEqual(snapshot.phase, .ready)
+        XCTAssertNil(snapshot.activeOperation)
+    }
+
     func testReservedGenerationCancellationIsTerminalWithoutSeparateAbort() async throws {
         let compatibilityModel = FacadeCompatibilityModel()
         let engine = VocelloQwen3Engine(
@@ -898,6 +952,24 @@ final class VocelloQwen3FacadeTests: XCTestCase {
         XCTAssertFalse(snapshot.pressure.admissionClosed)
     }
 
+    func testEngineFullUnloadReliefRunsWhileCriticalAdmissionIsClosed() async throws {
+        let engine = VocelloQwen3Engine(
+            loadedModel: try makeLoadedFixture(compatibilityModel: FacadeCompatibilityModel())
+        )
+        let original = await engine.snapshot()
+        await engine.observeMemoryPressure(.critical)
+
+        try await engine.relieveMemory(.fullUnload)
+
+        let snapshot = await engine.snapshot()
+        XCTAssertNil(snapshot.loadedModel)
+        XCTAssertEqual(snapshot.modelEpoch, original.modelEpoch + 1)
+        XCTAssertEqual(snapshot.phase, .unloaded)
+        XCTAssertNil(snapshot.activeOperation)
+        XCTAssertEqual(snapshot.pressure.level, .normal)
+        XCTAssertFalse(snapshot.pressure.admissionClosed)
+    }
+
     func testEngineCarriesGenerationLeaseThroughCriticalFinalizationRelief() async throws {
         let engine = VocelloQwen3Engine(
             loadedModel: try makeLoadedFixture(compatibilityModel: FacadeCompatibilityModel())
@@ -935,6 +1007,361 @@ final class VocelloQwen3FacadeTests: XCTestCase {
             disposition: .published
         )
         XCTAssertEqual(repeated, .alreadyAcknowledged)
+        let repeatedRelief = try await engine.acknowledgeProductFinalizationAndRelieveMemory(
+            generationID: reservation.session.generationID,
+            leaseID: reservation.lease.id,
+            token: reservation.session.finalizationToken,
+            disposition: .published,
+            action: .cacheTrim
+        )
+        XCTAssertEqual(repeatedRelief, .alreadyAcknowledged)
+        do {
+            _ = try await engine.acknowledgeProductFinalizationAndRelieveMemory(
+                generationID: reservation.session.generationID,
+                leaseID: reservation.lease.id,
+                token: reservation.session.finalizationToken,
+                disposition: .published,
+                action: .fullUnload
+            )
+            XCTFail("a completed cache trim cannot masquerade as full unload")
+        } catch {
+            XCTAssertEqual(
+                error as? VocelloQwen3EngineError,
+                .finalizationAlreadyReleased
+            )
+        }
+    }
+
+    func testAtomicReliefCannotClaimAPreviouslyReleasedFinalization() async throws {
+        let engine = VocelloQwen3Engine(
+            loadedModel: try makeLoadedFixture(compatibilityModel: FacadeCompatibilityModel())
+        )
+        let reservation = try await engine.reserveGeneration(
+            request: makeCustomRequest(generationID: UUID()),
+            audioCapacityFrames: 24_000
+        )
+        let audio = try await reservation.session.claimAudioConsumer()
+        let drain = Task {
+            for try await _ in audio {}
+        }
+        try await engine.open(reservation.id)
+        _ = await reservation.session.waitForModelTermination()
+        try await drain.value
+        await engine.observeMemoryPressure(.critical)
+
+        _ = try await engine.acknowledgeProductFinalization(
+            generationID: reservation.session.generationID,
+            leaseID: reservation.lease.id,
+            token: reservation.session.finalizationToken,
+            disposition: .published
+        )
+        do {
+            _ = try await engine.acknowledgeProductFinalizationAndRelieveMemory(
+                generationID: reservation.session.generationID,
+                leaseID: reservation.lease.id,
+                token: reservation.session.finalizationToken,
+                disposition: .published,
+                action: .fullUnload
+            )
+            XCTFail("a released generation lease cannot authorize later atomic relief")
+        } catch {
+            XCTAssertEqual(
+                error as? VocelloQwen3EngineError,
+                .finalizationAlreadyReleased
+            )
+        }
+
+        var snapshot = await engine.snapshot()
+        XCTAssertNotNil(snapshot.loadedModel)
+        XCTAssertTrue(snapshot.pressure.admissionClosed)
+        try await engine.relieveMemory(.fullUnload)
+        snapshot = await engine.snapshot()
+        XCTAssertNil(snapshot.loadedModel)
+        XCTAssertFalse(snapshot.pressure.admissionClosed)
+    }
+
+    func testEngineCarriesGenerationLeaseThroughCriticalFullUnload() async throws {
+        let engine = VocelloQwen3Engine(
+            loadedModel: try makeLoadedFixture(compatibilityModel: FacadeCompatibilityModel())
+        )
+        let original = await engine.snapshot()
+        let reservation = try await engine.reserveGeneration(
+            request: makeCustomRequest(generationID: UUID()),
+            audioCapacityFrames: 24_000
+        )
+        let audio = try await reservation.session.claimAudioConsumer()
+        let drain = Task {
+            for try await _ in audio {}
+        }
+        try await engine.open(reservation.id)
+        _ = await reservation.session.waitForModelTermination()
+        try await drain.value
+        await engine.observeMemoryPressure(.critical)
+
+        let result = try await engine.acknowledgeProductFinalizationAndRelieveMemory(
+            generationID: reservation.session.generationID,
+            leaseID: reservation.lease.id,
+            token: reservation.session.finalizationToken,
+            disposition: .published,
+            action: .fullUnload
+        )
+
+        XCTAssertEqual(result, .accepted)
+        let snapshot = await engine.snapshot()
+        XCTAssertNil(snapshot.loadedModel)
+        XCTAssertEqual(snapshot.modelEpoch, original.modelEpoch + 1)
+        XCTAssertEqual(snapshot.phase, .unloaded)
+        XCTAssertNil(snapshot.activeOperation)
+        XCTAssertEqual(snapshot.pressure.level, .normal)
+        XCTAssertFalse(snapshot.pressure.admissionClosed)
+    }
+
+    func testDuplicateAtomicReliefIsRejectedUntilOwnerCompletes() async throws {
+        let reliefGate = SuspendedEngineOperationGate()
+        let engine = VocelloQwen3Engine(
+            loadedModel: try makeLoadedFixture(compatibilityModel: FacadeCompatibilityModel()),
+            memoryReliefHook: { action in
+                if action == .fullUnload {
+                    await reliefGate.suspend()
+                }
+            }
+        )
+        let reservation = try await engine.reserveGeneration(
+            request: makeCustomRequest(generationID: UUID()),
+            audioCapacityFrames: 24_000
+        )
+        let audio = try await reservation.session.claimAudioConsumer()
+        let drain = Task {
+            for try await _ in audio {}
+        }
+        try await engine.open(reservation.id)
+        _ = await reservation.session.waitForModelTermination()
+        try await drain.value
+        await engine.observeMemoryPressure(.critical)
+
+        let owner = Task {
+            try await engine.acknowledgeProductFinalizationAndRelieveMemory(
+                generationID: reservation.session.generationID,
+                leaseID: reservation.lease.id,
+                token: reservation.session.finalizationToken,
+                disposition: .published,
+                action: .fullUnload
+            )
+        }
+        await reliefGate.waitUntilEntered()
+
+        do {
+            _ = try await engine.acknowledgeProductFinalizationAndRelieveMemory(
+                generationID: reservation.session.generationID,
+                leaseID: reservation.lease.id,
+                token: reservation.session.finalizationToken,
+                disposition: .published,
+                action: .fullUnload
+            )
+            XCTFail("a duplicate relief request must not report early completion")
+        } catch {
+            XCTAssertEqual(
+                error as? VocelloQwen3EngineError,
+                .operationInProgress(.memoryRelief)
+            )
+        }
+
+        await reliefGate.release()
+        let ownerResult = try await owner.value
+        XCTAssertEqual(ownerResult, .accepted)
+        let snapshot = await engine.snapshot()
+        XCTAssertEqual(snapshot.phase, .unloaded)
+        XCTAssertFalse(snapshot.pressure.admissionClosed)
+    }
+
+    func testRejectedAtomicReliefAcknowledgementReleasesItsClaim() async throws {
+        let staleEngine = VocelloQwen3Engine(
+            loadedModel: try makeLoadedFixture(compatibilityModel: FacadeCompatibilityModel())
+        )
+        let staleReservation = try await staleEngine.reserveGeneration(
+            request: makeCustomRequest(generationID: UUID()),
+            audioCapacityFrames: 24_000
+        )
+        let staleToken = staleReservation.session.finalizationToken
+        try await staleEngine.abortReservation(staleReservation.id)
+
+        let engine = VocelloQwen3Engine(
+            loadedModel: try makeLoadedFixture(compatibilityModel: FacadeCompatibilityModel())
+        )
+        let reservation = try await engine.reserveGeneration(
+            request: makeCustomRequest(generationID: UUID()),
+            audioCapacityFrames: 24_000
+        )
+        let audio = try await reservation.session.claimAudioConsumer()
+        let drain = Task {
+            for try await _ in audio {}
+        }
+        try await engine.open(reservation.id)
+        _ = await reservation.session.waitForModelTermination()
+        try await drain.value
+        await engine.observeMemoryPressure(.critical)
+
+        do {
+            _ = try await engine.acknowledgeProductFinalizationAndRelieveMemory(
+                generationID: reservation.session.generationID,
+                leaseID: reservation.lease.id,
+                token: staleToken,
+                disposition: .published,
+                action: .cacheTrim
+            )
+            XCTFail("a stale finalization token must fail closed")
+        } catch {
+            XCTAssertEqual(error as? VocelloQwen3SessionError, .invalidFinalizationIdentity)
+        }
+
+        let result = try await engine.acknowledgeProductFinalizationAndRelieveMemory(
+            generationID: reservation.session.generationID,
+            leaseID: reservation.lease.id,
+            token: reservation.session.finalizationToken,
+            disposition: .published,
+            action: .cacheTrim
+        )
+        XCTAssertEqual(result, .accepted)
+        let snapshot = await engine.snapshot()
+        XCTAssertEqual(snapshot.phase, .ready)
+        XCTAssertNil(snapshot.activeOperation)
+        XCTAssertFalse(snapshot.pressure.admissionClosed)
+    }
+
+    func testRejectedAtomicReliefCannotStrandConcurrentOrdinaryFinalization() async throws {
+        let claimGate = SuspendedEngineOperationGate()
+        let staleEngine = VocelloQwen3Engine(
+            loadedModel: try makeLoadedFixture(compatibilityModel: FacadeCompatibilityModel())
+        )
+        let staleReservation = try await staleEngine.reserveGeneration(
+            request: makeCustomRequest(generationID: UUID()),
+            audioCapacityFrames: 24_000
+        )
+        let staleToken = staleReservation.session.finalizationToken
+        try await staleEngine.abortReservation(staleReservation.id)
+
+        let engine = VocelloQwen3Engine(
+            loadedModel: try makeLoadedFixture(compatibilityModel: FacadeCompatibilityModel()),
+            finalizationReliefClaimHook: {
+                await claimGate.suspend()
+            }
+        )
+        let reservation = try await engine.reserveGeneration(
+            request: makeCustomRequest(generationID: UUID()),
+            audioCapacityFrames: 24_000
+        )
+        let audio = try await reservation.session.claimAudioConsumer()
+        let drain = Task {
+            for try await _ in audio {}
+        }
+        try await engine.open(reservation.id)
+        _ = await reservation.session.waitForModelTermination()
+        try await drain.value
+        await engine.observeMemoryPressure(.critical)
+
+        let rejectedRelief = Task {
+            try await engine.acknowledgeProductFinalizationAndRelieveMemory(
+                generationID: reservation.session.generationID,
+                leaseID: reservation.lease.id,
+                token: staleToken,
+                disposition: .published,
+                action: .cacheTrim
+            )
+        }
+        await claimGate.waitUntilEntered()
+
+        let ordinaryFinalization = Task {
+            try await engine.acknowledgeProductFinalization(
+                generationID: reservation.session.generationID,
+                leaseID: reservation.lease.id,
+                token: reservation.session.finalizationToken,
+                disposition: .published
+            )
+        }
+        let acceptedDisposition = await reservation.session.waitForProductFinalization()
+        XCTAssertEqual(acceptedDisposition, .published)
+        await claimGate.release()
+
+        do {
+            _ = try await rejectedRelief.value
+            XCTFail("a stale relief acknowledgement must fail closed")
+        } catch {
+            XCTAssertEqual(error as? VocelloQwen3SessionError, .invalidFinalizationIdentity)
+        }
+        _ = try await ordinaryFinalization.value
+
+        var snapshot = await engine.snapshot()
+        XCTAssertEqual(snapshot.phase, .ready)
+        XCTAssertNil(snapshot.activeOperation)
+        XCTAssertTrue(snapshot.pressure.admissionClosed)
+
+        try await engine.relieveMemory(.cacheTrim)
+        snapshot = await engine.snapshot()
+        XCTAssertEqual(snapshot.phase, .ready)
+        XCTAssertNil(snapshot.activeOperation)
+        XCTAssertFalse(snapshot.pressure.admissionClosed)
+    }
+
+    func testOrdinaryFinalizerOwnsReleaseAfterRejectedReliefClearsClaim() async throws {
+        let rollbackGate = SuspendedEngineOperationGate()
+        let staleEngine = VocelloQwen3Engine(
+            loadedModel: try makeLoadedFixture(compatibilityModel: FacadeCompatibilityModel())
+        )
+        let staleReservation = try await staleEngine.reserveGeneration(
+            request: makeCustomRequest(generationID: UUID()),
+            audioCapacityFrames: 24_000
+        )
+        let staleToken = staleReservation.session.finalizationToken
+        try await staleEngine.abortReservation(staleReservation.id)
+
+        let engine = VocelloQwen3Engine(
+            loadedModel: try makeLoadedFixture(compatibilityModel: FacadeCompatibilityModel()),
+            finalizationReliefRollbackHook: {
+                await rollbackGate.suspend()
+            }
+        )
+        let reservation = try await engine.reserveGeneration(
+            request: makeCustomRequest(generationID: UUID()),
+            audioCapacityFrames: 24_000
+        )
+        let audio = try await reservation.session.claimAudioConsumer()
+        let drain = Task {
+            for try await _ in audio {}
+        }
+        try await engine.open(reservation.id)
+        _ = await reservation.session.waitForModelTermination()
+        try await drain.value
+
+        let rejectedRelief = Task {
+            try await engine.acknowledgeProductFinalizationAndRelieveMemory(
+                generationID: reservation.session.generationID,
+                leaseID: reservation.lease.id,
+                token: staleToken,
+                disposition: .published,
+                action: .cacheTrim
+            )
+        }
+        await rollbackGate.waitUntilEntered()
+
+        let ordinaryResult = try await engine.acknowledgeProductFinalization(
+            generationID: reservation.session.generationID,
+            leaseID: reservation.lease.id,
+            token: reservation.session.finalizationToken,
+            disposition: .published
+        )
+        XCTAssertEqual(ordinaryResult, .accepted)
+        await rollbackGate.release()
+
+        do {
+            _ = try await rejectedRelief.value
+            XCTFail("a stale relief acknowledgement must fail closed")
+        } catch {
+            XCTAssertEqual(error as? VocelloQwen3SessionError, .invalidFinalizationIdentity)
+        }
+
+        let snapshot = await engine.snapshot()
+        XCTAssertEqual(snapshot.phase, .ready)
+        XCTAssertNil(snapshot.activeOperation)
     }
 
     func testEnginePrewarmIsActorOwnedAndReturnsToReady() async throws {
@@ -1104,6 +1531,91 @@ final class VocelloQwen3FacadeTests: XCTestCase {
         try await engine.abortReservation(reservation.id)
     }
 
+    func testCloneHandleBudgetAndReliefInvalidationAreDeterministic() async throws {
+        let engine = VocelloQwen3Engine(
+            loadedModel: try makeLoadedFixture(
+                compatibilityModel: FacadeCompatibilityModel(),
+                capabilities: VocelloQwen3CapabilitySet([
+                    .streaming,
+                    .voiceClone,
+                ])
+            )
+        )
+        let first = try await engine.makeCloneHandle(
+            referenceSamples: [0.1, 0.2],
+            referenceText: nil,
+            xVectorOnlyMode: true,
+            conditioningDigest: String(repeating: "a", count: 64)
+        )
+        let second = try await engine.makeCloneHandle(
+            referenceSamples: [0.3, 0.4],
+            referenceText: nil,
+            xVectorOnlyMode: true,
+            conditioningDigest: String(repeating: "b", count: 64)
+        )
+
+        do {
+            _ = try await engine.reserveGeneration(
+                request: makeCloneRequest(generationID: UUID()),
+                cloneHandle: first,
+                audioCapacityFrames: 24_000
+            )
+            XCTFail("the conservative one-handle budget must evict the oldest prompt")
+        } catch {
+            XCTAssertEqual(error as? VocelloQwen3EngineError, .invalidCloneHandle)
+        }
+
+        let preserved = try await engine.reserveGeneration(
+            request: makeCloneRequest(generationID: UUID()),
+            cloneHandle: second,
+            audioCapacityFrames: 24_000
+        )
+        try await engine.abortReservation(preserved.id)
+        try await engine.relieveMemory(.cacheTrim)
+
+        let afterBenignTrim = try await engine.reserveGeneration(
+            request: makeCloneRequest(generationID: UUID()),
+            cloneHandle: second,
+            audioCapacityFrames: 24_000
+        )
+        try await engine.abortReservation(afterBenignTrim.id)
+
+        let released = await engine.releaseCloneHandle(second)
+        let releasedAgain = await engine.releaseCloneHandle(second)
+        XCTAssertTrue(released)
+        XCTAssertFalse(releasedAgain)
+        do {
+            _ = try await engine.reserveGeneration(
+                request: makeCloneRequest(generationID: UUID()),
+                cloneHandle: second,
+                audioCapacityFrames: 24_000
+            )
+            XCTFail("an explicitly released handle must fail closed")
+        } catch {
+            XCTAssertEqual(error as? VocelloQwen3EngineError, .invalidCloneHandle)
+        }
+
+        let pressureHandle = try await engine.makeCloneHandle(
+            referenceSamples: [0.5, 0.6],
+            referenceText: nil,
+            xVectorOnlyMode: true,
+            conditioningDigest: String(repeating: "c", count: 64)
+        )
+
+        await engine.observeMemoryPressure(.critical)
+        try await engine.relieveMemory(.cacheTrim)
+        do {
+            _ = try await engine.reserveGeneration(
+                request: makeCloneRequest(generationID: UUID()),
+                cloneHandle: pressureHandle,
+                audioCapacityFrames: 24_000
+            )
+            XCTFail("critical relief must invalidate actor-owned clone tensors")
+        } catch {
+            XCTAssertEqual(error as? VocelloQwen3EngineError, .invalidCloneHandle)
+        }
+    }
+
     func testProductOutputAdapterFinalizesBeforeReleasingLease() async throws {
         let compatibilityModel = FacadeCompatibilityModel()
         let engine = VocelloQwen3Engine(
@@ -1256,6 +1768,26 @@ final class VocelloQwen3FacadeTests: XCTestCase {
             text: "Facade terminal fixture.",
             language: "en-US",
             input: .customVoice(speakerID: "fixture-speaker", deliveryInstruction: nil),
+            sampling: VocelloQwen3SamplingConfiguration(
+                maxNewTokens: 32,
+                temperature: 0.8,
+                topP: 0.9,
+                topK: VocelloQwen3SamplingConfiguration.compatibilityDefaultTopK,
+                repetitionPenalty: 1
+            ),
+            memory: VocelloQwen3MemoryConfiguration(
+                clearCacheOnStreamChunk: false,
+                tokenMemoryClearCadence: 16
+            )
+        )
+    }
+
+    private func makeCloneRequest(generationID: UUID) -> VocelloQwen3SynthesisRequest {
+        VocelloQwen3SynthesisRequest(
+            generationID: generationID,
+            text: "Facade clone fixture.",
+            language: "en-US",
+            input: .voiceClone(referenceID: "fixture-reference"),
             sampling: VocelloQwen3SamplingConfiguration(
                 maxNewTokens: 32,
                 temperature: 0.8,
@@ -1639,9 +2171,17 @@ private final class FacadeCompatibilityModel: SpeechGenerationModel, Qwen3Optimi
 
     func createVoiceClonePrompt(
         refAudio _: MLXArray,
-        refText _: String?,
-        xVectorOnlyMode _: Bool
-    ) throws -> Qwen3TTSVoiceClonePrompt { throw FacadeCompatibilityFixtureError.unsupported }
+        refText: String?,
+        xVectorOnlyMode: Bool
+    ) throws -> Qwen3TTSVoiceClonePrompt {
+        Qwen3TTSVoiceClonePrompt(
+            refCodes: nil,
+            speakerEmbedding: MLXArray([Float(0.25)]).reshaped(1, 1),
+            refText: refText,
+            xVectorOnlyMode: xVectorOnlyMode,
+            iclMode: !xVectorOnlyMode
+        )
+    }
 
     func prepareVoiceClone(
         text _: String,

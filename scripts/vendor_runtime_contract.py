@@ -53,10 +53,63 @@ EXPECTED_UPSTREAM_DISPOSITIONS = {
 EXPECTED_EVIDENCE_CLASSES = {"static", "benchmark", "diagnostic", "historical", "unmeasured"}
 EXPECTED_BENCHMARK_EVIDENCE_STATUSES = {"verified", "diagnostic", "unverified"}
 EXPECTED_CAPABILITY_STATES = {"production", "diagnostic", "internal", "retired"}
+PRODUCTION_FACADE_CAPABILITY_ID = "owned-facade"
+PRODUCTION_FACADE_SOURCES = frozenset({
+    "Sources/VocelloQwen3Core/CompatibilityExports.swift",
+    "Sources/VocelloQwen3Core/Contracts.swift",
+    "Sources/VocelloQwen3Core/LoadedModel.swift",
+    "Sources/VocelloQwen3Core/Runtime.swift",
+})
+STAGED_FOUNDATION_CAPABILITY_ID = "staged-runtime-foundations"
+STAGED_FOUNDATION_SOURCES = frozenset({
+    "Sources/VocelloQwen3Core/ClassifiedGenerationSession.swift",
+    "Sources/VocelloQwen3Core/Engine.swift",
+    "Sources/VocelloQwen3Core/GenerationSession.swift",
+    "Sources/VocelloQwen3Core/ProductOutputAdapter.swift",
+})
 FACADE_SOURCE_RELATIVE = Path("Sources/VocelloQwen3Core")
 FORBIDDEN_FACADE_API_TYPES = re.compile(
     r"\b(?:MLX|MLX[A-Z][A-Za-z0-9_]*|Qwen3TTS[A-Za-z0-9_]*|GenerateParameters|HubCache|HuggingFace)\b"
 )
+LEGACY_COMPATIBILITY_SPI = "VocelloQwen3LegacyCompatibility"
+LEGACY_COMPATIBILITY_SPI_ATTRIBUTE = f"@_spi({LEGACY_COMPATIBILITY_SPI})"
+LEGACY_COMPATIBILITY_SPI_ATTRIBUTE_PATTERN = re.compile(
+    rf"@_spi\(\s*{re.escape(LEGACY_COMPATIBILITY_SPI)}\s*\)"
+)
+LEGACY_COMPATIBILITY_DECLARATION = re.compile(
+    r"\bpublic\s+(?:"
+    r"(?:enum|protocol|struct|actor|(?:final\s+)?class)\s+(?:"
+    r"VocelloQwen3GenerationEvent|"
+    r"VocelloQwen3GenerationSession|"
+    r"VocelloQwen3ModelGenerationSession|"
+    r"VocelloQwen3GenerationSignal|"
+    r"VocelloQwen3GenerationCompletion|"
+    r"VocelloQwen3ClonePrompt|"
+    r"VocelloQwen3CompatibilityDiagnostics|"
+    r"VocelloQwen3LoadedModel"
+    r")\b|"
+    r"extension\s+VocelloQwen3LoadedModel\b|"
+    r"(?:nonisolated\s+)?static\s+func\s+(?:loadPreparedModel|clearRuntimeCaches)\b"
+    r")"
+)
+VOCELLO_QWEN3_CORE_IMPORT = re.compile(r"\bimport\s+VocelloQwen3Core\b")
+LEGACY_COMPATIBILITY_SPI_CONSUMERS = frozenset({
+    "Sources/QwenVoiceCore/MLXModelLoadCoordinator.swift",
+    "Sources/QwenVoiceCore/MLXTTSEngine.swift",
+    "Sources/QwenVoiceCore/NativeCloneSupport.swift",
+    "Sources/QwenVoiceCore/NativeEngineRuntime.swift",
+    "Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift",
+    "Sources/QwenVoiceCore/UnsafeSpeechGenerationModel.swift",
+})
+LEGACY_COMPATIBILITY_SPI_SURFACES = frozenset({
+    "VocelloQwen3GenerationSignal",
+    "VocelloQwen3GenerationCompletion",
+    "VocelloQwen3ClonePrompt",
+    "VocelloQwen3CompatibilityDiagnostics",
+    "VocelloQwen3LoadedModel",
+    "VocelloQwen3Runtime.loadPreparedModel",
+    "VocelloQwen3Runtime.clearRuntimeCaches",
+})
 RELOCATION_POST_PATHS = {
     CURRENT_INVENTORY_NAME,
     RELOCATION_INVENTORY_NAME,
@@ -240,15 +293,57 @@ def without_swift_comments(source: str) -> str:
     return re.sub(r"//[^\n]*", "", source)
 
 
+SWIFT_DECLARATION_ATTRIBUTE = re.compile(
+    r"@[A-Za-z_][A-Za-z0-9_]*(?:\([^\n]*\))?"
+)
+
+
+def swift_spi_declaration_start(source: str, declaration_start: int) -> int:
+    """Include the contiguous attribute block only when it carries the legacy SPI."""
+    line_start = source.rfind("\n", 0, declaration_start) + 1
+    inline_prefix = source[line_start:declaration_start]
+    inline_attributes = re.search(
+        rf"(?P<attributes>(?:{SWIFT_DECLARATION_ATTRIBUTE.pattern}[ \t]+)+)$",
+        inline_prefix,
+    )
+    if inline_attributes is not None:
+        start = line_start + inline_attributes.start("attributes")
+        attributes = source[start:declaration_start]
+        return (
+            start
+            if LEGACY_COMPATIBILITY_SPI_ATTRIBUTE_PATTERN.search(attributes)
+            else declaration_start
+        )
+
+    start = declaration_start
+    cursor = line_start
+    while cursor > 0:
+        previous_end = cursor - 1
+        previous_start = source.rfind("\n", 0, previous_end) + 1
+        previous_line = source[previous_start:previous_end]
+        stripped = previous_line.strip()
+        if SWIFT_DECLARATION_ATTRIBUTE.fullmatch(stripped) is None:
+            break
+        start = previous_start + len(previous_line) - len(previous_line.lstrip())
+        cursor = previous_start
+    attributes = source[start:declaration_start]
+    return (
+        start
+        if LEGACY_COMPATIBILITY_SPI_ATTRIBUTE_PATTERN.search(attributes)
+        else declaration_start
+    )
+
+
 def canonical_public_declarations(path: Path) -> list[str]:
     source = without_swift_comments(path.read_text(encoding="utf-8"))
     declarations: list[str] = []
     for match in re.finditer(r"\bpublic\b", source):
-        start = match.start()
+        public_start = match.start()
+        start = swift_spi_declaration_start(source, public_start)
         parentheses = 0
         brackets = 0
         end = len(source)
-        for index in range(start, len(source)):
+        for index in range(public_start, len(source)):
             character = source[index]
             if character == "(":
                 parentheses += 1
@@ -268,6 +363,82 @@ def canonical_public_declarations(path: Path) -> list[str]:
         if declaration:
             declarations.append(declaration)
     return declarations
+
+
+def legacy_compatibility_declaration_errors(declarations: list[str]) -> list[str]:
+    errors: list[str] = []
+    for declaration in declarations:
+        if (
+            LEGACY_COMPATIBILITY_DECLARATION.search(declaration)
+            and LEGACY_COMPATIBILITY_SPI_ATTRIBUTE_PATTERN.search(declaration) is None
+        ):
+            errors.append(
+                "VocelloQwen3Core exposes an ordinary public loaded-model, cache-mutation, "
+                f"or combined-session declaration: {declaration}"
+            )
+    return errors
+
+
+def legacy_compatibility_spi_consumers(repo_root: Path) -> set[str]:
+    consumers: set[str] = set()
+    source_root = repo_root / "Sources"
+    for path in sorted(source_root.rglob("*.swift")):
+        source = without_swift_comments(path.read_text(encoding="utf-8"))
+        if (
+            LEGACY_COMPATIBILITY_SPI_ATTRIBUTE_PATTERN.search(source)
+            and VOCELLO_QWEN3_CORE_IMPORT.search(source)
+        ):
+            consumers.add(path.relative_to(repo_root).as_posix())
+    return consumers
+
+
+def legacy_compatibility_consumer_errors(observed: set[str]) -> list[str]:
+    errors: list[str] = []
+    for path in sorted(observed - LEGACY_COMPATIBILITY_SPI_CONSUMERS):
+        errors.append(
+            f"unapproved {LEGACY_COMPATIBILITY_SPI} product consumer: {path}"
+        )
+    for path in sorted(LEGACY_COMPATIBILITY_SPI_CONSUMERS - observed):
+        errors.append(
+            f"stale {LEGACY_COMPATIBILITY_SPI} product consumer registration: {path}"
+        )
+    return errors
+
+
+def legacy_compatibility_metadata_errors(compatibility: dict) -> list[str]:
+    metadata = compatibility.get("sourceCompatibility", {}).get("temporaryLegacySPI", {})
+    errors: list[str] = []
+    if metadata.get("name") != LEGACY_COMPATIBILITY_SPI:
+        errors.append("COMPATIBILITY legacy SPI name differs from the enforced boundary")
+    if set(metadata.get("surfaces", [])) != LEGACY_COMPATIBILITY_SPI_SURFACES:
+        errors.append("COMPATIBILITY legacy SPI surface inventory is missing or stale")
+    if set(metadata.get("consumerAllowlist", [])) != LEGACY_COMPATIBILITY_SPI_CONSUMERS:
+        errors.append("COMPATIBILITY legacy SPI consumer allowlist is missing or stale")
+    return errors
+
+
+def facade_capability_boundary_errors(capabilities: dict) -> list[str]:
+    by_id = {
+        str(item.get("id")): item
+        for item in capabilities.get("capabilities", [])
+        if isinstance(item, dict)
+    }
+    errors: list[str] = []
+    production = by_id.get(PRODUCTION_FACADE_CAPABILITY_ID, {})
+    if production.get("state") != "production" or set(
+        production.get("sourcePatterns", [])
+    ) != PRODUCTION_FACADE_SOURCES:
+        errors.append(
+            "RUNTIME_CAPABILITIES production facade must cover only shipping facade sources"
+        )
+    staged = by_id.get(STAGED_FOUNDATION_CAPABILITY_ID, {})
+    if staged.get("state") != "internal" or set(
+        staged.get("sourcePatterns", [])
+    ) != STAGED_FOUNDATION_SOURCES:
+        errors.append(
+            "RUNTIME_CAPABILITIES staged actor/session foundations must remain internal"
+        )
+    return errors
 
 
 def make_facade_api_baseline(runtime: Path) -> dict:
@@ -757,6 +928,13 @@ def validate(repo_root: Path) -> list[str]:
             "VocelloQwen3Core public API exposes raw MLX/MLXAudio implementation types: "
             f"{leaked_types}"
         )
+    errors.extend(legacy_compatibility_declaration_errors(declarations))
+    errors.extend(legacy_compatibility_metadata_errors(compatibility))
+    errors.extend(
+        legacy_compatibility_consumer_errors(
+            legacy_compatibility_spi_consumers(repo_root)
+        )
+    )
 
     origin = lineage.get("origin", {})
     if lineage.get("lineagePolicy") != "immutable-import-separate-upstream-review":
@@ -1041,6 +1219,7 @@ def validate(repo_root: Path) -> list[str]:
         errors.append(
             "RUNTIME_CAPABILITIES benchmark evidence statuses differ from the controlled vocabulary"
         )
+    errors.extend(facade_capability_boundary_errors(capabilities))
     covered_patterns: list[str] = []
     referenced_patch_ids: set[str] = set()
     for item in capability_items:

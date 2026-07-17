@@ -14,7 +14,7 @@ machine-readable status record.
 | --- | --- |
 | 0 — Characterization | Partial. The ADR, contract, and model-free fixtures exist; exact shipping-path mode/token/PCM and manifest-v3 long-form fixtures plus the required clean 3-control, 10-warm, and 3-cold measurements are pending. |
 | 1 — Correctness prerequisites | Shipping. XPC reserves before side effects, pressure snapshots are synchronized, and critical relief holds admission continuously through cancellation, terminal cleanup, and relief. |
-| 2 — Plans and actor | Partial. Immutable plans run in shipping shadow comparison; load, prewarm, direct generation, cache relief, and unload are actor-isolated foundations, while the public loaded-model mutation surface still exists. |
+| 2 — Plans and actor | Complete non-shipping foundation. Immutable plans run in shipping shadow comparison; load, prewarm, direct generation, cache relief, and unload are actor-isolated foundations. Reserved/generating/aborting ownership makes concurrent aborts join one finalization, while typed cache-trim/full-unload relief transfers the generation lease without reopening critical admission. Actor-owned Clone prompts use a one-handle default LRU, explicit fail-closed release, benign-trim preservation, and critical-trim/full-unload invalidation. The loaded-model shipping bridge is quarantined behind the named `VocelloQwen3LegacyCompatibility` SPI and the old combined event session is package-internal; none of this changes shipping authority. |
 | 3 — Classified sessions | Complete non-shipping foundation. Custom, Design, and Clone have a direct caller-isolated Qwen producer that materializes `[Float]` before an awaited, frame-bounded channel send. Producer/receiver cancellation, delayed drains, maximum-length ordering, consumer failure, typed terminal outcomes, and stale-safe finalization are covered deterministically. Mutable speech tokenizer/decoder state is model-local; the only global prepared-component cache contains the immutable text tokenizer. |
 | 4 — Product adapter and mode cutover | Not cut over. The adapter, atomic WAV sink, and Fast-QC finalization foundation exist, but Custom, Design, and Clone still need product wiring and focused macOS/iPhone acceptance. |
 | 5 — Request-local sampling | Shipping. Algorithm v2 is request-local; it still requires fixed-seed live promotion evidence and shipping long-form/candidate sub-seed integration. |
@@ -26,11 +26,11 @@ machine-readable status record.
 | 11 — Long-form v4 | Planner and bounded assembler foundations only. Sequential streaming, resume/replacement, segment QA, History integration, and product cutover are pending; manifest-v3 non-streaming remains shipping. |
 | 12 — Bounded analysis and unified quality | Partial. Bounded prosody algorithm v2 is shipping; persisted-WAV consolidation and the typed registry/scheduler are not integrated. |
 | 13 — Benchmark/history v3 | Not started; schema v2 remains authoritative until shipping plan/session/quality identities stabilize. |
-| 14 — Organization and retirement | Deferred final phase. Compatibility authorities, direct loaded-model APIs, the old segmenter/writer, and large source files remain until the cutovers pass. |
+| 14 — Organization and retirement | Deferred final phase. Shipping compatibility authorities, the named legacy SPI and its direct loaded-model APIs, the internal combined event session, the old segmenter/writer, and large source files remain until the cutovers pass. |
 
 Latest deterministic proof for this checkpoint passed 243 Core tests, 15 XPC integration tests,
-and 89 owned-runtime tests. The arm64 macOS build completed at `2026-07-17T17:25:02Z`; the generic
-physical-device SDK app and policy-test compile completed at `2026-07-17T17:27:17Z`. Runtime,
+and 98 owned-runtime tests. The arm64 macOS build completed at `2026-07-17T18:27:29Z`; the generic
+physical-device SDK app and policy-test compile completed at `2026-07-17T18:30:01Z`. Runtime,
 documentation, vendor, build-output, and benchmark-history contracts pass. No model generation,
 XCUITest, benchmark, or physical-iPhone promotion run has been performed for this convergence
 worktree.
@@ -84,6 +84,22 @@ worktree.
   consumer failure wake blocked producers; terminal state cannot release the operation lease until
   product finalization is acknowledged. Mutable speech tokenizer/decoder state is owned by each
   loaded model; the shared prepared-component registry caches only the immutable text tokenizer.
+  The normal public mutation boundary is now `VocelloQwen3Engine`. The unchanged shipping bridge
+  reaches loaded-model, stream, clone-artifact, load, and cache adapters only through the named
+  `VocelloQwen3LegacyCompatibility` SPI, while the old combined event session is package-internal.
+  This completes the Phase 2 API boundary as a non-shipping foundation; it does not promote the
+  actor or change product authority.
+  The actor's remaining correctness gaps are also closed: `reserved`, `generating`, and `aborting`
+  lifecycle ownership prevents an abort-owned reservation from reopening generation and makes
+  duplicate aborts join the same finalization. Typed cache-trim or full-unload relief carries the
+  generation lease directly through critical relief and reopens admission only after the
+  revalidated relief operation completes. A rejected atomic relief claim clears only its matching
+  ownership before crossing the session barrier again; ordinary finalization therefore releases
+  the generation lease in both possible acknowledgment orderings instead of stranding it.
+  Clone conditioning remains tensor-opaque behind epoch-bound handles. The actor retains one handle
+  by default, supports an explicit bounded capacity with LRU eviction, and makes repeated release
+  fail closed. A reservation keeps the prompt it already captured; noncritical cache trim preserves
+  otherwise valid handles, while model reload, critical trim, and full unload invalidate them.
   New shipping schema-v8
   rows do embed a partial v9 transition projection with safe plan/policy digests and explicit
   reasons for actor-session, output-adapter, exact-range, and first-render fields that are not yet
@@ -182,13 +198,16 @@ worktree.
 - The Qwen3/Mimi implementation is now an explicitly owned monorepo core package at
   `Packages/VocelloQwen3Core`. Product targets depend on the `VocelloQwen3Core` facade, whose typed
   model-bundle, capability, sampling, memory, request, terminal, cancellation, and diagnostic
-  contracts isolate application code from implementation modules. The legacy `MLXAudio` package,
-  products, targets, modules, and public APIs remain available behind the facade for compatibility;
-  synthesis behavior and persistent identities did not change. Immutable lineage, compatibility,
-  ownership, and runtime-capability contracts replace patch-stack governance. Large-file
-  decomposition and compatibility-surface retirement are deferred Phase 14 work after shipping
-  authority converges.
-- The facade session's bounded event channel never suspends a producer on an absent consumer.
+  contracts isolate application code from implementation modules. Its normal public mutation
+  boundary is `VocelloQwen3Engine`; the current shipping bridge imports
+  `VocelloQwen3LegacyCompatibility` for temporary loaded-model access. The legacy `MLXAudio`
+  package, products, targets, modules, and public APIs remain available behind the facade for
+  implementation compatibility; synthesis behavior and persistent identities did not change.
+  Immutable lineage, compatibility, ownership, and runtime-capability contracts replace
+  patch-stack governance. The named SPI, large-file decomposition, and compatibility-surface
+  retirement are deferred Phase 14 work after shipping authority converges.
+- The package-internal combined session's bounded event channel never suspends a producer on an
+  absent consumer.
   Overflow fails explicitly with a reserved terminal slot, cancellation replaces obsolete queued
   events with its terminal, and `waitForTermination()` is independent of event-stream drainage.
 - Runtime trust boundaries are machine-readable. `config/runtime-debug-knobs.json` makes every

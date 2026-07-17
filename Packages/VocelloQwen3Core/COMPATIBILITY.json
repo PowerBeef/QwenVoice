@@ -36,17 +36,48 @@
     "stableContracts": [
       "VocelloQwen3PreparedModelBundle",
       "VocelloQwen3SynthesisRequest",
-      "VocelloQwen3GenerationSession",
-      "VocelloQwen3GenerationEvent",
+      "VocelloQwen3Engine",
+      "VocelloQwen3GenerationReservation",
+      "VocelloQwen3ClassifiedGenerationSession",
+      "VocelloQwen3CloneHandle",
+      "VocelloQwen3MemoryReliefAction",
       "VocelloQwen3TerminalOutcome",
       "VocelloQwen3DiagnosticEvent"
+    ],
+    "temporaryLegacySPI": {
+      "name": "VocelloQwen3LegacyCompatibility",
+      "status": "shipping-compatibility-only",
+      "surfaces": [
+        "VocelloQwen3GenerationSignal",
+        "VocelloQwen3GenerationCompletion",
+        "VocelloQwen3ClonePrompt",
+        "VocelloQwen3CompatibilityDiagnostics",
+        "VocelloQwen3LoadedModel",
+        "VocelloQwen3Runtime.loadPreparedModel",
+        "VocelloQwen3Runtime.clearRuntimeCaches"
+      ],
+      "consumerAllowlist": [
+        "Sources/QwenVoiceCore/MLXModelLoadCoordinator.swift",
+        "Sources/QwenVoiceCore/MLXTTSEngine.swift",
+        "Sources/QwenVoiceCore/NativeCloneSupport.swift",
+        "Sources/QwenVoiceCore/NativeEngineRuntime.swift",
+        "Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift",
+        "Sources/QwenVoiceCore/UnsafeSpeechGenerationModel.swift"
+      ],
+      "consumerAllowlistEnforcement": "scripts/vendor_runtime_contract.py::LEGACY_COMPATIBILITY_SPI_CONSUMERS",
+      "policy": "This named SPI preserves the unchanged shipping compatibility bridge. It is not normal public facade authority and retires only after the Phase 4 mode cutovers pass."
+    },
+    "internalCharacterizationSurfaces": [
+      "VocelloQwen3GenerationSession",
+      "VocelloQwen3GenerationEvent",
+      "VocelloQwen3ModelGenerationSession"
     ],
     "preservedImportModules": [
       "MLXAudioCore",
       "MLXAudioCodecs",
       "MLXAudioTTS"
     ],
-    "policy": "Vocello product targets consume the owned facade. The MLXAudio package, products, targets, modules, and public APIs remain available as implementation compatibility surfaces."
+    "policy": "Vocello product targets consume the owned facade. QwenVoiceCore imports the named legacy SPI only for the unchanged shipping compatibility bridge until Phase 4 cutover. The MLXAudio package, products, targets, modules, and public APIs remain available as implementation compatibility surfaces."
   },
   "modelContract": "../../Sources/Resources/qwenvoice_contract.json",
   "validation": [

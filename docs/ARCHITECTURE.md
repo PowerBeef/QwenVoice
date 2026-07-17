@@ -256,7 +256,7 @@ actors that own the heavy, isolated work:
 | `NativeMemoryPolicyResolver` | `NativeMemoryPolicyResolver.swift` | Per-device-tier MLX memory policy (see [§4.5](#45-memory-policy)). |
 | `ActiveGenerationCoordinator` | `ActiveGenerationCoordinator.swift` | One active task, typed cancellation reason, and awaited terminal barrier. |
 | `GenerationEventDeliveryProbe` | `GenerationEventDeliveryProbe.swift` | Accepted/dropped yield accounting for bounded progress, chunk, terminal, and termination delivery. |
-| `UnsafeSpeechGenerationModel` | `UnsafeSpeechGenerationModel.swift` | `@unchecked Sendable` single-owner wrapper over the facade's opaque `VocelloQwen3LoadedModel`; no raw MLXAudio model or protocol crosses into product code. |
+| `UnsafeSpeechGenerationModel` | `UnsafeSpeechGenerationModel.swift` | `@unchecked Sendable` single-owner shipping-compatibility wrapper over the named `VocelloQwen3LegacyCompatibility` SPI's opaque `VocelloQwen3LoadedModel`; normal facade clients cannot reach loaded-model mutation, and no raw MLXAudio model or protocol crosses into product code. |
 
 ### 4.2 Generation domain model
 
@@ -326,9 +326,10 @@ flowchart TD
     Lim --> QC["AudioQCReport → telemetry"]
 ```
 
-`UnsafeSpeechGenerationModel` wraps the opaque loaded-model handle exported by
-`VocelloQwen3Core` and exposes the three mode entry points (`generateCustomVoiceStream`,
-`generateVoiceDesignStream`, `generateVoiceCloneStream`) plus prewarm.
+`UnsafeSpeechGenerationModel` imports the opaque loaded-model handle only through
+`VocelloQwen3Core`'s named `VocelloQwen3LegacyCompatibility` SPI and exposes the three shipping
+compatibility mode entry points (`generateCustomVoiceStream`, `generateVoiceDesignStream`,
+`generateVoiceCloneStream`) plus prewarm. Normal facade clients cannot reach that mutation surface.
 
 The current shipping product path remains `NativeEngineRuntime` plus
 `NativeStreamingSynthesisSession`, which adapt the facade's mode-specific streams into Vocello's
@@ -337,15 +338,30 @@ are now immutable request-owned values: sampling algorithm v2 gives every reques
 and a fresh `MLXRandom.RandomState`, while talker/subtalker stages and per-request cache/window
 policy travel with the request instead of mutating process-global generation state.
 
+Phase 2's normal public mutation boundary is complete as a non-shipping foundation:
+`VocelloQwen3Engine` owns public mutation, the loaded-model/stream/clone/load/cache bridge is named
+legacy SPI, and the old combined event session is package-internal. This API quarantine does not
+change the shipping authorities above. Explicit reserved/generating/aborting ownership prevents an
+abort-owned reservation from reopening generation and makes duplicate aborts join one finalization.
+Typed cache-trim/full-unload relief transfers the generation lease directly into critical relief;
+admission reopens only after the selected release completes and the relief lease revalidates.
+Rejected atomic relief claims clear their matching ownership before querying the session barrier;
+an ordinary acknowledgment accepted on either side of that rollback therefore cannot strand the
+generation lease.
+Clone prompts remain actor-owned behind epoch-bound handles. The default retained-handle capacity is
+one; larger explicit capacities evict least-recently-used handles. Explicit release makes future
+lookups fail closed without invalidating a prompt already captured by a reservation. Noncritical
+cache trim preserves handles, while model reload, critical trim, and full unload invalidate them.
+
 The staged convergence path is intentionally not shipping authority yet. `VocelloQwen3Engine`
 models one actor-owned operation lease; `ClassifiedGenerationSession` provides a single-consumer,
 frame-bounded suspending audio channel and independent prepared/progress/model-terminal/diagnostic
 semantics; `ProductOutputAdapter` and `AtomicWAVGenerationOutputSink` prove stale-safe product
 finalization and atomic Fast-QC output. Synthetic tests also prove that cancelling a producer task
 while it is suspended by channel backpressure removes that pending send and wakes it with
-`CancellationError`. The owned Qwen hot loop still publishes through its compatibility
-`AsyncThrowingStream` before the foundation channel, so the suspending path is not yet end-to-end.
-Custom, Design, and Clone have not cut over.
+`CancellationError`. The foundation channel backpressures the direct caller-isolated Qwen producer,
+but Custom, Design, and Clone still run through the separate compatibility product path and have not
+cut over.
 `config/runtime-refactor-contract.json` is the machine-readable status
 record, and [`decisions/runtime-streaming-quality-convergence.md`](decisions/runtime-streaming-quality-convergence.md)
 defines the promotion boundaries. Do not infer that final audio is lossless merely because these
@@ -980,7 +996,7 @@ Most-frequent imports across `Sources/**/*.swift`:
 | `ContractBackedModelRegistry` | Loads `qwenvoice_contract.json` and expands it per platform. |
 | `GenerationRequest` / `Payload` | The generation ask + its mode-specific payload (custom/design/clone). |
 | `CloneReference` | Reference audio + typed conditioning mode (`transcriptBacked` or genuine audio-only `xVectorOnly`) + optional prepared voice identity. |
-| `UnsafeSpeechGenerationModel` | `@unchecked Sendable` single-owner wrapper over the opaque model handle exported by the owned facade. |
+| `UnsafeSpeechGenerationModel` | `@unchecked Sendable` single-owner shipping-compatibility wrapper over the named legacy SPI's opaque model handle. |
 
 ---
 

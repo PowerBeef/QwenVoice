@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import copy
 import importlib.util
 import unittest
 from pathlib import Path
@@ -75,10 +76,44 @@ class RuntimeSecurityContractTests(unittest.TestCase):
         contract = MODULE.load_json(ROOT / "config/runtime-refactor-contract.json")
         contract["phaseStatus"]["modeCutover"] = "implemented"
         contract["phaseStatus"]["telemetryV9"] = "shipping"
+        contract["phaseStatus"]["engineActor"] = "shipping"
+        contract["phase2PublicMutationBoundary"]["status"] = "complete-shipping"
+        contract["phase2PublicMutationBoundary"]["shippingAuthorityChanged"] = True
 
         errors = MODULE.runtime_refactor_contract_errors(contract)
         self.assertTrue(any("mode cutover" in error for error in errors))
         self.assertTrue(any("telemetry v9" in error for error in errors))
+        self.assertTrue(any("complete non-shipping" in error for error in errors))
+        self.assertTrue(any("must not change shipping authority" in error for error in errors))
+        self.assertTrue(any("engine actor status" in error for error in errors))
+
+        contract = MODULE.load_json(ROOT / "config/runtime-refactor-contract.json")
+        compatibility = MODULE.load_json(
+            ROOT / "Packages/VocelloQwen3Core/COMPATIBILITY.json"
+        )
+        observed = MODULE.phase2_legacy_spi_product_consumers()
+        contract["phase2PublicMutationBoundary"]["legacyShippingSPIConsumers"].pop()
+        contract["phase2PublicMutationBoundary"]["cloneHandleLifecycle"][
+            "defaultCapacity"
+        ] = 2
+        drifted_compatibility = copy.deepcopy(compatibility)
+        drifted_compatibility["sourceCompatibility"]["stableContracts"].remove(
+            "VocelloQwen3CloneHandle"
+        )
+
+        errors = MODULE.runtime_refactor_contract_errors(
+            contract,
+            compatibility=drifted_compatibility,
+            observed_spi_consumers=observed,
+        )
+        self.assertTrue(
+            any("SPI consumers differ from COMPATIBILITY" in error for error in errors)
+        )
+        self.assertTrue(
+            any("SPI consumers differ from actual imports" in error for error in errors)
+        )
+        self.assertTrue(any("clone-handle lifecycle" in error for error in errors))
+        self.assertTrue(any("stable contracts" in error for error in errors))
 
     def test_runtime_refactor_contract_requires_every_numbered_plan_phase(self) -> None:
         for key in (

@@ -7,10 +7,33 @@
   "capabilities": [
     {
       "id": "owned-facade",
-      "title": "Vocello-owned typed runtime facade, generation session, event, and compatibility boundary",
+      "title": "Vocello-owned typed shipping facade and compatibility boundary",
       "state": "production",
-      "sourcePatterns": ["Sources/VocelloQwen3Core/**"],
+      "sourcePatterns": [
+        "Sources/VocelloQwen3Core/CompatibilityExports.swift",
+        "Sources/VocelloQwen3Core/Contracts.swift",
+        "Sources/VocelloQwen3Core/LoadedModel.swift",
+        "Sources/VocelloQwen3Core/Runtime.swift"
+      ],
       "testPatterns": ["Tests/Qwen3RuntimeTests/VocelloQwen3FacadeTests.swift"],
+      "documentation": ["README.md", "COMPATIBILITY.json", "OWNERSHIP.json"],
+      "evidenceClass": "static",
+      "upstreamDeltaIDs": ["FACADE-001"]
+    },
+    {
+      "id": "staged-runtime-foundations",
+      "title": "Staged non-shipping actor, classified-session, and output-adapter foundations",
+      "state": "internal",
+      "sourcePatterns": [
+        "Sources/VocelloQwen3Core/ClassifiedGenerationSession.swift",
+        "Sources/VocelloQwen3Core/Engine.swift",
+        "Sources/VocelloQwen3Core/GenerationSession.swift",
+        "Sources/VocelloQwen3Core/ProductOutputAdapter.swift"
+      ],
+      "testPatterns": [
+        "Tests/Qwen3RuntimeTests/ClassifiedGenerationSessionTests.swift",
+        "Tests/Qwen3RuntimeTests/VocelloQwen3FacadeTests.swift"
+      ],
       "documentation": ["README.md", "COMPATIBILITY.json", "OWNERSHIP.json"],
       "evidenceClass": "static",
       "upstreamDeltaIDs": ["FACADE-001"]

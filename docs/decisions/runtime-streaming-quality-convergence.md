@@ -66,6 +66,8 @@ Correctness prerequisites land before actor/session cutover. Plans and actor sta
 shadow or compatibility mode. Custom, Design, and Clone then cut over independently, each with
 deterministic proof and focused platform acceptance. Sampling, telemetry, preview calibration,
 component storage, long-form, and unified quality remain separately promotable changes.
+Compatibility mode uses the named `VocelloQwen3LegacyCompatibility` SPI for the unchanged shipping
+bridge; it is outside the normal public facade mutation boundary and is not a second product backend.
 
 No permanent feature flag or dual backend is introduced. Each small pull request must leave `main`
 releasable and is independently revertible. Protected remote history is the rollback surface; no
@@ -114,8 +116,21 @@ must not yet be treated as product authority. At this checkpoint:
   suspends the actual Qwen token/decode loop without transferring `MLXArray` across isolation.
   Deterministic coverage includes delayed drains, receiver and producer cancellation, consumer
   failure, maximum-length ordering, bounded high-water evidence, and terminal/finalization lease
-  ordering. Custom, Design, and Clone still require product wiring and focused macOS and
-  physical-iPhone acceptance before the compatibility product session can be retired.
+  ordering. Phase 2's normal public mutation boundary is complete as a non-shipping foundation:
+  `VocelloQwen3Engine` owns mutation, loaded-model/stream/clone/load/cache adapters are quarantined
+  under `VocelloQwen3LegacyCompatibility`, and the old combined event session is package-internal.
+  QwenVoiceCore imports that SPI only for the unchanged shipping bridge. This is API-boundary
+  completion, not mode cutover or actor promotion. The actor correctness closure is also complete:
+  explicit reserved/generating/aborting ownership makes duplicate aborts join one finalization and
+  rejects open after abort ownership begins; typed cache-trim/full-unload relief transfers the
+  generation lease directly into critical relief and reopens admission only after that relief
+  completes. Rejected atomic relief claims clear their ownership before session reconciliation, so
+  ordinary finalization cannot strand the generation lease in either acknowledgment ordering.
+  Epoch-bound Clone handles retain one prompt by default, use bounded LRU eviction when
+  configured larger, support explicit fail-closed release, survive noncritical cache trim, and are
+  invalidated by model reload, critical trim, or full unload. Custom, Design, and Clone still
+  require product wiring and focused macOS and physical-iPhone acceptance before the compatibility
+  product session can be retired.
 - Production catalog schema v2 and the shared-component store are integrated into macOS, CLI, and
   iOS delivery. Exact verified content is published atomically, surfaced through ordinary hard
   links, and read alongside legacy schema-v1 installations. Delivery-plan resolution now

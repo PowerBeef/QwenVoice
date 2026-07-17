@@ -590,6 +590,10 @@ actor VocelloQwen3ProductFinalizationBarrier {
         if let disposition { return disposition }
         return await withCheckedContinuation { waiters.append($0) }
     }
+
+    func acceptedDisposition() -> VocelloQwen3ProductFinalizationDisposition? {
+        disposition
+    }
 }
 
 /// Classified session state used by the engine actor and product adapter. It
@@ -676,6 +680,12 @@ public final class VocelloQwen3ClassifiedGenerationSession: Sendable {
             token: token,
             disposition: disposition
         )
+    }
+
+    func acceptedProductFinalizationDisposition()
+        async -> VocelloQwen3ProductFinalizationDisposition?
+    {
+        await finalizationBarrier.acceptedDisposition()
     }
 
     public func waitForProductFinalization() async -> VocelloQwen3ProductFinalizationDisposition {

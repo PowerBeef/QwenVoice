@@ -19,6 +19,43 @@ UNCHECKED_PATTERN = re.compile(
 UNSAFE_DECLARATION_PATTERN = re.compile(
     r"nonisolated\(unsafe\)[^\n]*(?:var|let)\s+([A-Za-z_][A-Za-z0-9_]*)"
 )
+LEGACY_COMPATIBILITY_SPI = "VocelloQwen3LegacyCompatibility"
+LEGACY_COMPATIBILITY_SPI_PATTERN = re.compile(
+    rf"@_spi\(\s*{re.escape(LEGACY_COMPATIBILITY_SPI)}\s*\)"
+)
+VOCELLO_QWEN3_CORE_IMPORT_PATTERN = re.compile(r"\bimport\s+VocelloQwen3Core\b")
+PHASE2_ENGINE_ACTOR_STATUS = (
+    "complete-nonshipping-abort-critical-full-unload-and-bounded-clone-handle-"
+    "correctness-closed-legacy-shipping-bridge-spi-quarantined"
+)
+PHASE2_ACTOR_CORRECTNESS_CLOSURE = {
+    "abortLifecycle": "reserved-generating-aborting-single-owner-with-duplicate-abort-join",
+    "criticalMemoryRelief": "typed-cache-trim-or-full-unload-generation-lease-transfer",
+    "admissionReopen": "after-revalidated-relief-completion-only",
+}
+PHASE2_CLONE_HANDLE_LIFECYCLE = {
+    "defaultCapacity": 1,
+    "configuredCapacityMinimum": 1,
+    "eviction": "least-recently-used",
+    "explicitRelease": "first-release-true-repeat-release-false",
+    "activeReservationAfterRelease": "retains-captured-prompt",
+    "noncriticalCacheTrim": "preserves-handles",
+    "criticalCacheTrim": "invalidates-handles",
+    "fullUnload": "invalidates-handles-and-increments-model-epoch",
+    "modelReload": "invalidates-handles-and-increments-model-epoch",
+}
+PHASE2_REQUIRED_STABLE_CONTRACTS = {
+    "VocelloQwen3Engine",
+    "VocelloQwen3GenerationReservation",
+    "VocelloQwen3ClassifiedGenerationSession",
+    "VocelloQwen3CloneHandle",
+    "VocelloQwen3MemoryReliefAction",
+}
+PHASE2_INTERNAL_CHARACTERIZATION_SURFACES = {
+    "VocelloQwen3GenerationSession",
+    "VocelloQwen3GenerationEvent",
+    "VocelloQwen3ModelGenerationSession",
+}
 
 
 def load_json(path: Path) -> dict:
@@ -39,6 +76,26 @@ def swift_files(roots: list[str]) -> list[Path]:
             raise ValueError(f"source root does not exist: {relative}")
         result.extend(path.rglob("*.swift"))
     return sorted(set(result))
+
+
+def phase2_legacy_spi_product_consumers(root: Path = ROOT) -> set[str]:
+    consumers: set[str] = set()
+    for path in sorted((root / "Sources").rglob("*.swift")):
+        source = path.read_text(encoding="utf-8")
+        source = re.sub(r"/\*.*?\*/", " ", source, flags=re.DOTALL)
+        source = re.sub(r"//[^\n]*", "", source)
+        if (
+            LEGACY_COMPATIBILITY_SPI_PATTERN.search(source)
+            and VOCELLO_QWEN3_CORE_IMPORT_PATTERN.search(source)
+        ):
+            consumers.add(path.relative_to(root).as_posix())
+    return consumers
+
+
+def string_list_set(value: object) -> set[str] | None:
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        return None
+    return set(value)
 
 
 def debug_gate_enforcement_errors(
@@ -292,7 +349,11 @@ def validate_release_contract() -> list[str]:
 
 
 def runtime_refactor_contract_errors(
-    contract: dict, *, decision_exists: bool = True
+    contract: dict,
+    *,
+    decision_exists: bool = True,
+    compatibility: dict | None = None,
+    observed_spi_consumers: set[str] | None = None,
 ) -> list[str]:
     errors: list[str] = []
     if contract.get("schemaVersion") != 1:
@@ -390,6 +451,99 @@ def runtime_refactor_contract_errors(
         "quality", "custom", "design", "clone"
     }:
         errors.append("runtime-refactor-contract must name every current shipping authority")
+
+    if compatibility is None:
+        try:
+            compatibility = load_json(
+                ROOT / "Packages/VocelloQwen3Core/COMPATIBILITY.json"
+            )
+        except ValueError as exc:
+            errors.append(str(exc))
+            compatibility = {}
+    if observed_spi_consumers is None:
+        observed_spi_consumers = phase2_legacy_spi_product_consumers()
+
+    phase2 = contract.get("phase2PublicMutationBoundary")
+    expected_phase2_keys = {
+        "status",
+        "normalPublicMutationAuthority",
+        "legacyShippingSPI",
+        "legacyShippingSPIConsumers",
+        "consumerAllowlistEnforcement",
+        "combinedCompatibilitySession",
+        "actorCorrectnessClosure",
+        "cloneHandleLifecycle",
+        "shippingAuthorityChanged",
+    }
+    if not isinstance(phase2, dict) or set(phase2) != expected_phase2_keys:
+        errors.append(
+            "runtime-refactor-contract must define the complete Phase 2 public mutation boundary"
+        )
+        phase2 = phase2 if isinstance(phase2, dict) else {}
+    if phase2.get("status") != "complete-nonshipping":
+        errors.append("runtime-refactor-contract Phase 2 must remain complete non-shipping")
+    if phase2.get("normalPublicMutationAuthority") != "VocelloQwen3Engine":
+        errors.append("runtime-refactor-contract Phase 2 mutation authority must be the engine actor")
+    if phase2.get("legacyShippingSPI") != LEGACY_COMPATIBILITY_SPI:
+        errors.append("runtime-refactor-contract Phase 2 legacy SPI name drifted")
+    if phase2.get("consumerAllowlistEnforcement") != (
+        "scripts/vendor_runtime_contract.py::LEGACY_COMPATIBILITY_SPI_CONSUMERS"
+    ):
+        errors.append("runtime-refactor-contract Phase 2 SPI enforcement reference drifted")
+    if phase2.get("combinedCompatibilitySession") != (
+        "internal-package-characterization-only"
+    ):
+        errors.append("runtime-refactor-contract combined compatibility session must remain internal")
+    if phase2.get("actorCorrectnessClosure") != PHASE2_ACTOR_CORRECTNESS_CLOSURE:
+        errors.append("runtime-refactor-contract Phase 2 actor correctness closure drifted")
+    if phase2.get("cloneHandleLifecycle") != PHASE2_CLONE_HANDLE_LIFECYCLE:
+        errors.append("runtime-refactor-contract Phase 2 clone-handle lifecycle drifted")
+    if phase2.get("shippingAuthorityChanged") is not False:
+        errors.append("runtime-refactor-contract Phase 2 must not change shipping authority")
+
+    source_compatibility_value = compatibility.get("sourceCompatibility", {})
+    source_compatibility = (
+        source_compatibility_value if isinstance(source_compatibility_value, dict) else {}
+    )
+    spi_metadata_value = source_compatibility.get("temporaryLegacySPI", {})
+    spi_metadata = spi_metadata_value if isinstance(spi_metadata_value, dict) else {}
+    if spi_metadata.get("name") != phase2.get("legacyShippingSPI"):
+        errors.append("runtime-refactor-contract Phase 2 SPI differs from COMPATIBILITY")
+    if spi_metadata.get("status") != "shipping-compatibility-only":
+        errors.append("COMPATIBILITY legacy SPI must remain shipping-compatibility-only")
+    declared_consumers = string_list_set(phase2.get("legacyShippingSPIConsumers"))
+    registered_consumers = string_list_set(spi_metadata.get("consumerAllowlist"))
+    if declared_consumers is None:
+        errors.append("runtime-refactor-contract Phase 2 SPI consumers must be a string list")
+        declared_consumers = set()
+    if registered_consumers is None:
+        errors.append("COMPATIBILITY legacy SPI consumer allowlist must be a string list")
+        registered_consumers = set()
+    if declared_consumers != registered_consumers:
+        errors.append("runtime-refactor-contract Phase 2 SPI consumers differ from COMPATIBILITY")
+    if declared_consumers != observed_spi_consumers:
+        errors.append("runtime-refactor-contract Phase 2 SPI consumers differ from actual imports")
+    stable_contracts = string_list_set(source_compatibility.get("stableContracts"))
+    if stable_contracts is None:
+        errors.append("COMPATIBILITY stable contracts must be a string list")
+        stable_contracts = set()
+    if not PHASE2_REQUIRED_STABLE_CONTRACTS.issubset(stable_contracts):
+        errors.append("COMPATIBILITY stable contracts omit a required Phase 2 actor contract")
+    internal_surfaces = string_list_set(
+        source_compatibility.get("internalCharacterizationSurfaces")
+    )
+    if internal_surfaces is None:
+        errors.append("COMPATIBILITY internal characterization surfaces must be a string list")
+        internal_surfaces = set()
+    if internal_surfaces != PHASE2_INTERNAL_CHARACTERIZATION_SURFACES:
+        errors.append("COMPATIBILITY internal characterization surface inventory drifted")
+    if isinstance(authorities, dict) and (
+        authorities.get("runtime") != "NativeEngineRuntime"
+        or authorities.get("productSession") != "NativeStreamingSynthesisSession"
+        or authorities.get("ownedRuntimeFacade") != "VocelloQwen3Core"
+    ):
+        errors.append("runtime-refactor-contract Phase 2 shipping authorities drifted")
+
     phases = contract.get("phaseStatus")
     required_phases = {
         "characterizationContract", "xpcReserveBeforeSideEffects",
@@ -429,8 +583,10 @@ def runtime_refactor_contract_errors(
                 )
         if isinstance(versions, dict) and versions.get("benchmarkEvidence") == 2 and phases.get("historyV3") != "pending-stable-plan-session-quality-identities":
             errors.append("runtime-refactor-contract cannot claim history v3 while schema v2 ships")
-    compatibility = contract.get("temporaryCompatibilitySurfaces")
-    if not isinstance(compatibility, list) or not compatibility or len(compatibility) != len(set(compatibility)):
+    if isinstance(phases, dict) and phases.get("engineActor") != PHASE2_ENGINE_ACTOR_STATUS:
+        errors.append("runtime-refactor-contract Phase 2 engine actor status drifted")
+    compatibility_surfaces = contract.get("temporaryCompatibilitySurfaces")
+    if not isinstance(compatibility_surfaces, list) or not compatibility_surfaces or len(compatibility_surfaces) != len(set(compatibility_surfaces)):
         errors.append("runtime-refactor-contract compatibility surfaces must be unique and non-empty")
     invariants = contract.get("invariants")
     if not isinstance(invariants, list) or not invariants or len(invariants) != len(set(invariants)):
