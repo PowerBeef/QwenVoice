@@ -5,15 +5,12 @@
 
 ## Runtime convergence status — reviewed 2026-07-20
 
-This checkpoint covers runtime source commit
-`00c9eea637259cfce858d1fc7d43a1a2c52ff86d`, which closes focused Phase 4 acceptance on macOS and
-the physical iPhone. “Implementation complete” below means source authority has changed and the
-named focused proof has passed; it does not mean the full convergence program or overall runtime
-promotion has passed. `config/runtime-refactor-contract.json` is the machine-readable status
-record. The checkpoint was delivered to protected `main` by [PR #78](https://github.com/PowerBeef/QwenVoice/pull/78)
-as merge commit `d39b9a6f2f2cedd4c02a1114c7a127e645029cb7`; all nine GitHub checks passed. The
-follow-up NumPy toolchain pin in that pull request fixes fresh-runner prosody-test setup and does not
-change runtime or promotion evidence.
+This checkpoint tracks the staged runtime convergence program. Focused Phase 4 acceptance landed
+at `00c9eea637259cfce858d1fc7d43a1a2c52ff86d` (delivered by [PR #78](https://github.com/PowerBeef/QwenVoice/pull/78)
+as `d39b9a6…`). On 2026-07-20, Phase 0/5/6 closed and Phase 4 **`overallPromotion: passed`**
+(`a4bb483`). That closes the cutover gate; it does **not** close the full program — Phases 7–13
+and Phase 14 retirement remain open. `config/runtime-refactor-contract.json` is the
+machine-readable status record and wins over older prose that still says promotion is pending.
 
 | Plan phase | Current state |
 | --- | --- |
@@ -31,7 +28,7 @@ change runtime or promotion evidence.
 | 11 — Long-form v4 | Planner and bounded assembler foundations only. Sequential streaming, resume/replacement, segment QA, History integration, and product cutover are pending; manifest-v3 non-streaming remains shipping. |
 | 12 — Bounded analysis and unified quality | Partial. Bounded prosody algorithm v2 is shipping; persisted-WAV consolidation and the typed registry/scheduler are not integrated. |
 | 13 — Benchmark/history v3 | Not started; schema v2 remains authoritative until shipping plan/session/quality identities stabilize. |
-| 14 — Organization and retirement | Explicitly deferred until overall Phase 4 promotion and Phase 5/6/0 close. Named deferred surfaces: `NativeStreamingSynthesisSession.swift` filename, `VocelloQwen3LegacyCompatibility` SPI, combined characterization session, and Clone priming stream APIs. |
+| 14 — Organization and retirement | Unblocked after overall promotion (2026-07-20); not started. Named deferred surfaces: `NativeStreamingSynthesisSession.swift` filename, `VocelloQwen3LegacyCompatibility` SPI, combined characterization session, and Clone priming stream APIs. Contract `mechanicalRetirement`: `deferred-explicit-retirement-spi-filename-and-combined-session-remain`. |
 
 The post-cutover deterministic proof passed `scripts/macos_test.sh test`, including Core, XPC
 transport, and 103 owned-runtime tests. The arm64 macOS build and generic iPhoneOS SDK app plus
@@ -74,14 +71,10 @@ promotion evidence by the 2026-07-20 post–Phase 0 canonical matrices above.
 | macOS | `pre-research-baseline-20260719` → `macos-xcui-benchmark-20260719-215547-11f8f4cf` |
 | iPhone | `pre-research-baseline-ios-20260719` → `ios-xcui-benchmark-20260719-224743-1e69da39` |
 
-### Next convergence checkpoint
+### Cutover gate — closed 2026-07-20
 
-The Phase 1–4 checkpoint is on protected `main`. The sampling evidence path, v9 sidecar
-publication helpers, model-free characterization fixture identities, and
-`scripts/check_convergence_promotion_gate.py` are now in-tree. The soft gate no longer freezes
-fixture `status` at `model-free-foundation`; allowed statuses include live capture progress.
-Proceed in this order so later performance evidence is not recorded against transitional telemetry
-or incomplete live sampling proof:
+The Phase 0–6 cutover prerequisites and `overallPromotion: passed` are on protected `main`.
+Historical checklist (all done):
 
 1. ~~Fixed-seed pairs (2026-07-19):~~ macOS CLI and physical-iPhone headless Custom/Design/Clone
    Speed short with seeds `19790615` (equal pair) and `42424242` (diverge) all PASS via matching/
@@ -116,13 +109,23 @@ or incomplete live sampling proof:
    `SamplingTakeEvidence.packagedTelemetryNotes()`, complete v9 sidecar publish path,
    history evidence keys for sidecar digests, and contract telemetry v9.
 7. ~~`overallPromotion: passed` (2026-07-20):~~ claimed after Phase 0/5/6 close plus
-   canonical macOS/iPhone 29-take matrices. Phase 14 mechanical retirement remains
-   deferred on the named SPI/filename/combined-session surfaces.
+   canonical macOS/iPhone 29-take matrices.
 
-Shipping long-form sub-seed execution remains Phase 11, candidate retry remains Phase 12.
-Phase 14 mechanical retirement is the next explicit organization step.
+### Next convergence fork
+
+Overall promotion no longer forces a single linear gate. Choose by goal:
+
+1. **Phase 14** — mechanical retirement (Legacy SPI, adapter filename, combined session, Clone
+   stream APIs) when the priority is removing dual-surface confusion.
+2. **Phase 7** — chunk/preview A/B and calibration when the priority is perceived latency
+   (requires shipping v9 evidence, now available; protect secret-sauce cells).
+3. **Phase 8** — live all-artifact validation when the priority is model-delivery confidence.
+4. **Phases 10–13** — spoken-text, long-form v4, quality consolidation, history v3 remain later
+   product work; manifest-v3 and history schema v2 still ship.
 
 Status report: [`docs/reference/runtime-refactor-status-report.md`](reference/runtime-refactor-status-report.md).
+You-are-here map: trust `config/runtime-refactor-contract.json` over any older “promotion pending”
+paragraph.
 
 ### Local storage-policy verification — 2026-07-18
 

@@ -4,7 +4,8 @@
 > Apple Metal/MLX guidance. Protects the low-RAM + streaming-preview “secret sauce”
 > that makes the product feel fast on 8 GB Mac and physical iPhone.
 >
-> Reviewed 2026-07-19. Code and machine-readable contracts win over this prose.
+> Reviewed 2026-07-19; position sync 2026-07-20 after `overallPromotion: passed`.
+> Code and machine-readable contracts win over this prose.
 
 ## Secret sauce (do not trade for roadmap convenience)
 
@@ -49,8 +50,8 @@ cache limits + soft/hard trim / `fullUnload` align with Apple and MLX guidance. 
 
 - **No hard production `Memory.memoryLimit`** (soft relief is the product model).
 - **MLX-only** during convergence (no Core ML / MPS Graph / custom Metal second path).
-- **Pin lockstep** for `mlx-swift` + `mlx-swift-lm` until overall promotion.
-- Tighter cache-limit A/B only after Phase 5 seed proof, evidence-gated.
+- **Pin lockstep** for `mlx-swift` + `mlx-swift-lm` through remaining convergence (Phases 7–14).
+- Tighter cache-limit A/B only after Phase 5 packaging (closed 2026-07-20), evidence-gated.
 - Quantized KV and `compile()` remain diagnostic unless new evidence overturns prior −RTF findings.
 
 For “lightning fast” claims, prefer `playbackScheduled` / first-chunk materialization until a true
@@ -76,14 +77,14 @@ Both platforms ran exploratory full 29-take UI matrices on a dirty worktree
 
 ## Recommendations (ordered)
 
-1. Keep Phase 5 live fixed-seed pairs before any v9 authority flip.
-2. ~~Secret-sauce latency/memory cells~~ captured 2026-07-19 via focused UI short runs
-   (`secret-sauce-20260719`, `secret-sauce-ios-20260719`); evaluate with
-   `scripts/check_secret_sauce_cells.py` before treating later full matrices as promotion evidence.
+1. ~~Phase 5 live fixed-seed pairs before v9 authority flip~~ closed 2026-07-19/20; packaging and
+   sidecar authority landed with `overallPromotion: passed`.
+2. ~~Secret-sauce latency/memory cells~~ captured 2026-07-19 and re-checked on post–Phase 0
+   canonical matrices; keep `scripts/check_secret_sauce_cells.py` fail-closed for later Phase 7+.
 3. Do not target A100 97 ms; use Vocello clean-control regression bounds.
-4. Defer Metal 4 / Neural Accelerator work until pins and hardware matrix expand post-promotion.
-5. Split unrelated dirty-tree work (Cursor migration, Codex storage, convergence scaffolding) into
-   separate PRs when publishing.
+4. Defer Metal 4 / Neural Accelerator work until pins and hardware matrix expand further.
+5. Next convergence work is a fork: Phase 14 retirement, Phase 7 chunk/preview A/B, or Phase 8
+   live artifact validation — see `docs/development-progress.md`.
 
 Related: [`docs/decisions/runtime-streaming-quality-convergence.md`](../decisions/runtime-streaming-quality-convergence.md),
 [`docs/development-progress.md`](../development-progress.md),
