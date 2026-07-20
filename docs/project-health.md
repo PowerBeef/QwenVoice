@@ -4,8 +4,8 @@
 > execute models, devices, UI tests, signing, or network checks.
 
 - Current source identity and dirty state: local JSON report only (kept out of the tracked snapshot to avoid self-referential drift)
-- Swift tests: 391 cases in 54 files
-- Python tests: 630 cases in 46 files
+- Swift tests: 392 cases in 54 files
+- Python tests: 641 cases in 49 files
 - Required-step assurance: 55 steps across 12 workflows, all covered by forced-failure fixtures
 - Unsafe-concurrency annotations: 50 (50 registered with owner and invariant; contract complete)
 
@@ -13,22 +13,22 @@
 
 | Platform | Latest canonical run | Captured |
 | --- | --- | --- |
-| macos | `macos-xcui-benchmark-20260716-181853-b4c2e299` | 2026-07-16T18:35:18Z |
-| ios | `ios-xcui-benchmark-20260716-184106-48e3a3a6` | 2026-07-16T19:00:05Z |
+| macos | `macos-xcui-benchmark-20260720-172920-591696d1` | 2026-07-20T17:43:59Z |
+| ios | `ios-xcui-benchmark-20260720-174441-16fc128c` | 2026-07-20T18:02:12Z |
 
 ## Critical-domain coverage and freshness
 
 | Domain | Owner | Production files | Direct test files / cases | Hardware evidence |
 | --- | --- | ---: | ---: | --- |
-| generation-terminal | backend | 4 | 2 / 16 | macos: stale, ios: stale |
-| clone-conditioning | backend | 30 | 2 / 31 | macos: stale, ios: stale |
+| generation-terminal | backend | 4 | 2 / 16 | macos: fresh, ios: fresh |
+| clone-conditioning | backend | 30 | 2 / 31 | macos: fresh, ios: fresh |
 | event-delivery | backend | 3 | 2 / 10 | macos: stale, ios: stale |
-| memory-policy | backend-platform | 6 | 2 / 25 | macos: stale, ios: stale |
-| model-delivery | backend-platform | 17 | 3 / 36 | macos: stale, ios: stale |
-| xpc-transport | macos | 3 | 3 / 15 | macos: stale |
+| memory-policy | backend-platform | 6 | 2 / 25 | macos: fresh, ios: fresh |
+| model-delivery | backend-platform | 17 | 3 / 36 | macos: fresh, ios: fresh |
+| xpc-transport | macos | 3 | 3 / 15 | macos: fresh |
 | benchmark-validation | release-qa | 6 | 4 / 111 | macos: stale, ios: stale |
 | orchestration-assurance | release-qa | 3 | 1 / 12 | not hardware-gated |
-| release-supply-chain | release-qa | 6 | 3 / 51 | macos: stale |
+| release-supply-chain | release-qa | 6 | 3 / 51 | macos: fresh |
 | persistence-privacy | platform-release-qa | 4 | 2 / 7 | not hardware-gated |
 | runtime-hardening | backend-release-qa | 5 | 2 / 17 | not hardware-gated |
 
