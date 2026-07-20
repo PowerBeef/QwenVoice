@@ -24,8 +24,37 @@ LEGACY_COMPATIBILITY_SPI_PATTERN = re.compile(
     rf"@_spi\(\s*{re.escape(LEGACY_COMPATIBILITY_SPI)}\s*\)"
 )
 VOCELLO_QWEN3_CORE_IMPORT_PATTERN = re.compile(r"\bimport\s+VocelloQwen3Core\b")
-PHASE2_ENGINE_ACTOR_STATUS = (
+PHASE2_ENGINE_ACTOR_STATUS_PENDING = (
     "shipping-through-phase4-implementation-complete-promotion-pending"
+)
+PHASE2_ENGINE_ACTOR_STATUS_PASSED = (
+    "shipping-through-phase4-implementation-complete-overall-promotion-passed"
+)
+PHASE2_CLASSIFIED_SESSION_STATUS_PENDING = (
+    "shipping-through-phase4-implementation-complete-promotion-pending"
+)
+PHASE2_CLASSIFIED_SESSION_STATUS_PASSED = (
+    "shipping-through-phase4-implementation-complete-overall-promotion-passed"
+)
+PHASE4_PRODUCT_ADAPTER_STATUS_PENDING = (
+    "shipping-implementation-complete-promotion-pending"
+)
+PHASE4_PRODUCT_ADAPTER_STATUS_PASSED = (
+    "shipping-implementation-complete-overall-promotion-passed"
+)
+PHASE4_MODE_CUTOVER_PENDING = (
+    "implementation-complete-focused-platform-acceptance-passed-"
+    "overall-promotion-pending"
+)
+PHASE4_MODE_CUTOVER_PASSED = (
+    "implementation-complete-focused-platform-acceptance-passed-"
+    "overall-promotion-passed"
+)
+PHASE4_PROMOTION_EVIDENCE_PENDING = (
+    "focused-platform-acceptance-passed-overall-promotion-pending"
+)
+PHASE4_PROMOTION_EVIDENCE_PASSED = (
+    "overall-promotion-passed-phase0-5-6-closed-canonical-matrices"
 )
 PHASE2_ACTOR_CORRECTNESS_CLOSURE = {
     "abortLifecycle": "reserved-generating-aborting-single-owner-with-duplicate-abort-join",
@@ -433,13 +462,20 @@ def runtime_refactor_contract_errors(
             for key in ("coreTests", "xpcIntegrationTests", "ownedRuntimeTests")
         ):
             errors.append("runtime-refactor-contract deterministic test counts must be positive")
-        if (
-            checkpoint.get("promotionEvidence")
-            != "focused-platform-acceptance-passed-overall-promotion-pending"
-        ):
+        promotion = (
+            (contract.get("phase4ProductCutover") or {}).get("overallPromotion")
+            if isinstance(contract.get("phase4ProductCutover"), dict)
+            else None
+        )
+        expected_evidence = (
+            PHASE4_PROMOTION_EVIDENCE_PASSED
+            if promotion == "passed"
+            else PHASE4_PROMOTION_EVIDENCE_PENDING
+        )
+        if checkpoint.get("promotionEvidence") != expected_evidence:
             errors.append(
-                "runtime-refactor-contract review checkpoint must record focused platform "
-                "acceptance without claiming overall promotion"
+                "runtime-refactor-contract review checkpoint promotion evidence must match "
+                "overall Phase 4 promotion state"
             )
 
     versions = contract.get("contractVersions")
@@ -450,7 +486,7 @@ def runtime_refactor_contract_errors(
         "sampling": 2,
         "chunking": 1,
         "memory": 1,
-        "telemetry": 8,
+        "telemetry": 9,
         "telemetryTransition": 9,
         "benchmarkEvidence": 2,
     }
@@ -703,10 +739,12 @@ def runtime_refactor_contract_errors(
         compatibility_modes = {authorities.get(mode) for mode in ("custom", "design", "clone")}
         if compatibility_modes != {PHASE4_MODE_AUTHORITY}:
             errors.append("runtime-refactor-contract cannot claim Phase 4 with mixed mode authority")
-        if phases.get("modeCutover") != (
-            "implementation-complete-focused-platform-acceptance-passed-"
-            "overall-promotion-pending"
-        ):
+        expected_mode_cutover = (
+            PHASE4_MODE_CUTOVER_PASSED
+            if phase4.get("overallPromotion") == "passed"
+            else PHASE4_MODE_CUTOVER_PENDING
+        )
+        if phases.get("modeCutover") != expected_mode_cutover:
             errors.append("runtime-refactor-contract Phase 4 mode-cutover status drifted")
         if isinstance(versions, dict) and versions.get("telemetry") == 8:
             expected_transition = (
@@ -719,17 +757,45 @@ def runtime_refactor_contract_errors(
                 errors.append(
                     "runtime-refactor-contract cannot claim complete telemetry v9 while schema v8 ships"
                 )
+        if isinstance(versions, dict) and versions.get("telemetry") == 9:
+            if phases.get("telemetryV9") != "complete-sidecar-authority-with-v8-envelope":
+                errors.append(
+                    "runtime-refactor-contract telemetry v9 must declare complete sidecar authority"
+                )
+            if authorities.get("telemetry") != (
+                "generation-telemetry-v8-envelope-with-complete-v9-sidecar-authority"
+            ):
+                errors.append(
+                    "runtime-refactor-contract telemetry authority must match complete v9 sidecars"
+                )
+        if isinstance(phases, dict) and phases.get("requestLocalSamplingV2") != (
+            "shipping-promotion-packaged-evidence-live"
+        ):
+            errors.append(
+                "runtime-refactor-contract Phase 5 sampling status must be promotion-packaged"
+            )
         if isinstance(versions, dict) and versions.get("benchmarkEvidence") == 2 and phases.get("historyV3") != "pending-stable-plan-session-quality-identities":
             errors.append("runtime-refactor-contract cannot claim history v3 while schema v2 ships")
-    if isinstance(phases, dict) and phases.get("engineActor") != PHASE2_ENGINE_ACTOR_STATUS:
+    expected_actor = (
+        PHASE2_ENGINE_ACTOR_STATUS_PASSED
+        if isinstance(phase4, dict) and phase4.get("overallPromotion") == "passed"
+        else PHASE2_ENGINE_ACTOR_STATUS_PENDING
+    )
+    expected_classified = (
+        PHASE2_CLASSIFIED_SESSION_STATUS_PASSED
+        if isinstance(phase4, dict) and phase4.get("overallPromotion") == "passed"
+        else PHASE2_CLASSIFIED_SESSION_STATUS_PENDING
+    )
+    expected_adapter = (
+        PHASE4_PRODUCT_ADAPTER_STATUS_PASSED
+        if isinstance(phase4, dict) and phase4.get("overallPromotion") == "passed"
+        else PHASE4_PRODUCT_ADAPTER_STATUS_PENDING
+    )
+    if isinstance(phases, dict) and phases.get("engineActor") != expected_actor:
         errors.append("runtime-refactor-contract engine actor shipping status drifted")
-    if isinstance(phases, dict) and phases.get("classifiedSessionChannels") != (
-        "shipping-through-phase4-implementation-complete-promotion-pending"
-    ):
+    if isinstance(phases, dict) and phases.get("classifiedSessionChannels") != expected_classified:
         errors.append("runtime-refactor-contract classified-session shipping status drifted")
-    if isinstance(phases, dict) and phases.get("productOutputAdapter") != (
-        "shipping-implementation-complete-promotion-pending"
-    ):
+    if isinstance(phases, dict) and phases.get("productOutputAdapter") != expected_adapter:
         errors.append("runtime-refactor-contract product-output-adapter status drifted")
     compatibility_surfaces = contract.get("temporaryCompatibilitySurfaces")
     if not isinstance(compatibility_surfaces, list) or not compatibility_surfaces or len(compatibility_surfaces) != len(set(compatibility_surfaces)):

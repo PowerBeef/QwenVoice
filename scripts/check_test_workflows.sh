@@ -612,6 +612,9 @@ python3 -m unittest \
   scripts.tests.test_ios_platform_preflight \
   scripts.tests.test_benchmark_memory \
   scripts.tests.test_benchmark_history \
+  scripts.tests.test_convergence_promotion_gate \
+  scripts.tests.test_sampling_promotion_evidence \
+  scripts.tests.test_streaming_telemetry_v9_history \
   scripts.tests.test_bench_command_contract \
   scripts.tests.test_publish_benchmark_history \
   scripts.tests.test_check_ios_clone_conditioning \

@@ -1354,6 +1354,10 @@ struct StreamingExecutionContext: Sendable {
                         previewDisposition = .notRequested
                     }
                     if TelemetryGate.resolvedEnabled {
+                        let mlxInstants = Self.mlxChunkInstants(
+                            timings: chunk.timings,
+                            materializedAtNS: materializedAtNS
+                        )
                         chunkObservations.append(
                             ShippingChunkObservationV9(
                                 index: observationIndex,
@@ -1362,6 +1366,10 @@ struct StreamingExecutionContext: Sendable {
                                 codecEndFrameExclusive: chunk.codecEndFrameExclusive,
                                 audioStartFrame: audioStartFrame,
                                 audioEndFrameExclusive: audioEndFrame,
+                                generatedAtNS: mlxInstants?.generatedAtNS,
+                                mlxEvaluationEnqueuedAtNS: mlxInstants?.enqueuedAtNS,
+                                mlxEnqueueDurationNS: mlxInstants?.enqueueDurationNS,
+                                mlxMaterializationDurationNS: mlxInstants?.materializationDurationNS,
                                 materializedAtNS: materializedAtNS,
                                 writtenAtNS: writtenAtNS,
                                 previewPublishedAtNS: previewPublishedAtNS,
@@ -1576,7 +1584,13 @@ struct StreamingExecutionContext: Sendable {
                 seedSource: request.seed == nil ? .generated : .requested,
                 wavDigest: wavDigest
             )
-            successNotes.merge(evidence.telemetryNotes) { _, evidence in evidence }
+            // Prefer fail-closed promotion packaging; fall back to observational
+            // notes when a side is still incomplete (e.g. missing effective seed).
+            if let packaged = try? evidence.packagedTelemetryNotes() {
+                successNotes.merge(packaged) { _, evidence in evidence }
+            } else {
+                successNotes.merge(evidence.telemetryNotes) { _, evidence in evidence }
+            }
         }
         successNotes.merge(GenerationStreamingTelemetryV9Publication.shippingIdentityNotes) {
             current, _ in current
@@ -1841,7 +1855,7 @@ struct StreamingExecutionContext: Sendable {
         case .clone:
             break
         }
-        let notesWithTier = tierNotes
+        var notesWithTier = tierNotes
             .merging(notes) { _, caller in caller }
             .merging(currentTaskQOSNotes()) { current, _ in current }
             .merging(BenchRunContext.telemetryNotes(intendedWarmState: warmState.rawValue)) { current, _ in current }
@@ -1869,6 +1883,21 @@ struct StreamingExecutionContext: Sendable {
             chunkObservations: streamingChunkObservations,
             audioChannel: streamingAudioChannel
         )
+        if let nestedStreamingV9 {
+            let sidecarDirectory = appSupportDirectory
+                .appendingPathComponent("diagnostics", isDirectory: true)
+                .appendingPathComponent("engine", isDirectory: true)
+                .appendingPathComponent("streaming-telemetry-v9", isDirectory: true)
+            if let published = try? GenerationStreamingTelemetryV9Publication.publishCompleteSidecarIfReady(
+                transition: nestedStreamingV9,
+                directory: sidecarDirectory
+            ) {
+                notesWithTier["streamingTelemetryV9SidecarDigest"] = published.digest
+                notesWithTier["streamingTelemetryV9PublicationReady"] = "true"
+            } else if GenerationStreamingTelemetryV9Publication.isPublicationReady(nestedStreamingV9) {
+                notesWithTier["streamingTelemetryV9PublicationReady"] = "true"
+            }
+        }
         let record = GenerationTelemetryRecord(
             generationID: generationID.uuidString,
             layer: .engine,
@@ -2231,6 +2260,34 @@ struct StreamingExecutionContext: Sendable {
             audioChunkEvalMS: timings.audioChunkEvalMS,
             kvCacheDiagnostics: timings.kvCacheDiagnostics,
             mimiDecoderBreakdownMS: timings.mimiDecoderBreakdownMS
+        )
+    }
+
+    /// Derive exact MLX enqueue/materialization instants from measured substage
+    /// milliseconds anchored at the observed materialization uptime. Durations
+    /// of zero are allowed when the producer measured zero — never invented.
+    private static func mlxChunkInstants(
+        timings: VocelloQwen3ChunkTimings?,
+        materializedAtNS: UInt64
+    ) -> (generatedAtNS: UInt64, enqueuedAtNS: UInt64, enqueueDurationNS: UInt64, materializationDurationNS: UInt64)? {
+        guard let timings else { return nil }
+        let enqueueDurationNS = UInt64(max(0, timings.streamStepEvalEnqueueMS) * 1_000_000.0)
+        let waitDurationNS = UInt64(max(0, timings.streamStepEvalWaitMS) * 1_000_000.0)
+        let evalDurationNS = UInt64(max(0, timings.streamStepEvalMS) * 1_000_000.0)
+        let materializationDurationNS = waitDurationNS > 0
+            ? waitDurationNS
+            : (evalDurationNS > enqueueDurationNS ? evalDurationNS - enqueueDurationNS : 0)
+        let enqueuedAtNS = materializedAtNS >= materializationDurationNS
+            ? materializedAtNS - materializationDurationNS
+            : materializedAtNS
+        let generatedAtNS = enqueuedAtNS >= enqueueDurationNS
+            ? enqueuedAtNS - enqueueDurationNS
+            : enqueuedAtNS
+        return (
+            generatedAtNS,
+            enqueuedAtNS,
+            enqueueDurationNS,
+            materializedAtNS >= enqueuedAtNS ? materializedAtNS - enqueuedAtNS : 0
         )
     }
 

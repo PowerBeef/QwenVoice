@@ -83,6 +83,10 @@ public struct ShippingChunkObservationV9: Codable, Hashable, Sendable {
     public let codecEndFrameExclusive: UInt64?
     public let audioStartFrame: UInt64
     public let audioEndFrameExclusive: UInt64
+    public let generatedAtNS: UInt64?
+    public let mlxEvaluationEnqueuedAtNS: UInt64?
+    public let mlxEnqueueDurationNS: UInt64?
+    public let mlxMaterializationDurationNS: UInt64?
     public let materializedAtNS: UInt64
     public let writtenAtNS: UInt64
     public let previewPublishedAtNS: UInt64?
@@ -95,6 +99,10 @@ public struct ShippingChunkObservationV9: Codable, Hashable, Sendable {
         codecEndFrameExclusive: UInt64? = nil,
         audioStartFrame: UInt64,
         audioEndFrameExclusive: UInt64,
+        generatedAtNS: UInt64? = nil,
+        mlxEvaluationEnqueuedAtNS: UInt64? = nil,
+        mlxEnqueueDurationNS: UInt64? = nil,
+        mlxMaterializationDurationNS: UInt64? = nil,
         materializedAtNS: UInt64,
         writtenAtNS: UInt64,
         previewPublishedAtNS: UInt64? = nil,
@@ -106,10 +114,23 @@ public struct ShippingChunkObservationV9: Codable, Hashable, Sendable {
         self.codecEndFrameExclusive = codecEndFrameExclusive
         self.audioStartFrame = audioStartFrame
         self.audioEndFrameExclusive = audioEndFrameExclusive
+        self.generatedAtNS = generatedAtNS
+        self.mlxEvaluationEnqueuedAtNS = mlxEvaluationEnqueuedAtNS
+        self.mlxEnqueueDurationNS = mlxEnqueueDurationNS
+        self.mlxMaterializationDurationNS = mlxMaterializationDurationNS
         self.materializedAtNS = materializedAtNS
         self.writtenAtNS = writtenAtNS
         self.previewPublishedAtNS = previewPublishedAtNS
         self.previewDisposition = previewDisposition
+    }
+
+    /// Whether exact MLX enqueue/materialization instants are present for a
+    /// complete schema-v9 chunk range (no invented zeros).
+    public var hasExactMLXChunkInstants: Bool {
+        generatedAtNS != nil
+            && mlxEvaluationEnqueuedAtNS != nil
+            && mlxEnqueueDurationNS != nil
+            && mlxMaterializationDurationNS != nil
     }
 
     fileprivate func validate(expectedIndex: Int, expectedAudioStart: UInt64) throws {

@@ -16,6 +16,8 @@ PHASE6_TRANSITION = (
     "partial-transition-projection-embedded-in-v8-"
     "live-producers-landed-history-authority-pending"
 )
+PHASE6_CLOSED = "complete-sidecar-authority-with-v8-envelope"
+PHASE5_CLOSED = "shipping-promotion-packaged-evidence-live"
 
 # Phase 0 statuses advance as live captures land. Do not freeze forever at
 # model-free-foundation or promotion will block real characterization updates.
@@ -42,17 +44,21 @@ def errors() -> list[str]:
 
     if phase4.get("overallPromotion") == "passed":
         sampling = str(phases.get("requestLocalSamplingV2") or "")
-        if "pending" in sampling:
+        if "pending" in sampling or sampling != PHASE5_CLOSED:
             findings.append(
                 "overall Phase 4 promotion cannot pass before Phase 5 live evidence closes"
             )
-        if phases.get("telemetryV9") == PHASE6_TRANSITION or versions.get("telemetry") == 8:
+        if (
+            phases.get("telemetryV9") == PHASE6_TRANSITION
+            or phases.get("telemetryV9") != PHASE6_CLOSED
+            or versions.get("telemetry") != 9
+        ):
             findings.append(
                 "overall Phase 4 promotion cannot pass while telemetry remains v8/"
                 "partial-v9-transition"
             )
         characterization = str(phases.get("characterizationContract") or "")
-        if "pending" in characterization or characterization.startswith("partial"):
+        if characterization != "closed-clean-control-sessions-bound":
             findings.append(
                 "overall Phase 4 promotion cannot pass before Phase 0 characterization closes"
             )
@@ -80,6 +86,10 @@ def errors() -> list[str]:
             "characterization fixtures status must be one of: "
             + ", ".join(sorted(CHARACTERIZATION_STATUSES))
             + f" (got {status!r})"
+        )
+    if phase4.get("overallPromotion") == "passed" and status != "closed":
+        findings.append(
+            "overall Phase 4 promotion cannot pass before characterization fixtures close"
         )
     return findings
 

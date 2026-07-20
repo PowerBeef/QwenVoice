@@ -54,13 +54,13 @@ iOS: UI → Core in-process → same owned runtime.
 
 | Phase | State |
 | --- | --- |
-| 0 Characterization | Partial — tracked model-free fixtures present; live clean controls pending |
+| 0 Characterization | Closed — clean controls bound |
 | 1 Correctness | Shipping |
 | 2 Actor + plans | Actor shipping; plans shadow-only; SPI load bridge remains |
 | 3 Classified sessions | Shipping |
-| 4 Product adapter + mode cutover | Impl + focused acceptance passed; overall promotion pending |
-| 5 Sampling v2 | Evidence path shipping; live fixed-seed promotion pending |
-| 6 Telemetry v9 | Nested transition in v8; live codec/audio-channel/terminal producers landed (macOS); history authority pending |
+| 4 Product adapter + mode cutover | Overall promotion passed (`overallPromotion: passed`) |
+| 5 Sampling v2 | Promotion-packaged evidence live |
+| 6 Telemetry v9 | Complete sidecar authority with v8 envelope (`telemetry: 9`) |
 | 7–13 | Foundations / not started / partial as in the runtime contract |
 | 14 Mechanical retirement | Explicitly deferred (`phase14DeferredSurfaces` in the contract) |
 
@@ -71,24 +71,26 @@ iOS: UI → Core in-process → same owned runtime.
 - Combined `VocelloQwen3ModelGenerationSession` — characterization only
 - Legacy SPI for load/prewarm/Clone adoption
 - Shadow plan mapper — comparison only
-- Nested v9-in-v8 — not a publishable schema-v9 envelope for history
+- Nested v9-in-v8 plus complete `*.streaming-telemetry-v9.json` sidecars when ready
 
 ## Risks
 
-1. Nested partial v9-in-v8 looks “v9-ready” while merger/history remain v8/v2.
+1. JSONL envelope remains v8; do not treat nested transitions alone as history v9 rows.
 2. Focused exploratory XCUI is not clean full-matrix promotion.
 3. Actor is generation mutation authority, not sole MLX mutator until SPI retires.
-4. Running full 29-take matrices before Phase 5/6/0 live closures creates transitional evidence that must be repeated. The promotion gate script enforces this for `overallPromotion: passed`.
+4. JSONL remains schema v8; complete v9 sidecars are the history authority for streaming detail.
 
 ## Resume order
 
 1. ~~Live fixed-seed pairs~~, ~~nested-v9 producers~~, and ~~macOS + iPhone nested-v9 pilots~~
-   landed 2026-07-19/20 (see `docs/development-progress.md`). Keep schema-v8 authoritative until
-   history can consume complete sidecars.
+   landed 2026-07-19/20 (see `docs/development-progress.md`).
 2. ~~Live Phase 0 characterization~~ closed 2026-07-20 (`status: closed`,
    `characterizationContract: closed-clean-control-sessions-bound`).
-3. Fresh full 29-take matrices (Phase 5/6 still pending for overall promotion).
-4. Phase 14 retirement only after overall promotion.
+3. ~~Fresh full 29-take matrices~~ landed 2026-07-20
+   (`macos-xcui-benchmark-20260720-172920-591696d1`,
+   `ios-xcui-benchmark-20260720-174441-16fc128c`).
+4. ~~Phase 5 promotion packaging + Phase 6 v9 sidecar authority~~ closed 2026-07-20.
+5. ~~`overallPromotion: passed`~~ claimed 2026-07-20. Next: Phase 14 mechanical retirement.
 
 ## Implementation landed with this report
 

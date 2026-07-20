@@ -12,6 +12,10 @@ final class SamplingEvidenceTests: XCTestCase {
         XCTAssertNoThrow(try evidence.validatedForPromotion())
         XCTAssertEqual(evidence.telemetryNotes["samplingSeedAgreement"], "matched")
         XCTAssertEqual(evidence.telemetryNotes["samplingWAVDigest"]?.count, 64)
+        let packaged = try evidence.packagedTelemetryNotes()
+        XCTAssertEqual(packaged["samplingPromotionPackaged"], "true")
+        let reconstructed = try XCTUnwrap(SamplingTakeEvidence(telemetryNotes: packaged))
+        XCTAssertNoThrow(try reconstructed.validatedForPromotion())
     }
 
     func testMissingOrMismatchedSeedsFailClosed() {

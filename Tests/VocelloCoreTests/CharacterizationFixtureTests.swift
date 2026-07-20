@@ -46,8 +46,10 @@ final class CharacterizationFixtureTests: XCTestCase {
             }
         }
         let pending = try XCTUnwrap(root?["liveEvidencePending"] as? [String])
-        XCTAssertFalse(pending.isEmpty)
-        XCTAssertFalse(pending.contains("secret-sauce-latency-memory-cells"))
+        XCTAssertTrue(pending.isEmpty)
+        if status == "closed" {
+            XCTAssertFalse((root?["controlSessions"] as? [Any] ?? []).isEmpty)
+        }
 
         let secretSauce = try XCTUnwrap(root?["secretSauceCells"] as? [[String: Any]])
         XCTAssertEqual(secretSauce.count, 3)
@@ -71,7 +73,7 @@ final class CharacterizationFixtureTests: XCTestCase {
         }
 
         let captures = try XCTUnwrap(root?["secretSauceCaptures"] as? [[String: Any]])
-        XCTAssertEqual(captures.count, 2)
+        XCTAssertGreaterThanOrEqual(captures.count, 2)
         let platforms = Set(captures.compactMap { $0["platform"] as? String })
         XCTAssertEqual(platforms, ["macos", "ios"])
         for capture in captures {

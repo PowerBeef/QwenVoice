@@ -343,6 +343,104 @@ final class GenerationStreamingTelemetryV9Tests: XCTestCase {
         XCTAssertNoThrow(
             try GenerationStreamingTelemetryV9Publication.requirePublicationReady(transition)
         )
+        XCTAssertThrowsError(
+            try GenerationStreamingTelemetryV9Publication.makeCompleteDocument(from: transition)
+        ) { error in
+            XCTAssertEqual(
+                error as? GenerationStreamingTelemetryV9Publication.PublicationError,
+                .incompleteChunkInstants
+            )
+        }
+    }
+
+    func testPublicationReadyTransitionWithMLXInstantsPublishesCompleteSidecar() throws {
+        let digest = String(repeating: "ab", count: 32)
+        var notes = GenerationStreamingTelemetryV9Publication.shippingIdentityNotes
+        for key in [
+            "streamingV9PlanDigest",
+            "streamingV9SamplingDigest",
+            "streamingV9ChunkDigest",
+            "streamingV9MemoryDigest",
+            "streamingV9OutputPolicyDigest",
+            "streamingV9QualityPolicyDigest",
+        ] {
+            notes[key] = digest
+        }
+        notes["streamingV9PlanVersion"] = "1"
+        notes["streamingV9SamplingVersion"] = "2"
+        notes["streamingV9ChunkVersion"] = "1"
+        notes["streamingV9MemoryVersion"] = "1"
+        notes["streamingV9OutputPolicyVersion"] = "1"
+        notes["streamingV9QualityPolicyVersion"] = "1"
+        let observations = [
+            ShippingChunkObservationV9(
+                index: 0,
+                transportSequence: 0,
+                codecStartFrame: 0,
+                codecEndFrameExclusive: 7,
+                audioStartFrame: 0,
+                audioEndFrameExclusive: 13_440,
+                generatedAtNS: 10,
+                mlxEvaluationEnqueuedAtNS: 11,
+                mlxEnqueueDurationNS: 1,
+                mlxMaterializationDurationNS: 19,
+                materializedAtNS: 30,
+                writtenAtNS: 40,
+                previewPublishedAtNS: 45,
+                previewDisposition: .publishedToProductSink
+            ),
+            ShippingChunkObservationV9(
+                index: 1,
+                transportSequence: 1,
+                codecStartFrame: 7,
+                codecEndFrameExclusive: 14,
+                audioStartFrame: 13_440,
+                audioEndFrameExclusive: 26_880,
+                generatedAtNS: 50,
+                mlxEvaluationEnqueuedAtNS: 51,
+                mlxEnqueueDurationNS: 1,
+                mlxMaterializationDurationNS: 29,
+                materializedAtNS: 80,
+                writtenAtNS: 90,
+                previewPublishedAtNS: 95,
+                previewDisposition: .publishedToProductSink
+            ),
+        ]
+        let transition = try XCTUnwrap(GenerationStreamingTelemetryV9Bridge.make(
+            generationID: "A57D9599-E428-4D74-A7DE-69A6BD801F54",
+            layer: .engine,
+            notes: notes,
+            frontend: nil,
+            transport: nil,
+            terminals: GenerationTerminalTimelineV9(
+                modelTerminalAtNS: 100,
+                productTerminalAtNS: 120,
+                modelOutcome: .eos,
+                productOutcome: .completed
+            ),
+            chunkObservations: observations,
+            audioChannel: AudioChannelSummaryV9(
+                capacityFrames: 26_880,
+                highWaterFrames: 13_440,
+                producerSuspensionNS: 2,
+                producerSuspensionCount: 1,
+                cancellationWakeups: 0
+            )
+        ))
+        XCTAssertTrue(GenerationStreamingTelemetryV9Publication.isPublicationReady(transition))
+        let document = try GenerationStreamingTelemetryV9Publication.makeCompleteDocument(from: transition)
+        XCTAssertEqual(document.schemaVersion, 9)
+        XCTAssertEqual(document.chunks.count, 2)
+
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let published = try GenerationStreamingTelemetryV9Publication.publishCompleteSidecarIfReady(
+            transition: transition,
+            directory: directory
+        )
+        XCTAssertEqual(published.digest.count, 64)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: published.url.path))
     }
 
     func testCompleteV9SidecarPublicationRoundTrip() throws {

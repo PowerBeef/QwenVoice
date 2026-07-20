@@ -121,6 +121,8 @@ SECTION_KEYS = {
         "sampleSidecarsDigest", "memoryPolicyID", "retentionMetric",
         "retentionThresholdFraction", "maximumRetainedGrowthMB",
         "maximumRetainedGrowthFraction", "retentionPassed",
+        "streamingTelemetryV9SidecarCount", "streamingTelemetryV9SidecarsDigest",
+        "streamingTelemetryV9PublicationReadyCount",
     },
     "comparison": {"key", "comparable", "baselineRunID", "deltas"},
     "listening": {"status", "note", "annotatedAt"},
@@ -137,6 +139,8 @@ TAKE_KEYS = {
     "modelRevision", "modelArtifactVersion", "modelQuantization", "seed",
     "accuracyMetric", "accuracyThreshold", "playbackStartSource",
     "memoryStatus", "sampleSidecarDigest",
+    "streamingTelemetryV9SidecarDigest", "samplingPromotionPackaged", "samplingWAVDigest",
+    "samplingSeedAgreement",
 }
 OUTPUT_KEYS = {
     "readableWAV", "atomicPublish", "durationSeconds", "sampleRate", "channels",
@@ -214,6 +218,8 @@ SCHEMA_REQUIRED_KEYS = {
         "sampleSidecarCount", "sampleSidecarsDigest",
         "memoryPolicyID", "retentionMetric", "retentionThresholdFraction",
         "maximumRetainedGrowthMB", "maximumRetainedGrowthFraction", "retentionPassed",
+        "streamingTelemetryV9SidecarCount", "streamingTelemetryV9SidecarsDigest",
+        "streamingTelemetryV9PublicationReadyCount",
     },
     "comparison": SECTION_KEYS["comparison"],
     "listening": SECTION_KEYS["listening"],
@@ -243,8 +249,14 @@ V2_ONLY_EVIDENCE_KEYS = {
     "memoryContractVersion", "memoryQualified", "sampleSidecarCount", "sampleSidecarsDigest",
     "memoryPolicyID", "retentionMetric", "retentionThresholdFraction",
     "maximumRetainedGrowthMB", "maximumRetainedGrowthFraction", "retentionPassed",
+    "streamingTelemetryV9SidecarCount", "streamingTelemetryV9SidecarsDigest",
+    "streamingTelemetryV9PublicationReadyCount",
 }
-V2_ONLY_TAKE_KEYS = {"memoryStatus", "sampleSidecarDigest"}
+V2_ONLY_TAKE_KEYS = {
+    "memoryStatus", "sampleSidecarDigest",
+    "streamingTelemetryV9SidecarDigest", "samplingPromotionPackaged", "samplingWAVDigest",
+    "samplingSeedAgreement",
+}
 V2_ONLY_TRACE_SUMMARY_KEYS = {
     *LEGACY_MEMORY_TRACE_SUMMARY_KEYS,
     *MEMORY_TRACE_V2_SUMMARY_KEYS,

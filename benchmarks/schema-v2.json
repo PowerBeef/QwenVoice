@@ -297,6 +297,17 @@
         },
         "retentionPassed": {
           "const": true
+        },
+        "streamingTelemetryV9SidecarCount": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "streamingTelemetryV9SidecarsDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "streamingTelemetryV9PublicationReadyCount": {
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "required": [
@@ -768,6 +779,22 @@
         },
         "sampleSidecarDigest": {
           "$ref": "#/$defs/digest"
+        },
+        "streamingTelemetryV9SidecarDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "samplingPromotionPackaged": {
+          "type": "boolean"
+        },
+        "samplingWAVDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "samplingSeedAgreement": {
+          "enum": [
+            "matched",
+            "mismatched",
+            "incomplete"
+          ]
         }
       },
       "required": [

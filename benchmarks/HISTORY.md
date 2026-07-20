@@ -205,6 +205,12 @@ from schema-v2 memory trends.
 |---|---|---|---|---|---|---:|---|---|---|---|
 | 2026-07-19 | [`ios-xcui-benchmark-20260719-234454-7df6a1e0`](runs/ui-generation/ios-xcui-benchmark-20260719-234454-7df6a1e0.json) | focused | exploratory | passedWithWarnings | qualified-with-warnings | 5 | `d07384473fe9` dirty | `excluded` | baseline | secret-sauce-ios-20260719 |
 
+## ui-generation / ios / iphone-17-pro / config `ef1fb93b4162`
+
+| completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |
+|---|---|---|---|---|---|---:|---|---|---|---|
+| 2026-07-20 | [`ios-xcui-benchmark-20260720-174441-16fc128c`](runs/ui-generation/ios-xcui-benchmark-20260720-174441-16fc128c.json) | canonical | canonical | passedWithWarnings | qualified-with-warnings | 29 | `610125b7423e` | `ef1fb93b4162` | baseline | post-phase0-ios-matrix-20260720 |
+
 ## ui-generation / ios / iphone-17-pro / config `f50250bbe161`
 
 | completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |
@@ -290,6 +296,12 @@ from schema-v2 memory trends.
 | completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |
 |---|---|---|---|---|---|---:|---|---|---|---|
 | 2026-07-19 | [`macos-xcui-benchmark-20260719-233834-98038639`](runs/ui-generation/macos-xcui-benchmark-20260719-233834-98038639.json) | focused | exploratory | passedWithWarnings | qualified-with-warnings | 5 | `d07384473fe9` dirty | `excluded` | baseline | secret-sauce-20260719 |
+
+## ui-generation / macos / mac-mini-m2-8gb / config `8d727e051825`
+
+| completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |
+|---|---|---|---|---|---|---:|---|---|---|---|
+| 2026-07-20 | [`macos-xcui-benchmark-20260720-172920-591696d1`](runs/ui-generation/macos-xcui-benchmark-20260720-172920-591696d1.json) | canonical | canonical | passedWithWarnings | qualified-with-warnings | 29 | `610125b7423e` | `8d727e051825` | baseline | post-phase0-matrix-20260720 |
 
 ## ui-generation / macos / mac-mini-m2-8gb / config `ad660b134305`
 

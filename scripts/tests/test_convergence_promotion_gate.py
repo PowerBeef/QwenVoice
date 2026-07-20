@@ -20,7 +20,7 @@ class ConvergencePromotionGateTests(unittest.TestCase):
     def test_current_checkout_passes(self) -> None:
         self.assertEqual(GATE.errors(), [])
 
-    def test_rejects_premature_overall_promotion(self) -> None:
+    def test_allows_overall_promotion_when_phase_0_5_6_closed(self) -> None:
         contract = json.loads((ROOT / "config/runtime-refactor-contract.json").read_text(encoding="utf-8"))
         contract["phase4ProductCutover"]["overallPromotion"] = "passed"
         with tempfile.TemporaryDirectory() as temporary:
@@ -42,11 +42,40 @@ class ConvergencePromotionGateTests(unittest.TestCase):
             finally:
                 GATE.CONTRACT = original_contract
                 GATE.CHARACTERIZATION = original_fixtures
+        self.assertEqual(errors, [])
+
+    def test_rejects_promotion_while_phase_5_or_6_pending(self) -> None:
+        contract = json.loads((ROOT / "config/runtime-refactor-contract.json").read_text(encoding="utf-8"))
+        contract["phase4ProductCutover"]["overallPromotion"] = "passed"
+        contract["phaseStatus"]["requestLocalSamplingV2"] = (
+            "shipping-evidence-path-and-subseed-derivation-live-promotion-pending"
+        )
+        contract["phaseStatus"]["telemetryV9"] = (
+            "partial-transition-projection-embedded-in-v8-"
+            "live-producers-landed-history-authority-pending"
+        )
+        contract["contractVersions"]["telemetry"] = 8
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "config").mkdir()
+            contract_path = root / "config/runtime-refactor-contract.json"
+            fixtures_path = root / "config/characterization-fixtures.json"
+            contract_path.write_text(json.dumps(contract), encoding="utf-8")
+            fixtures_path.write_text(
+                (ROOT / "config/characterization-fixtures.json").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            original_contract = GATE.CONTRACT
+            original_fixtures = GATE.CHARACTERIZATION
+            try:
+                GATE.CONTRACT = contract_path
+                GATE.CHARACTERIZATION = fixtures_path
+                errors = GATE.errors()
+            finally:
+                GATE.CONTRACT = original_contract
+                GATE.CHARACTERIZATION = original_fixtures
         self.assertTrue(any("Phase 5" in item for item in errors))
         self.assertTrue(any("telemetry" in item for item in errors))
-        # Phase 0 is closed in the current checkout; it must not keep blocking
-        # once characterizationContract no longer says pending/partial.
-        self.assertFalse(any("Phase 0" in item for item in errors))
 
     def test_rejects_promotion_while_characterization_pending(self) -> None:
         contract = json.loads((ROOT / "config/runtime-refactor-contract.json").read_text(encoding="utf-8"))
@@ -76,6 +105,11 @@ class ConvergencePromotionGateTests(unittest.TestCase):
         self.assertTrue(any("Phase 0" in item for item in errors))
 
     def test_allows_live_characterization_status_progress(self) -> None:
+        contract = json.loads(
+            (ROOT / "config/runtime-refactor-contract.json").read_text(encoding="utf-8")
+        )
+        # Live fixture progress is allowed only while overall promotion remains pending.
+        contract["phase4ProductCutover"]["overallPromotion"] = "pending"
         fixtures = json.loads(
             (ROOT / "config/characterization-fixtures.json").read_text(encoding="utf-8")
         )
@@ -85,10 +119,7 @@ class ConvergencePromotionGateTests(unittest.TestCase):
             (root / "config").mkdir()
             contract_path = root / "config/runtime-refactor-contract.json"
             fixtures_path = root / "config/characterization-fixtures.json"
-            contract_path.write_text(
-                (ROOT / "config/runtime-refactor-contract.json").read_text(encoding="utf-8"),
-                encoding="utf-8",
-            )
+            contract_path.write_text(json.dumps(contract), encoding="utf-8")
             fixtures_path.write_text(json.dumps(fixtures), encoding="utf-8")
             original_contract = GATE.CONTRACT
             original_fixtures = GATE.CHARACTERIZATION

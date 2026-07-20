@@ -17,13 +17,13 @@ change runtime or promotion evidence.
 
 | Plan phase | Current state |
 | --- | --- |
-| 0 — Characterization | Closed 2026-07-20. Clean-tree Mac CLI ×3, Mac UI ×3, and iPhone UI ×3 short Speed warm-10 controls PASS `check_characterization_controls.py` and secret-sauce checks (soft_trim only). `config/characterization-fixtures.json` binds BenchMatrixSpec short/long `promptDigest` values, representative warm WAV digests, and `controlSessions`; status `closed`. Contract `characterizationContract`: `closed-clean-control-sessions-bound`. Full 29-take matrices remain the next promotion evidence step. |
+| 0 — Characterization | Closed 2026-07-20. Clean-tree Mac CLI ×3, Mac UI ×3, and iPhone UI ×3 short Speed warm-10 controls PASS `check_characterization_controls.py` and secret-sauce checks (soft_trim only). `config/characterization-fixtures.json` binds BenchMatrixSpec short/long `promptDigest` values, representative warm WAV digests, and `controlSessions`; status `closed`. Contract `characterizationContract`: `closed-clean-control-sessions-bound`. Post–Phase 0 full 29-take UI matrices are recorded below. |
 | 1 — Correctness prerequisites | Shipping. XPC reserves before side effects, pressure snapshots are synchronized, and critical relief holds admission continuously through cancellation, terminal cleanup, and relief. |
 | 2 — Plans and actor | The actor foundation is now the shipping generation-mutation authority through Phase 4. Immutable plans remain in shadow comparison. A narrow named SPI still bridges prepared-model loading/prewarm and validated schema-3 Clone prompt adoption; do not describe the actor as the sole MLX mutator until that bridge retires. Reserved/generating/aborting ownership, critical-relief lease transfer, and epoch-bound Clone handles remain unchanged. |
 | 3 — Classified sessions | Shipping through Phase 4. Custom, Design, and Clone materialize `[Float]` before an awaited, frame-bounded, single-consumer channel send. Producer/receiver cancellation, delayed drains, maximum-length ordering, consumer failure, typed terminal outcomes, and stale-safe product finalization remain deterministic contracts. |
-| 4 — Product adapter and mode cutover | Source implementation, deterministic verification, and focused macOS plus physical-iPhone Custom, Design, and Clone acceptance passed. QwenVoiceCore's `GenerationOutputAdapter` owns output/QC/finalization over the classified session, while the retained filename awaits Phase 14 mechanical organization. Overall promotion remains pending on the required clean repeated controls, applicable full matrices, exact legacy characterization, and later retirement work. |
-| 5 — Request-local sampling | Shipping evidence path. Algorithm v2 remains request-local; planned/observed seed agreement, privacy-safe WAV digests, fail-closed fixtures, and versioned domain-separated sub-seed derivation are in Core. macOS CLI and physical-iPhone headless fixed-seed equal/diverge pairs for Custom/Design/Clone Speed short passed on 2026-07-19 (WAV content digests). Promotion-packaged telemetry evidence (`SamplingTakeEvidence.validatedForPromotion()`) remains pending. Shipping long-form/candidate sub-seed execution remains Phase 11/12. |
-| 6 — Telemetry v9 | Transitional. Nested v9 projection remains inside shipping schema-v8 rows. Live engine producers stamp exact codec-frame ranges, audio-channel statistics, chunk audio ranges, and model/product terminals. macOS CLI (2026-07-19) and physical-iPhone headless Custom/Design/Clone (2026-07-20) nested transitions are engine-domain publication-ready. Complete sidecar writer/validator/publisher exist; history-level schema-v9 authority remains pending. |
+| 4 — Product adapter and mode cutover | Closed 2026-07-20. Source implementation, deterministic verification, focused platform acceptance, clean Phase 0 controls, canonical 29-take matrices, Phase 5 packaging, and Phase 6 v9 sidecar authority are all closed. Contract `overallPromotion`: `passed`. QwenVoiceCore's `GenerationOutputAdapter` remains the shipping product session; Phase 14 still owns mechanical retirement of deferred surfaces. |
+| 5 — Request-local sampling | Closed 2026-07-20. Shipping path packages fail-closed `SamplingTakeEvidence.packagedTelemetryNotes()` (`validatedForPromotion()` + `samplingPromotionPackaged=true`). Fixed-seed equal/diverge pairs remain live identity proof. Contract `requestLocalSamplingV2`: `shipping-promotion-packaged-evidence-live`. Long-form/candidate sub-seed execution remains Phase 11/12. |
+| 6 — Telemetry v9 | Closed 2026-07-20 for history sidecar authority. JSONL envelope remains schema v8 with nested transition; publication-ready transitions with exact MLX chunk instants publish complete `*.streaming-telemetry-v9.json` sidecars and stamp digests. Contract `telemetry: 9`, `telemetryV9`: `complete-sidecar-authority-with-v8-envelope`. |
 | 7 — Chunk and preview experiments | Not started beyond prerequisites. Shipping v9 evidence, controlled A/B runs, audio-graph preparation experiments, and identity-bound calibration are pending. |
 | 8 — Shared component storage | Production-integrated with deterministic coverage. Live validation across all six macOS artifacts and all three iPhone Speed artifacts is pending. |
 | 9 — Runtime component reuse | Not started. Decoder/immutable-weight reuse remains an optional isolated A/B after disk-component proof. |
@@ -52,16 +52,27 @@ evidence, readable output, Fast QC, and no crash delta. They are exploratory
 close the focused physical-iPhone Phase 4 acceptance requirement, but they are not clean repeated
 controls or a full canonical matrix.
 
-### Pre-research UI baselines — 2026-07-19
+### Post–Phase 0 canonical UI matrices — 2026-07-20
 
-Exploratory dirty-worktree 29-take UI matrices (soft trim → `passedWithWarnings`), not clean
-promotion controls. Roadmap cross-check:
+Clean-tree 29-take UI matrices after Phase 0 close (`610125b`). Canonical scope;
+`passedWithWarnings` for allowed soft_trim only. Secret-sauce short cells PASS on both.
+Roadmap cross-check:
 [`docs/reference/qwen3-apple-silicon-roadmap-review.md`](reference/qwen3-apple-silicon-roadmap-review.md).
 
 | Platform | Label / record |
 | --- | --- |
-| macOS | `pre-research-baseline-20260719` → `macos-xcui-benchmark-20260719-215547-11f8f4cf` (smoke + gate PASS after dSYM refresh) |
-| iPhone | `pre-research-baseline-ios-20260719` → `ios-xcui-benchmark-20260719-224743-1e69da39` (smoke PASS; `ios_device.sh gate` PASS as `ios-gate-20260719-191932` after phone returned) |
+| macOS | `post-phase0-matrix-20260720` → `macos-xcui-benchmark-20260720-172920-591696d1` (smoke PASS; 29/29; soft_trim) |
+| iPhone | `post-phase0-ios-matrix-20260720` → `ios-xcui-benchmark-20260720-174441-16fc128c` (preflight OK; 29/29; soft_trim; smoke skipped — History `historySearchField` flake) |
+
+### Pre-research UI baselines — 2026-07-19
+
+Exploratory dirty-worktree 29-take UI matrices (soft trim → `passedWithWarnings`), superseded for
+promotion evidence by the 2026-07-20 post–Phase 0 canonical matrices above.
+
+| Platform | Label / record |
+| --- | --- |
+| macOS | `pre-research-baseline-20260719` → `macos-xcui-benchmark-20260719-215547-11f8f4cf` |
+| iPhone | `pre-research-baseline-ios-20260719` → `ios-xcui-benchmark-20260719-224743-1e69da39` |
 
 ### Next convergence checkpoint
 
@@ -97,13 +108,19 @@ or incomplete live sampling proof:
    `promptDigest=1693d060…` (35 chars); long `promptDigest=f1b3eae6…` (344 chars). Fixtures
    `status: closed`; `liveEvidencePending` cleared. Note: full iPhone smoke still flakes on
    History `historySearchField` hittability; generation UI benchmarks are unaffected.
-5. Run fresh full 29-take macOS and physical-iPhone matrices next.
-   `scripts/check_convergence_promotion_gate.py` still refuses `overallPromotion: passed` while
-   Phase 5/6 remain pending (Phase 0 characterizationContract no longer blocks).
+5. ~~Fresh full 29-take matrices (2026-07-20):~~ macOS
+   `macos-xcui-benchmark-20260720-172920-591696d1` and iPhone
+   `ios-xcui-benchmark-20260720-174441-16fc128c` both canonical 29/29 PASS
+   (`passedWithWarnings` / soft_trim only).
+6. ~~Phase 5 promotion packaging + Phase 6 v9 sidecar authority (2026-07-20):~~
+   `SamplingTakeEvidence.packagedTelemetryNotes()`, complete v9 sidecar publish path,
+   history evidence keys for sidecar digests, and contract telemetry v9.
+7. ~~`overallPromotion: passed` (2026-07-20):~~ claimed after Phase 0/5/6 close plus
+   canonical macOS/iPhone 29-take matrices. Phase 14 mechanical retirement remains
+   deferred on the named SPI/filename/combined-session surfaces.
 
-Shipping long-form sub-seed execution remains Phase 11, candidate retry remains Phase 12, and
-neither is a prerequisite for the Phase 5 live sampling proof. Phase 14 mechanical retirement
-stays deferred until overall promotion.
+Shipping long-form sub-seed execution remains Phase 11, candidate retry remains Phase 12.
+Phase 14 mechanical retirement is the next explicit organization step.
 
 Status report: [`docs/reference/runtime-refactor-status-report.md`](reference/runtime-refactor-status-report.md).
 

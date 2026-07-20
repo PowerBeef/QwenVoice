@@ -16,6 +16,10 @@ public enum GenerationStreamingTelemetryV9Publication: Sendable {
         case validationFailed
         case writeFailed
         case transitionNotPublicationReady
+        case incompleteChunkInstants
+        case incompleteIdentities
+        case incompleteFrameFlow
+        case missingAudioChannel
     }
 
     /// Stable privacy-safe identity notes for the shipping actor session and
@@ -129,6 +133,102 @@ public enum GenerationStreamingTelemetryV9Publication: Sendable {
         guard isPublicationReady(transition) else {
             throw PublicationError.transitionNotPublicationReady
         }
+    }
+
+    /// Build a complete schema-v9 document from a publication-ready transition.
+    /// Requires exact MLX chunk instants on every shipping observation — never
+    /// invents timestamps or frame counts.
+    public static func makeCompleteDocument(
+        from transition: GenerationStreamingTelemetryTransitionV9
+    ) throws -> GenerationStreamingTelemetryV9 {
+        try requirePublicationReady(transition)
+        guard transition.chunks.allSatisfy(\.hasExactMLXChunkInstants) else {
+            throw PublicationError.incompleteChunkInstants
+        }
+        guard let plan = transition.identities.plan,
+              let sampling = transition.identities.sampling,
+              let chunk = transition.identities.chunk,
+              let memory = transition.identities.memory,
+              let session = transition.identities.session,
+              let outputAdapter = transition.identities.outputAdapter,
+              let quality = transition.identities.qualityPolicy else {
+            throw PublicationError.incompleteIdentities
+        }
+        // Complete identity stores the quality-policy digest; output-policy remains
+        // in the nested transition and must already be present for readiness.
+        guard transition.identities.outputPolicy != nil else {
+            throw PublicationError.incompleteIdentities
+        }
+        guard let codecGenerated = transition.frameFlow.codecFramesGenerated,
+              let codecMaterialized = transition.frameFlow.codecFramesMaterialized,
+              let audioMaterialized = transition.frameFlow.audioFramesMaterialized,
+              let audioWritten = transition.frameFlow.audioFramesWritten,
+              let audioPreview = transition.frameFlow.audioFramesPreviewPublished else {
+            throw PublicationError.incompleteFrameFlow
+        }
+        guard let audioChannel = transition.audioChannel else {
+            throw PublicationError.missingAudioChannel
+        }
+
+        let chunks: [StreamingChunkRangeV9] = try transition.chunks.map { observation in
+            guard let codecStart = observation.codecStartFrame,
+                  let codecEnd = observation.codecEndFrameExclusive,
+                  let generatedAtNS = observation.generatedAtNS,
+                  let enqueuedAtNS = observation.mlxEvaluationEnqueuedAtNS,
+                  let enqueueDurationNS = observation.mlxEnqueueDurationNS,
+                  let materializationDurationNS = observation.mlxMaterializationDurationNS else {
+                throw PublicationError.incompleteChunkInstants
+            }
+            return StreamingChunkRangeV9(
+                index: observation.index,
+                codecStartFrame: codecStart,
+                codecEndFrameExclusive: codecEnd,
+                audioStartFrame: observation.audioStartFrame,
+                audioEndFrameExclusive: observation.audioEndFrameExclusive,
+                generatedAtNS: generatedAtNS,
+                mlxEvaluationEnqueuedAtNS: enqueuedAtNS,
+                materializedAtNS: observation.materializedAtNS,
+                writtenAtNS: observation.writtenAtNS,
+                previewPublishedAtNS: observation.previewPublishedAtNS,
+                mlxEnqueueDurationNS: enqueueDurationNS,
+                mlxMaterializationDurationNS: materializationDurationNS
+            )
+        }
+
+        return try GenerationStreamingTelemetryV9(
+            generationID: transition.generationID,
+            identities: GenerationStreamingIdentityV9(
+                plan: plan,
+                sampling: sampling,
+                chunk: chunk,
+                memory: memory,
+                session: session,
+                outputAdapter: outputAdapter,
+                quality: quality
+            ),
+            terminals: transition.terminals,
+            frameFlow: CodecFrameFlowV9(
+                codecFramesGenerated: codecGenerated,
+                codecFramesMaterialized: codecMaterialized,
+                audioFramesMaterialized: audioMaterialized,
+                audioFramesWritten: audioWritten,
+                audioFramesPreviewPublished: audioPreview
+            ),
+            audioChannel: audioChannel,
+            chunks: chunks
+        )
+    }
+
+    /// Publish a complete v9 sidecar when the transition is publication-ready and
+    /// every chunk carries exact MLX instants. Returns the sidecar URL and SHA-256.
+    public static func publishCompleteSidecarIfReady(
+        transition: GenerationStreamingTelemetryTransitionV9,
+        directory: URL
+    ) throws -> (url: URL, digest: String) {
+        let document = try makeCompleteDocument(from: transition)
+        let url = try publishSidecar(document: document, directory: directory)
+        let digest = try SamplingTakeEvidence.sha256FileDigest(at: url)
+        return (url, digest)
     }
 
     public static func identityDigest(namespace: String, components: [String]) -> String {

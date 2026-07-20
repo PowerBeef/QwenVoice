@@ -179,15 +179,13 @@ file) is front‑trimmed past ~8 MB (`QWENVOICE_DIAGNOSTICS_MAX_MB` scales it), 
 v1–v7 rows remain decodable. New history publication that claims qualified memory requires v8;
 older rows stay readable but are marked memory-contract-incomplete and excluded from memory trends.
 
-> **Convergence status:** `GenerationStreamingTelemetryV9` is the complete target contract, not a
-> shipping top-level telemetry schema. Every newly constructed schema-v8 row now automatically
-> embeds a nested `GenerationStreamingTelemetryTransitionV9` projection. It includes valid safe
-> plan/policy digests and the typed transport/frontend evidence already owned by that row, and lists
-> every unobserved actor-session, output-adapter, exact codec-range, and first-render field with an
-> explicit reason instead of encoding a measured zero. The projection remains partial: no shipping
-> merger, validator, summarizer, or history publisher consumes a complete v9 record yet.
-> Operational runs and publication therefore continue to use schema v8 plus benchmark-evidence v2
-> until that complete path is implemented and promoted.
+> **Convergence status:** The shipping JSONL envelope remains schema v8 and still embeds a nested
+> `GenerationStreamingTelemetryTransitionV9` projection. When the transition is publication-ready
+> and every chunk carries exact MLX instants, the engine also publishes a complete
+> `*.streaming-telemetry-v9.json` sidecar and stamps `streamingTelemetryV9SidecarDigest` /
+> `streamingTelemetryV9PublicationReady` notes. History may bind those sidecar digests; the
+> top-level JSONL schema is not flipped to 9. Sampling promotion packaging stamps
+> `samplingPromotionPackaged=true` after `SamplingTakeEvidence.validatedForPromotion()`.
 
 | Field | Type | Notes |
 |---|---|---|

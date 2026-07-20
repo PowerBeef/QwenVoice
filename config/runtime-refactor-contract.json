@@ -6,9 +6,9 @@
   "shippingPolicy": "shadow-contracts-must-not-run-a-second-model-generation",
   "rollbackPolicy": "revert-the-owning-small-pull-request",
   "reviewCheckpoint": {
-    "date": "2026-07-19",
+    "date": "2026-07-20",
     "baseRevision": "00c9eea637259cfce858d1fc7d43a1a2c52ff86d",
-    "sourceState": "phase4-focused-platform-acceptance-passed",
+    "sourceState": "phase4-overall-promotion-passed",
     "deterministicVerification": {
       "status": "passed",
       "coreTests": 243,
@@ -17,7 +17,7 @@
       "macosBuildFinishedAt": "2026-07-19T16:19:06Z",
       "iosDeviceSDKCompileFinishedAt": "2026-07-19T16:21:37Z"
     },
-    "promotionEvidence": "focused-platform-acceptance-passed-overall-promotion-pending"
+    "promotionEvidence": "overall-promotion-passed-phase0-5-6-closed-canonical-matrices"
   },
   "contractVersions": {
     "productPlan": 1,
@@ -26,7 +26,7 @@
     "sampling": 2,
     "chunking": 1,
     "memory": 1,
-    "telemetry": 8,
+    "telemetry": 9,
     "telemetryTransition": 9,
     "benchmarkEvidence": 2
   },
@@ -37,7 +37,7 @@
     "sampling": "request-local-mlx-random-state-v2",
     "memory": "request-local-qwen-memory-policy-v1",
     "planShadow": "GenerationPlanShadowMapper",
-    "telemetry": "generation-telemetry-v8-with-partial-v9-transition-projection",
+    "telemetry": "generation-telemetry-v8-envelope-with-complete-v9-sidecar-authority",
     "benchmarkHistory": "schema-v2",
     "modelStorage": "catalog-v2-shared-component-store-with-authenticated-auto-reconciliation-and-legacy-reads",
     "longForm": "manifest-v3-nonstreaming",
@@ -91,7 +91,7 @@
     "deterministicVerification": "passed",
     "macosFocusedAcceptance": "passed",
     "physicalIPhoneFocusedAcceptance": "passed",
-    "overallPromotion": "pending"
+    "overallPromotion": "passed"
   },
   "phaseStatus": {
     "characterizationContract": "closed-clean-control-sessions-bound",
@@ -99,12 +99,12 @@
     "synchronizedPressureSnapshot": "implemented",
     "continuousCriticalReliefAdmission": "implemented-current-product-gate",
     "immutablePlans": "implemented-independent-shadow-comparison-only",
-    "engineActor": "shipping-through-phase4-implementation-complete-promotion-pending",
-    "classifiedSessionChannels": "shipping-through-phase4-implementation-complete-promotion-pending",
-    "productOutputAdapter": "shipping-implementation-complete-promotion-pending",
-    "modeCutover": "implementation-complete-focused-platform-acceptance-passed-overall-promotion-pending",
-    "requestLocalSamplingV2": "shipping-evidence-path-and-subseed-derivation-live-promotion-pending",
-    "telemetryV9": "partial-transition-projection-embedded-in-v8-live-producers-landed-history-authority-pending",
+    "engineActor": "shipping-through-phase4-implementation-complete-overall-promotion-passed",
+    "classifiedSessionChannels": "shipping-through-phase4-implementation-complete-overall-promotion-passed",
+    "productOutputAdapter": "shipping-implementation-complete-overall-promotion-passed",
+    "modeCutover": "implementation-complete-focused-platform-acceptance-passed-overall-promotion-passed",
+    "requestLocalSamplingV2": "shipping-promotion-packaged-evidence-live",
+    "telemetryV9": "complete-sidecar-authority-with-v8-envelope",
     "chunkAndPreviewExperiments": "not-started-shipping-v9-and-clean-ab-evidence-required",
     "sharedComponentStorage": "integrated-production-path-authenticated-auto-reconciliation-live-artifact-validation-pending",
     "runtimeComponentReuse": "not-started-isolated-ab-after-live-disk-component-proof",
@@ -113,7 +113,7 @@
     "boundedAnalyzers": "prosody-v2-shipping-persisted-wav-consolidation-pending",
     "unifiedQuality": "typed-registry-foundation-specialized-gates-ship",
     "historyV3": "pending-stable-plan-session-quality-identities",
-    "mechanicalRetirement": "deferred-until-overall-promotion-and-phase5-6-0-close-spi-filename-and-combined-session-remain"
+    "mechanicalRetirement": "deferred-explicit-retirement-spi-filename-and-combined-session-remain"
   },
   "phase14DeferredSurfaces": [
     "NativeStreamingSynthesisSession.swift-filename",

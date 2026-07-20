@@ -160,11 +160,11 @@ class RuntimeSecurityContractTests(unittest.TestCase):
         errors = MODULE.runtime_refactor_contract_errors(contract)
         self.assertTrue(any("invokes direct mode streams" in error for error in errors))
 
-    def test_runtime_refactor_contract_allows_passed_focused_acceptance_without_overall_promotion(self) -> None:
+    def test_runtime_refactor_contract_records_overall_promotion_passed(self) -> None:
         contract = MODULE.load_json(ROOT / "config/runtime-refactor-contract.json")
         self.assertEqual(
             contract["reviewCheckpoint"]["promotionEvidence"],
-            "focused-platform-acceptance-passed-overall-promotion-pending",
+            "overall-promotion-passed-phase0-5-6-closed-canonical-matrices",
         )
         self.assertEqual(
             contract["phase4ProductCutover"]["deterministicVerification"],
@@ -178,19 +178,19 @@ class RuntimeSecurityContractTests(unittest.TestCase):
             contract["phase4ProductCutover"]["physicalIPhoneFocusedAcceptance"],
             "passed",
         )
-        self.assertEqual(contract["phase4ProductCutover"]["overallPromotion"], "pending")
+        self.assertEqual(contract["phase4ProductCutover"]["overallPromotion"], "passed")
         self.assertEqual(
             contract["phaseStatus"]["modeCutover"],
             "implementation-complete-focused-platform-acceptance-passed-"
-            "overall-promotion-pending",
+            "overall-promotion-passed",
         )
         self.assertEqual(MODULE.runtime_refactor_contract_errors(contract), [])
 
         contract["reviewCheckpoint"]["promotionEvidence"] = (
-            "not-run-for-convergence-worktree"
+            "focused-platform-acceptance-passed-overall-promotion-pending"
         )
         errors = MODULE.runtime_refactor_contract_errors(contract)
-        self.assertTrue(any("focused platform acceptance" in error for error in errors))
+        self.assertTrue(any("promotion evidence must match" in error for error in errors))
 
     def test_security_adrs_exist(self) -> None:
         self.assertEqual(MODULE.validate_docs(), [])

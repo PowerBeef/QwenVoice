@@ -64,6 +64,24 @@ public struct SamplingTakeEvidence: Codable, Hashable, Sendable {
         return self
     }
 
+    /// Reconstruct evidence from privacy-safe telemetry notes.
+    public init?(telemetryNotes notes: [String: String]) {
+        guard let algorithmVersion = notes["samplingAlgorithmVersion"].flatMap(Int.init) else {
+            return nil
+        }
+        guard let seedSource = notes["samplingSeedSource"].flatMap(SeedSource.init(rawValue:)) else {
+            return nil
+        }
+        self.init(
+            algorithmVersion: algorithmVersion,
+            plannedSeed: notes["samplingPlannedSeed"].flatMap(UInt64.init),
+            observedSeed: notes["samplingObservedSeed"].flatMap(UInt64.init)
+                ?? notes["samplingSeed"].flatMap(UInt64.init),
+            seedSource: seedSource,
+            wavDigest: notes["samplingWAVDigest"]
+        )
+    }
+
     public var telemetryNotes: [String: String] {
         var notes: [String: String] = [
             "samplingAlgorithmVersion": String(algorithmVersion),
@@ -84,6 +102,14 @@ public struct SamplingTakeEvidence: Codable, Hashable, Sendable {
         } else {
             notes["samplingSeedAgreement"] = "incomplete"
         }
+        return notes
+    }
+
+    /// Fail-closed promotion packaging: validated seeds/WAV digest plus an explicit
+    /// packaged marker for history and promotion tooling.
+    public func packagedTelemetryNotes() throws -> [String: String] {
+        var notes = try validatedForPromotion().telemetryNotes
+        notes["samplingPromotionPackaged"] = "true"
         return notes
     }
 
