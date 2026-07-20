@@ -1,9 +1,11 @@
 {
   "schemaVersion": 1,
-  "status": "live-characterization-active",
+  "status": "closed",
   "owner": "backend-runtime",
   "contract": "config/runtime-refactor-contract.json",
-  "purpose": "Exact shipping-path characterization fixture identities for Phase 0. These are model-free digests and counts only; live PCM/token captures remain operator evidence.",
+  "purpose": "Exact shipping-path characterization fixture identities for Phase 0. These are model-free digests and counts only; live PCM stays operator evidence referenced by WAV digests.",
+  "closedAt": "2026-07-20",
+  "corpusSource": "Sources/QwenVoiceCore/BenchMatrixSpec.swift",
   "minimumCleanControlRuns": 3,
   "minimumWarmTakesPerPromotedCell": 10,
   "minimumColdTakesPerPromotedCell": 3,
@@ -16,11 +18,15 @@
       "length": "short",
       "samplingAlgorithmVersion": 2,
       "chunkFrames": { "first": 7, "later": 7 },
-      "promptCharCount": 48,
-      "promptDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "promptCharCount": 35,
+      "promptDigest": "1693d0601bde462e08fe1019c27cdd34f12c9c4214a37dfad6b09aea33e5f9ea",
       "expectedTokenBudgetClass": "short",
       "longFormManifestSchema": null,
-      "notes": "Exact prompt text and PCM stay out of tracked fixtures; live controls bind promptDigest and WAV digest."
+      "representativeWarmWAVDigest": {
+        "macosCLI": "713057a85ae957191d7193a2c3a605063297660e7887584c3a85fb33c14ad3f4",
+        "iosUI": "e67c4d9632068bca5ac468779f2382c6a3f0649f2057d828a7a65ce7fc9f7198"
+      },
+      "notes": "BenchMatrixSpec short corpus. Exact prompt text stays out of tracked fixtures; live controls bind promptDigest and representative warm WAV digests."
     },
     {
       "id": "design-speed-short-control",
@@ -29,11 +35,15 @@
       "length": "short",
       "samplingAlgorithmVersion": 2,
       "chunkFrames": { "first": 7, "later": 14 },
-      "promptCharCount": 48,
-      "promptDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "promptCharCount": 35,
+      "promptDigest": "1693d0601bde462e08fe1019c27cdd34f12c9c4214a37dfad6b09aea33e5f9ea",
       "expectedTokenBudgetClass": "short",
       "longFormManifestSchema": null,
-      "notes": "Design uses the same short-control corpus shape with Design chunk frames."
+      "representativeWarmWAVDigest": {
+        "macosCLI": "ead545d706de2618bb40e480ba2b0d45389dec9f8338c5ba2a7c0f7dcc734fb0",
+        "iosUI": "88db1c115caca97703d4def7c872002477925471d6a5bd1a2adc4ba9ca64fb40"
+      },
+      "notes": "Same short corpus as Custom with Design chunk frames (7/14)."
     },
     {
       "id": "clone-speed-short-control",
@@ -42,11 +52,15 @@
       "length": "short",
       "samplingAlgorithmVersion": 2,
       "chunkFrames": { "first": 7, "later": 14 },
-      "promptCharCount": 48,
-      "promptDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "promptCharCount": 35,
+      "promptDigest": "1693d0601bde462e08fe1019c27cdd34f12c9c4214a37dfad6b09aea33e5f9ea",
       "expectedTokenBudgetClass": "short",
       "longFormManifestSchema": null,
-      "notes": "Clone short-control identity; conditioning digests come from live prepared voices."
+      "representativeWarmWAVDigest": {
+        "macosCLI": "5e7b0bfebe6adaa9eb8d8a302f5e0b441d1cfc6bac429e602a29fa49c92681ff",
+        "iosUI": "1582e17c477efa6d1be01a7f02147f8582a22837d455a1b00345e24d0324789c"
+      },
+      "notes": "Same short corpus; conditioning digests come from live prepared voices."
     },
     {
       "id": "custom-speed-longform-manifest-v3",
@@ -55,11 +69,11 @@
       "length": "long",
       "samplingAlgorithmVersion": 2,
       "chunkFrames": { "first": 7, "later": 7 },
-      "promptCharCount": 1200,
-      "promptDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "promptCharCount": 344,
+      "promptDigest": "f1b3eae6b88ec0f01d8499129e8566501d26231e72b469d731af1b917d2d7b10",
       "expectedTokenBudgetClass": "long",
       "longFormManifestSchema": 3,
-      "notes": "Shipping long-form remains manifest-v3 non-streaming until Phase 11."
+      "notes": "BenchMatrixSpec long corpus identity. Shipping long-form remains manifest-v3 non-streaming until Phase 11; not required for short-cell control close."
     }
   ],
   "secretSauceCells": [
@@ -136,11 +150,99 @@
       "evaluator": "scripts/check_secret_sauce_cells.py",
       "result": "pass",
       "notes": "Focused UI short cells (warm 1) on physical iPhone. Exploratory dirty worktree; soft_trim warning only."
+    },
+    {
+      "platform": "macos",
+      "label": "phase0-ui-control-1",
+      "record": "benchmarks/runs/ui-generation/macos-xcui-benchmark-20260720-053624-f2eb6d13.json",
+      "takes": 32,
+      "evaluator": "scripts/check_secret_sauce_cells.py",
+      "result": "pass",
+      "notes": "Clean-tree Phase 0 Mac UI control; soft_trim warning only."
+    },
+    {
+      "platform": "ios",
+      "label": "phase0-ios-control-3",
+      "record": "benchmarks/runs/ui-generation/ios-xcui-benchmark-20260720-164844-5f6e9240.json",
+      "takes": 32,
+      "evaluator": "scripts/check_secret_sauce_cells.py",
+      "result": "pass",
+      "notes": "Clean-tree Phase 0 iPhone UI control; soft_trim warning only."
     }
   ],
-  "liveEvidencePending": [
-    "exact-mode-token-pcm-captures",
-    "three-clean-control-sessions",
-    "ten-warm-and-three-cold-observations-per-promoted-cell"
-  ]
+  "controlSessions": [
+    {
+      "platform": "macos",
+      "lane": "cli-engine",
+      "label": "phase0-cli-control-1",
+      "record": "benchmarks/runs/engine-generation/macos-engine-20260720-052534-b9dcb26d.json",
+      "evaluator": "scripts/check_characterization_controls.py",
+      "result": "pass"
+    },
+    {
+      "platform": "macos",
+      "lane": "cli-engine",
+      "label": "phase0-cli-control-2",
+      "record": "benchmarks/runs/engine-generation/macos-engine-20260720-052721-ebbbbda7.json",
+      "evaluator": "scripts/check_characterization_controls.py",
+      "result": "pass"
+    },
+    {
+      "platform": "macos",
+      "lane": "cli-engine",
+      "label": "phase0-cli-control-3",
+      "record": "benchmarks/runs/engine-generation/macos-engine-20260720-052856-845cd043.json",
+      "evaluator": "scripts/check_characterization_controls.py",
+      "result": "pass"
+    },
+    {
+      "platform": "macos",
+      "lane": "ui",
+      "label": "phase0-ui-control-1",
+      "record": "benchmarks/runs/ui-generation/macos-xcui-benchmark-20260720-053624-f2eb6d13.json",
+      "evaluator": "scripts/check_characterization_controls.py",
+      "result": "pass"
+    },
+    {
+      "platform": "macos",
+      "lane": "ui",
+      "label": "phase0-ui-control-2",
+      "record": "benchmarks/runs/ui-generation/macos-xcui-benchmark-20260720-054551-6b71dc9b.json",
+      "evaluator": "scripts/check_characterization_controls.py",
+      "result": "pass"
+    },
+    {
+      "platform": "macos",
+      "lane": "ui",
+      "label": "phase0-ui-control-3",
+      "record": "benchmarks/runs/ui-generation/macos-xcui-benchmark-20260720-055506-11eb8550.json",
+      "evaluator": "scripts/check_characterization_controls.py",
+      "result": "pass"
+    },
+    {
+      "platform": "ios",
+      "lane": "ui",
+      "label": "phase0-ios-control-1",
+      "record": "benchmarks/runs/ui-generation/ios-xcui-benchmark-20260720-061732-10df7fd1.json",
+      "evaluator": "scripts/check_characterization_controls.py",
+      "result": "pass"
+    },
+    {
+      "platform": "ios",
+      "lane": "ui",
+      "label": "phase0-ios-control-2",
+      "record": "benchmarks/runs/ui-generation/ios-xcui-benchmark-20260720-063420-e0258f45.json",
+      "evaluator": "scripts/check_characterization_controls.py",
+      "result": "pass"
+    },
+    {
+      "platform": "ios",
+      "lane": "ui",
+      "label": "phase0-ios-control-3",
+      "record": "benchmarks/runs/ui-generation/ios-xcui-benchmark-20260720-164844-5f6e9240.json",
+      "evaluator": "scripts/check_characterization_controls.py",
+      "result": "pass"
+    }
+  ],
+  "liveEvidencePending": []
 }

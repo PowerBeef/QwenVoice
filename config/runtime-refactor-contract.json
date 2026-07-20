@@ -94,7 +94,7 @@
     "overallPromotion": "pending"
   },
   "phaseStatus": {
-    "characterizationContract": "partial-model-free-fixtures-present-exact-mode-token-pcm-and-clean-controls-pending",
+    "characterizationContract": "closed-clean-control-sessions-bound",
     "xpcReserveBeforeSideEffects": "implemented",
     "synchronizedPressureSnapshot": "implemented",
     "continuousCriticalReliefAdmission": "implemented-current-product-gate",

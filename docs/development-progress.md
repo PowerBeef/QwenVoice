@@ -3,7 +3,7 @@
 > Current maintainer checkpoint. Confirm this summary against the checkout before acting; source,
 > `project.yml`, and repository scripts remain authoritative.
 
-## Runtime convergence status — reviewed 2026-07-19
+## Runtime convergence status — reviewed 2026-07-20
 
 This checkpoint covers runtime source commit
 `00c9eea637259cfce858d1fc7d43a1a2c52ff86d`, which closes focused Phase 4 acceptance on macOS and
@@ -17,7 +17,7 @@ change runtime or promotion evidence.
 
 | Plan phase | Current state |
 | --- | --- |
-| 0 — Characterization | Active. Fixtures at `live-characterization-active` with `scripts/check_characterization_controls.py` for the 3-session / 10-warm / 3-cold minima. Secret-sauce short UI cells already passed on prior exploratory records. Exact mode/token/PCM binding and three clean-tree control sessions per platform remain the next Phase 0 work. |
+| 0 — Characterization | Closed 2026-07-20. Clean-tree Mac CLI ×3, Mac UI ×3, and iPhone UI ×3 short Speed warm-10 controls PASS `check_characterization_controls.py` and secret-sauce checks (soft_trim only). `config/characterization-fixtures.json` binds BenchMatrixSpec short/long `promptDigest` values, representative warm WAV digests, and `controlSessions`; status `closed`. Contract `characterizationContract`: `closed-clean-control-sessions-bound`. Full 29-take matrices remain the next promotion evidence step. |
 | 1 — Correctness prerequisites | Shipping. XPC reserves before side effects, pressure snapshots are synchronized, and critical relief holds admission continuously through cancellation, terminal cleanup, and relief. |
 | 2 — Plans and actor | The actor foundation is now the shipping generation-mutation authority through Phase 4. Immutable plans remain in shadow comparison. A narrow named SPI still bridges prepared-model loading/prewarm and validated schema-3 Clone prompt adoption; do not describe the actor as the sole MLX mutator until that bridge retires. Reserved/generating/aborting ownership, critical-relief lease transfer, and epoch-bound Clone handles remain unchanged. |
 | 3 — Classified sessions | Shipping through Phase 4. Custom, Design, and Clone materialize `[Float]` before an awaited, frame-bounded, single-consumer channel send. Producer/receiver cancellation, delayed drains, maximum-length ordering, consumer failure, typed terminal outcomes, and stale-safe product finalization remain deterministic contracts. |
@@ -91,13 +91,15 @@ or incomplete live sampling proof:
    install + headless Custom/Design/Clone Speed short (seed `19790615`) all engine-ready under
    `build/scratch/transient/v9-ios-pilot/` (blocking unavailable empty) + UI smoke PASS.
    Schema-v8 JSONL remains authoritative until history consumes complete v9 sidecars.
-4. Finish Phase 0 live characterization with at least three clean control sessions and, for each
-   applicable promoted cell, at least ten warm and three cold observations bound to
-   `config/characterization-fixtures.json` identities.
-5. Only then run fresh full 29-take macOS and physical-iPhone matrices.
-   `scripts/check_convergence_promotion_gate.py` refuses `overallPromotion: passed` while Phase
-   5/6/0 remain pending. Running matrices earlier would create transitional schema-v8 evidence that
-   must be repeated.
+4. ~~Phase 0 live characterization (2026-07-20):~~ Mac CLI ×3, Mac UI ×3, iPhone UI ×3
+   short Speed warm-10 controls PASS. Records listed in
+   `config/characterization-fixtures.json` → `controlSessions`. Short
+   `promptDigest=1693d060…` (35 chars); long `promptDigest=f1b3eae6…` (344 chars). Fixtures
+   `status: closed`; `liveEvidencePending` cleared. Note: full iPhone smoke still flakes on
+   History `historySearchField` hittability; generation UI benchmarks are unaffected.
+5. Run fresh full 29-take macOS and physical-iPhone matrices next.
+   `scripts/check_convergence_promotion_gate.py` still refuses `overallPromotion: passed` while
+   Phase 5/6 remain pending (Phase 0 characterizationContract no longer blocks).
 
 Shipping long-form sub-seed execution remains Phase 11, candidate retry remains Phase 12, and
 neither is a prerequisite for the Phase 5 live sampling proof. Phase 14 mechanical retirement

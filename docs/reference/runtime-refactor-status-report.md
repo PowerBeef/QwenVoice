@@ -85,8 +85,9 @@ iOS: UI → Core in-process → same owned runtime.
 1. ~~Live fixed-seed pairs~~, ~~nested-v9 producers~~, and ~~macOS + iPhone nested-v9 pilots~~
    landed 2026-07-19/20 (see `docs/development-progress.md`). Keep schema-v8 authoritative until
    history can consume complete sidecars.
-2. Live Phase 0 characterization bound to `config/characterization-fixtures.json`.
-3. Only then fresh full matrices.
+2. ~~Live Phase 0 characterization~~ closed 2026-07-20 (`status: closed`,
+   `characterizationContract: closed-clean-control-sessions-bound`).
+3. Fresh full 29-take matrices (Phase 5/6 still pending for overall promotion).
 4. Phase 14 retirement only after overall promotion.
 
 ## Implementation landed with this report

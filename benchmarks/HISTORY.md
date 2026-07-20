@@ -31,6 +31,14 @@ from schema-v2 memory trends.
 |---|---|---|---|---|---|---:|---|---|---|---|
 | 2026-07-12 | [`macos-engine-20260712-204208-0cb5705c`](runs/engine-generation/macos-engine-20260712-204208-0cb5705c.json) | focused | exploratory | passed | memory-contract-incomplete | 2 | `1ef1669326b5` dirty | `excluded` | baseline | telemetry-v7-cli-focused |
 
+## engine-generation / macos / mac-mini-m2-8gb / config `817164bfb96c`
+
+| completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |
+|---|---|---|---|---|---|---:|---|---|---|---|
+| 2026-07-20 | [`macos-engine-20260720-052534-b9dcb26d`](runs/engine-generation/macos-engine-20260720-052534-b9dcb26d.json) | focused | focused | passedWithWarnings | qualified-with-warnings | 32 | `0d4eac8b336b` | `817164bfb96c` | baseline | phase0-cli-control-1 |
+| 2026-07-20 | [`macos-engine-20260720-052721-ebbbbda7`](runs/engine-generation/macos-engine-20260720-052721-ebbbbda7.json) | focused | focused | passedWithWarnings | qualified-with-warnings | 32 | `0d4eac8b336b` | `817164bfb96c` | vs macos-engine-20260720-052534-b9dcb26d: RTF +2.1%, TTFC -5.8%, RAM -0.4% | phase0-cli-control-2 |
+| 2026-07-20 | [`macos-engine-20260720-052856-845cd043`](runs/engine-generation/macos-engine-20260720-052856-845cd043.json) | focused | focused | passedWithWarnings | qualified-with-warnings | 32 | `0d4eac8b336b` | `817164bfb96c` | vs macos-engine-20260720-052721-ebbbbda7: RTF +0.3%, TTFC -1.3%, RAM +2.4% | phase0-cli-control-3 |
+
 ## instrument-profile / ios / iphone-17-pro / config `1259c1914031`
 
 | completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |
@@ -123,6 +131,14 @@ from schema-v2 memory trends.
 |---|---|---|---|---|---|---:|---|---|---|---|
 | 2026-07-13 | [`ios-xcui-benchmark-20260713-042913-57f9e32e`](runs/ui-generation/ios-xcui-benchmark-20260713-042913-57f9e32e.json) | focused | exploratory | passed | memory-contract-incomplete | 2 | `04083b15a4e2` dirty | `excluded` | baseline | focused-short-playback-repair-20260713 |
 
+## ui-generation / ios / iphone-17-pro / config `35a3b94d3ba6`
+
+| completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |
+|---|---|---|---|---|---|---:|---|---|---|---|
+| 2026-07-20 | [`ios-xcui-benchmark-20260720-061732-10df7fd1`](runs/ui-generation/ios-xcui-benchmark-20260720-061732-10df7fd1.json) | focused | focused | passedWithWarnings | qualified-with-warnings | 32 | `0d4eac8b336b` | `35a3b94d3ba6` | baseline | phase0-ios-control-1 |
+| 2026-07-20 | [`ios-xcui-benchmark-20260720-063420-e0258f45`](runs/ui-generation/ios-xcui-benchmark-20260720-063420-e0258f45.json) | focused | focused | passedWithWarnings | qualified-with-warnings | 32 | `0d4eac8b336b` | `35a3b94d3ba6` | vs ios-xcui-benchmark-20260720-061732-10df7fd1: RTF -0.2%, RAM -0.2% | phase0-ios-control-2 |
+| 2026-07-20 | [`ios-xcui-benchmark-20260720-164844-5f6e9240`](runs/ui-generation/ios-xcui-benchmark-20260720-164844-5f6e9240.json) | focused | exploratory | passedWithWarnings | qualified-with-warnings | 32 | `0d4eac8b336b` dirty | `excluded` | baseline | phase0-ios-control-3 |
+
 ## ui-generation / ios / iphone-17-pro / config `4d75b5478cdc`
 
 | completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |
@@ -206,6 +222,14 @@ from schema-v2 memory trends.
 | completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |
 |---|---|---|---|---|---|---:|---|---|---|---|
 | 2026-07-14 | [`ios-xcui-benchmark-20260714-105423-4dddee2f`](runs/ui-generation/ios-xcui-benchmark-20260714-105423-4dddee2f.json) | focused | focused | passedWithWarnings | qualified-with-warnings | 5 | `4b79bb497f1b` | `fc0fc2887412` | baseline | ios-v2-focused |
+
+## ui-generation / macos / mac-mini-m2-8gb / config `126311b505ce`
+
+| completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |
+|---|---|---|---|---|---|---:|---|---|---|---|
+| 2026-07-20 | [`macos-xcui-benchmark-20260720-053624-f2eb6d13`](runs/ui-generation/macos-xcui-benchmark-20260720-053624-f2eb6d13.json) | focused | focused | passedWithWarnings | qualified-with-warnings | 32 | `0d4eac8b336b` | `126311b505ce` | baseline | phase0-ui-control-1 |
+| 2026-07-20 | [`macos-xcui-benchmark-20260720-054551-6b71dc9b`](runs/ui-generation/macos-xcui-benchmark-20260720-054551-6b71dc9b.json) | focused | focused | passedWithWarnings | qualified-with-warnings | 32 | `0d4eac8b336b` | `126311b505ce` | vs macos-xcui-benchmark-20260720-053624-f2eb6d13: RTF -0.4%, RAM -3.4% | phase0-ui-control-2 |
+| 2026-07-20 | [`macos-xcui-benchmark-20260720-055506-11eb8550`](runs/ui-generation/macos-xcui-benchmark-20260720-055506-11eb8550.json) | focused | focused | passedWithWarnings | qualified-with-warnings | 32 | `0d4eac8b336b` | `126311b505ce` | vs macos-xcui-benchmark-20260720-054551-6b71dc9b: RTF +0.0%, RAM +0.2% | phase0-ui-control-3 |
 
 ## ui-generation / macos / mac-mini-m2-8gb / config `161b2fa90d9f`
 
