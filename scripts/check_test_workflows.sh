@@ -60,6 +60,7 @@ for required_policy_surface in \
   scripts/tests/test_release_evidence.py \
   scripts/tests/test_required_step_ledger.py \
   scripts/tests/test_project_health.py \
+  scripts/tests/test_refresh_derived_artifacts.py \
   scripts/tests/test_build_routing_contract.py \
   scripts/tests/test_clean_build_caches.py \
   scripts/tests/test_profile_trace_retention.py \
@@ -602,6 +603,7 @@ python3 -m unittest \
   scripts.tests.test_evidence_impact \
   scripts.tests.test_required_step_ledger \
   scripts.tests.test_project_health \
+  scripts.tests.test_refresh_derived_artifacts \
   scripts.tests.test_vendor_runtime_contract \
   scripts.tests.test_supply_chain_contract \
   scripts.tests.test_swift_dependency_snapshot \

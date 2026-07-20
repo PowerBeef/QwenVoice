@@ -87,6 +87,7 @@ MCP:    .cursor/mcp.json (project) plus optional ~/.cursor/mcp.json (user)
 | **Raw profile traces are ephemeral** | Exact-PID profiles hash, validate, summarize, and publish before discarding the multi-gigabyte raw trace. Use `--keep-trace` only for an explicit Instruments debugging session. Failed traces stay diagnostic until superseded or explicitly acknowledged with `--compact-profile-failure RUN_ID`; status reports that space separately from automatically eligible cleanup. `--routine` prunes scratch without touching the current app, canonical caches, dSYMs, models, source, or tracked history. |
 | **Memory evidence must be qualified** | New publishable generation benchmarks require telemetry schema v8 plus benchmark-evidence manifest v2: exact run-scoped sample sidecars, start/stop and lifecycle boundaries, zero capture failures, ≥95% sampler coverage, and no critical pressure, memory warning/exit, `hardTrim`, or `fullUnload`. macOS app/engine totals are uptime-aligned; never add independent process peaks. |
 | **Audio QA is autonomous** | Engine/language promotion uses deterministic PCM QC, fixed-seed evidence, locale-locked ASR consensus, and the applicable prosody/delivery gates. Human listening is optional annotation only. A QC warning may be tracked as `passedWithWarnings`, but it is not promotion-quality until a deterministic rule or code fix clears it. |
+| **Derived catalogs stay fresh** | Fail-closed generated inventories must be rebuilt in the same change as their sources: owned-runtime `CURRENT_INVENTORY` / `FACADE_API_BASELINE`, `docs/project-health.md`, `docs/INDEX.md`, and the production model catalog when their inputs change. Prefer `python3 scripts/refresh_derived_artifacts.py refresh` then `validate` before commit/push. This does **not** auto-write narrative progress prose — when `config/runtime-refactor-contract.json` (or another meaning-bearing contract) changes status, update `docs/development-progress.md` and the matching ADR/status-report in the same change. Cursor rule: [`.cursor/rules/derived-artifacts.mdc`](.cursor/rules/derived-artifacts.mdc). |
 
 Every active invariant must live here, in a role playbook, in an authoritative reference document,
 or in a machine-readable contract named by one of those surfaces.
@@ -97,6 +98,7 @@ or in a machine-readable contract named by one of those surfaces.
 
 ```sh
 ./scripts/regenerate_project.sh      # if project.yml changed
+python3 scripts/refresh_derived_artifacts.py refresh   # if owned-runtime/docs/catalog inputs changed
 ./scripts/check_project_inputs.sh
 ./scripts/build.sh build             # macOS compile check
 ./scripts/build_foundation_targets.sh ios   # iOS app + pure policy-test bundle compile safety
@@ -256,6 +258,9 @@ scripts/ios_device.sh clone-conditioning --label focused-clone-proof  # local tw
 scripts/ios_device.sh memory-field-report       # local-only delayed MetricKit aggregate
 python3 scripts/build_output_policy.py status
 python3 scripts/build_output_policy.py validate
+python3 scripts/refresh_derived_artifacts.py status
+python3 scripts/refresh_derived_artifacts.py refresh
+python3 scripts/refresh_derived_artifacts.py validate
 scripts/clean_build_caches.sh --routine --dry-run
 scripts/clean_build_caches.sh --cache macos --dry-run
 ```

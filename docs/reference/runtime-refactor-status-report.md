@@ -2,14 +2,14 @@
 
 > Maintainer status report for the active staged convergence program. Confirm against the
 > checkout; source, `project.yml`, and `config/runtime-refactor-contract.json` remain higher
-> authority. Reviewed with the Phase 5 evidence-path / Phase 6 sidecar / Phase 0 fixture landing.
+> authority. Reviewed 2026-07-20 after `overallPromotion: passed`.
 
-**Verdict:** Phases **1–4 are source-complete** with focused macOS + physical-iPhone Custom/Design/Clone
-acceptance on protected `main`. That is **not** full promotion. Telemetry still ships **schema v8
-with a nested partial v9 projection** (now with shipping session/adapter identity digests and a
-complete-document sidecar publisher). Sampling v2 ships with an in-tree evidence path (seed
-agreement, WAV digests, sub-seed derivation); live fixed-seed promotion pairs remain open.
-Load/prewarm still uses the named Legacy SPI. Phase 14 mechanical retirement is explicitly deferred.
+**Verdict:** Phases **0–6 are closed** and Phase 4 **`overallPromotion: passed`** on protected
+`main`. Shipping Custom/Design/Clone generation uses the actor → classified session →
+`GenerationOutputAdapter` path. Telemetry still uses a **schema-v8 JSONL envelope** plus complete
+`*.streaming-telemetry-v9.json` sidecars as streaming history authority. Sampling v2 ships with
+fail-closed promotion packaging. Load/prewarm still uses the named Legacy SPI. Phase 14
+mechanical retirement is unblocked but not started; Phases 7–13 remain open.
 
 ## Authority order
 
@@ -76,9 +76,9 @@ iOS: UI → Core in-process → same owned runtime.
 ## Risks
 
 1. JSONL envelope remains v8; do not treat nested transitions alone as history v9 rows.
-2. Focused exploratory XCUI is not clean full-matrix promotion.
-3. Actor is generation mutation authority, not sole MLX mutator until SPI retires.
-4. JSONL remains schema v8; complete v9 sidecars are the history authority for streaming detail.
+2. Actor is generation mutation authority, not sole MLX mutator until the Legacy SPI retires.
+3. Stale prose that still says “promotion pending” is wrong — trust the machine contract.
+4. Phase 7+ work must not regress secret-sauce first-preview latency or trim/unload safety.
 
 ## Resume order
 

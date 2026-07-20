@@ -209,7 +209,9 @@
     "Sources/VocelloQwen3Core/GenerationSession.swift::public let sampleRate: Int",
     "Sources/VocelloQwen3Core/GenerationSession.swift::public let channelCount: Int",
     "Sources/VocelloQwen3Core/GenerationSession.swift::public let timings: VocelloQwen3ChunkTimings?",
-    "Sources/VocelloQwen3Core/GenerationSession.swift::public init( generationID: UUID, sequence: Int, samples: [Float], sampleRate: Int, channelCount: Int = 1, timings: VocelloQwen3ChunkTimings? = nil )",
+    "Sources/VocelloQwen3Core/GenerationSession.swift::public let codecStartFrame: UInt64?",
+    "Sources/VocelloQwen3Core/GenerationSession.swift::public let codecEndFrameExclusive: UInt64?",
+    "Sources/VocelloQwen3Core/GenerationSession.swift::public init( generationID: UUID, sequence: Int, samples: [Float], sampleRate: Int, channelCount: Int = 1, timings: VocelloQwen3ChunkTimings? = nil, codecStartFrame: UInt64? = nil, codecEndFrameExclusive: UInt64? = nil )",
     "Sources/VocelloQwen3Core/GenerationSession.swift::public var frameCount: Int",
     "Sources/VocelloQwen3Core/GenerationSession.swift::public struct VocelloQwen3ProgressEvent: Codable, Hashable, Sendable",
     "Sources/VocelloQwen3Core/GenerationSession.swift::public let generationID: UUID",
@@ -276,6 +278,8 @@
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let audioChunkEvalMS: Double",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let kvCacheDiagnostics: VocelloQwen3KVCacheDiagnostics?",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let mimiDecoderBreakdownMS: VocelloQwen3MimiDecoderTimings?",
+    "Sources/VocelloQwen3Core/LoadedModel.swift::public let codecStartFrame: UInt64?",
+    "Sources/VocelloQwen3Core/LoadedModel.swift::public let codecEndFrameExclusive: UInt64?",
     "Sources/VocelloQwen3Core/LoadedModel.swift::@_spi(VocelloQwen3LegacyCompatibility) public enum VocelloQwen3GenerationSignal: Sendable",
     "Sources/VocelloQwen3Core/LoadedModel.swift::@_spi(VocelloQwen3LegacyCompatibility) public struct VocelloQwen3GenerationCompletion: Sendable",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let audio: [Float]",
@@ -370,15 +374,15 @@
     },
     {
       "path": "Sources/VocelloQwen3Core/Engine.swift",
-      "sha256": "1cb5a234a68dd7e0c2216efcaf31dc9faece5eb85555654fc57fd6a1fc0018f6"
+      "sha256": "10dbfa5c8308824b93649215ed1a8d64c7240db24aae5a62d6e94b4f0e174b11"
     },
     {
       "path": "Sources/VocelloQwen3Core/GenerationSession.swift",
-      "sha256": "157c6259133ac20e26a084e308f4a35701f147b6ba4f9e69560eafbca311320e"
+      "sha256": "328c5e67b71e0608353167b5b2b9585bc295f76bb361068a0461eb01c6c5481d"
     },
     {
       "path": "Sources/VocelloQwen3Core/LoadedModel.swift",
-      "sha256": "646fba209cbc80241dd244e62623895e07fcdc3e4885dc158d227c7a47c52acb"
+      "sha256": "a72e03cbf90557b196e5da265c81dafb0d3bd43e609196b761cae6bb333b7712"
     },
     {
       "path": "Sources/VocelloQwen3Core/ProductOutputAdapter.swift",

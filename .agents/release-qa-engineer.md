@@ -143,6 +143,10 @@ QWENVOICE_DEBUG=1 ./build/vocello bench --modes clone --variants speed \
   --lengths short,medium,long --warm 3 --voice <prepared-voice> \
   --label "release-QA"
 
+# Derived catalogs (inventories / indexes CI fail-closes on)
+python3 scripts/refresh_derived_artifacts.py refresh
+python3 scripts/refresh_derived_artifacts.py validate
+
 # Registry validation / reproducibility
 python3 scripts/benchmark_history.py validate --all
 python3 scripts/benchmark_history.py rebuild-index --check

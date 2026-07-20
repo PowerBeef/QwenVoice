@@ -1,7 +1,7 @@
 # Runtime, streaming, and quality convergence
 
-- **Status:** Accepted; Phase 4 source cutover and focused platform acceptance passed, overall promotion pending
-- **Date:** 2026-07-19
+- **Status:** Accepted; Phase 4 overall promotion passed (Phases 0–6 closed 2026-07-20). Phases 7–14 remain open.
+- **Date:** 2026-07-20
 - **Owners:** Backend/MLX, macOS, iOS, and Release/QA
 - **Machine contract:** [`config/runtime-refactor-contract.json`](../../config/runtime-refactor-contract.json)
 
@@ -150,8 +150,10 @@ must not yet be treated as product authority. At this checkpoint:
   `ios-xcui-benchmark-20260719-134041-9653f7cf` (Design 2/2), and
   `ios-xcui-benchmark-20260719-134646-d90db984` (Clone 1/1) also passed with complete telemetry,
   Fast QC, readable output, and no crash delta. They are exploratory `passedWithWarnings` evidence
-  because the worktree was dirty and soft trims were observed; focused platform acceptance is
-  complete, while clean repeated controls and applicable full matrices keep overall promotion open.
+  because the worktree was dirty and soft trims were observed. Those focused runs closed Phase 4
+  platform acceptance; clean Phase 0 controls, canonical 29-take matrices, Phase 5 packaging, and
+  Phase 6 v9 sidecar authority later closed overall promotion on 2026-07-20
+  (`overallPromotion: passed` in the machine contract).
 - Production catalog schema v2 and the shared-component store are integrated into macOS, CLI, and
   iOS delivery. Exact verified content is published atomically, surfaced through ordinary hard
   links, and read alongside legacy schema-v1 installations. Delivery-plan resolution now
@@ -163,13 +165,12 @@ must not yet be treated as product authority. At this checkpoint:
 - The low-dependency prosody analyzer is now two-pass and bounded-memory, while the typed unified
   quality registry remains a foundation. Existing persisted-WAV Fast QC and specialized language,
   delivery, and prosody gates still own shipping decisions.
-- Telemetry v8 and benchmark history v2 remain authoritative. New v8 rows embed a partial v9
-  transition projection with safe shadow-plan/policy digests. Live engine producers now observe
-  codec-frame ranges, audio-channel statistics, chunk audio ranges, and model/product terminals;
-  non-blocking layer gaps (`notApplicable`, aggregate-only transport list, missing player render
-  callback) may remain listed. History-level complete-v9 merger/authority remains pending.
+- Telemetry JSONL remains schema v8 with a nested transition projection. Publication-ready
+  transitions with exact MLX chunk instants publish complete `*.streaming-telemetry-v9.json`
+  sidecars; those sidecars are the history authority for streaming detail. Benchmark history
+  schema v2 remains authoritative until Phase 13. Non-blocking layer gaps (`notApplicable`,
+  aggregate-only transport list, missing player render callback) may remain listed.
 
-This explicit split prevents focused source/platform acceptance from being mistaken for complete
-promotion or convergence. The full program remains open until clean repeated controls, applicable
-full matrices, exact legacy characterization, and later phases retire the remaining compatibility,
-telemetry, long-form, and quality foundations.
+Overall Phase 4 promotion is closed. The broader convergence program remains open for Phases
+7–13 and for Phase 14 mechanical retirement of the named Legacy SPI, adapter filename, combined
+characterization session, and Clone priming stream APIs.
