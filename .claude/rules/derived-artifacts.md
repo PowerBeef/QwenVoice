@@ -1,8 +1,3 @@
----
-description: Keep fail-closed derived catalogs fresh before commit/push
-alwaysApply: true
----
-
 # Derived artifacts freshness
 
 CI fail-closes on stale generated inventories. Refresh them in the **same change** as the source edit. Do **not** auto-rewrite narrative progress prose.
@@ -25,4 +20,4 @@ python3 scripts/refresh_derived_artifacts.py refresh   # stale only
 python3 scripts/refresh_derived_artifacts.py validate
 ```
 
-Authority: `AGENTS.md` hard rule **Derived catalogs stay fresh**. Scripts win over this rule.
+Authority: `CLAUDE.md` hard rule **Derived catalogs stay fresh**. Scripts win over this rule.

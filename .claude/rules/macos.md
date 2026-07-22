@@ -1,6 +1,6 @@
-# macOS Engineer
+# macOS domain rule
 
-> Agent role for the macOS app target `QwenVoice`, the XPC stack
+> Domain rule for the macOS app target `QwenVoice`, the XPC stack
 > (`QwenVoiceNative`, `QwenVoiceEngineService`, `QwenVoiceEngineSupport`), and the
 > macOS SwiftUI/AppKit layers.
 
@@ -16,14 +16,14 @@
 - macOS entitlements and `Sources/Info.plist`
 
 **Does NOT own:**
-- Engine core / MLX internals (`.agents/backend-mlx.md`)
-- iOS app (`.agents/ios-engineer.md`)
-- Build scripts / CI / release (`.agents/release-qa-engineer.md`)
+- Engine core / MLX internals (`.claude/rules/backend-mlx.md`)
+- iOS app (`.claude/rules/ios.md`)
+- Build scripts / CI / release (`.claude/rules/release-qa.md`)
 
 **Consults:**
 - `docs/ARCHITECTURE.md` §3 (runtime architecture), §5 (macOS request lifecycle), §8 (macOS app surfaces)
 - `docs/reference/{macos-app-guide,macos-testing,macos-release-qa,macos-permissions,privacy-storage}.md`
-- Root `AGENTS.md` (Hard rules) + [`docs/project-map.html`](../docs/project-map.html)
+- Root `CLAUDE.md` (Hard rules) + [`docs/project-map.html`](../../docs/project-map.html)
 
 ## Required pre-read
 
@@ -47,16 +47,18 @@ Before changing macOS app or XPC code, read:
   macOS project discovery, build, run, and debug: call `session_show_defaults`, select the `macos`
   profile, and return to repository scripts for final verification. Unavailability is not permission
   to configure a second XcodeBuildMCP server.
-- Optional SwiftUI/AppKit or performance skills MCP may assist after their instructions are read;
+- Optional SwiftUI/AppKit or performance skills may assist after their instructions are read;
   shell scripts remain the source of truth for gates.
 - Generated output must use `config/build-output-policy.json`. Do not add a macOS DerivedData,
   package, evidence, symbol, or distribution root outside the manifest; route policy changes
-  through `.agents/release-qa-engineer.md`.
+  through `.claude/rules/release-qa.md`.
 - Use authoritative Apple documentation (docs MCP when callable) where current framework behavior
   matters, and a GitHub integration or `gh` for repository/CI context.
 - XCUITest is the sole autonomous macOS app UI driver. Run the smoke and benchmark lanes
   only for explicitly requested frontend acceptance. Missing UI evidence never blocks committing,
-  pushing, opening a pull request, merging, ordinary CI, or release packaging.
+  pushing, opening a pull request, merging, ordinary CI, or release packaging. The computer-use MCP
+  is dev-environment-assistive only (Xcode GUI, Instruments, system dialogs) and never drives
+  Vocello's UI.
 - macOS owns app/XPC capture, uptime alignment, transport, and platform-pressure evidence. Typed
   field semantics remain backend-owned and schema/publication changes require release/QA review.
 

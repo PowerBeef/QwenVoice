@@ -18,7 +18,7 @@
       "authority": "repository guidance",
       "audience": "contributors and users",
       "reviewTriggers": ["release facts", "workflow changes", "platform support"],
-      "paths": ["AGENTS.md", "README.md", "CONTRIBUTING.md", "PRODUCT.md", "SECURITY.md", ".agents/*.md", "website/AGENTS.md", "website/DESIGN.md", "website/PRODUCT.md", "website/README.md"]
+      "paths": ["CLAUDE.md", "README.md", "CONTRIBUTING.md", "PRODUCT.md", "SECURITY.md", ".claude/rules/*.md", "website/CLAUDE.md", "website/DESIGN.md", "website/PRODUCT.md", "website/README.md"]
     },
     {
       "id": "architecture",

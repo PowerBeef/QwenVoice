@@ -209,8 +209,8 @@
     {
       "id": "documentation-and-governance",
       "include": [
-        "AGENTS.md",
-        ".agents/**",
+        "CLAUDE.md",
+        ".claude/**",
         "CONTRIBUTING.md",
         "README.md",
         "config/documentation-contract.json",

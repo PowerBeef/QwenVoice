@@ -1,6 +1,6 @@
-# iOS Engineer
+# iOS domain rule
 
-> Agent role for the `VocelloiOS` target, `Sources/iOS/`, `Sources/iOSSupport/`, and the
+> Domain rule for the `VocelloiOS` target, `Sources/iOS/`, `Sources/iOSSupport/`, and the
 > iOS-side pieces of `Sources/SharedSupport`.
 
 ## Boundaries
@@ -12,14 +12,14 @@
 - iOS entitlements, Info.plist, App Store submission materials
 
 **Does NOT own:**
-- macOS app / XPC service (`.agents/macos-engineer.md`)
-- Engine core / MLX internals (`.agents/backend-mlx.md`)
-- Build scripts / CI / release (`.agents/release-qa-engineer.md`)
+- macOS app / XPC service (`.claude/rules/macos.md`)
+- Engine core / MLX internals (`.claude/rules/backend-mlx.md`)
+- Build scripts / CI / release (`.claude/rules/release-qa.md`)
 
 **Consults:**
 - `docs/ARCHITECTURE.md` §6 (iOS request lifecycle)
 - `docs/reference/{ios-app-guide,ios-device-testing,ios-engine-optimization,ios-appstore-submission,ios-increased-memory-entitlement-request}.md`
-- Root `AGENTS.md` (Hard rules) + [`docs/project-map.html`](../docs/project-map.html)
+- Root `CLAUDE.md` (Hard rules) + [`docs/project-map.html`](../../docs/project-map.html)
 
 ## Required pre-read
 
@@ -51,14 +51,15 @@ Before changing iOS UI or behavior, read:
   crash proof.
 - Generated output must use `config/build-output-policy.json`. Do not add an iOS DerivedData,
   package, evidence, symbol, or archive root outside the manifest; route policy changes through
-  `.agents/release-qa-engineer.md`.
+  `.claude/rules/release-qa.md`.
 - Use authoritative Apple documentation (docs MCP when callable) for current framework APIs. Use a
   GitHub integration when callable, otherwise `gh`, for repository context; scripts remain the test
   interface.
 - **XCUITest owns iOS UI.** It runs only on the paired physical iPhone. Run smoke and
   benchmark lanes only for explicitly requested frontend acceptance.
   Missing device, UI, or model evidence never blocks a commit, push, pull request, ordinary merge,
-  or ordinary CI. Never add a Simulator route, alternate UI driver, or coordinate table.
+  or ordinary CI. Never add a Simulator route, alternate UI driver, or coordinate table. The
+  computer-use MCP is dev-environment-assistive only and never drives the app UI.
 - iOS owns on-device capture, frontend/engine correlation, transport, memory-warning, MetricKit,
   and platform-pressure evidence. Typed field semantics remain backend-owned and schema/publication
   changes require release/QA review.

@@ -30,8 +30,8 @@ mechanical retirement is unblocked but not started; Phases 7–13 remain open.
 | `config/` | Machine-readable contracts |
 | `docs/` | Architecture, progress, ADR, reference guides |
 | `benchmarks/` | PASS-only privacy-safe history (schema v2 authoritative) |
-| `.agents/` | Role playbooks |
-| `.cursor/` | Project MCP (`mcp.json`) — not a second policy constitution |
+| `.claude/rules/` | Domain rules |
+| `.claude/settings.json` | Project tool permissions — not a second policy constitution |
 
 ### Shipping generation authority stack
 

@@ -1,10 +1,10 @@
-# AGENTS.md — Vocello (QwenVoice)
+# CLAUDE.md — Vocello (QwenVoice)
 
-> Durable onboarding for **Cursor** and other MCP-capable agents. **Code wins over docs.**
+> Durable onboarding for Claude Code and other MCP-capable agents. **Code wins over docs.**
 > Scripts and machine-readable contracts are the gates; optional MCP tools and skills never are.
 > When scope, platform, or gate expectations are unclear, **ask before editing**.
 >
-> **Active progress:** [`docs/development-progress.md`](docs/development-progress.md) · **Project map:** [`docs/project-map.html`](docs/project-map.html) · **Architecture:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · **Role playbooks:** [`.agents/`](.agents/) · **Cursor MCP:** [`.cursor/mcp.json`](.cursor/mcp.json)
+> **Active progress:** [`docs/development-progress.md`](docs/development-progress.md) · **Project map:** [`docs/project-map.html`](docs/project-map.html) · **Architecture:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · **Domain rules:** [`.claude/rules/`](.claude/rules/)
 
 ## What this is
 
@@ -17,10 +17,10 @@ evidence uses Mac mini M2 8 GB and iPhone 17 Pro; support and evidence hardware 
 ## Source of truth
 
 `Sources/` → `project.yml` → machine-readable `config/` contracts → `scripts/` →
-`.github/workflows/` → `AGENTS.md` → other prose.
+`.github/workflows/` → `CLAUDE.md` → other prose.
 
 Model/speaker schema: [`Sources/Resources/qwenvoice_contract.json`](Sources/Resources/qwenvoice_contract.json).
-The cross-platform artifact catalog is
+The cross-platform artifact catalog
 [`Sources/Resources/qwenvoice_production_model_catalog.json`](Sources/Resources/qwenvoice_production_model_catalog.json)
 is complete for all six Speed/Quality artifacts and is the fail-closed macOS/CLI/iOS download
 source. Static completeness does not substitute for explicit post-change live delivery evidence.
@@ -28,42 +28,12 @@ source. Static completeness does not substitute for explicit post-change live de
 
 ## Before you edit
 
-1. **Resume active work** — read [`docs/development-progress.md`](docs/development-progress.md) when it exists, then confirm its checkpoint against the current checkout.
-2. **Pick a role** — read [`.agents/<role>.md`](.agents/) (backend, iOS, macOS, release-qa, website).
-3. **Inspect capabilities** — for relevant tasks, inspect currently callable Cursor MCP servers
-   and skills (XcodeBuildMCP, Axiom, sosumi/docs, browser) before using them. Project defaults live
-   in [`.cursor/mcp.json`](.cursor/mcp.json); additional user-scoped MCP entries are fine. Read every
-   selected skill before use and never infer availability from a cache directory alone.
+1. **Resume active work** — read [`docs/development-progress.md`](docs/development-progress.md), then confirm its checkpoint against the current checkout.
+2. **Read the domain rule** — before working in a domain, read the matching file under [`.claude/rules/`](.claude/rules/) (see the routing table below).
+3. **Inspect capabilities** — MCP servers and skills are user-scoped; verify a tool is currently callable before relying on it, and read every selected skill before use. Optional assists never substitute for the deterministic script gates.
 4. **Minimal diff** — no drive-by refactors; preserve module boundaries and stable `accessibilityIdentifier` values.
 5. **Ask** when the target platform or test scope is ambiguous. Commit/push policy is not
    ambiguous: deterministic verification is sufficient to preserve and share development work.
-
-### Cursor operating charter
-
-```text
-Resume: docs/development-progress.md → .agents/<role>.md
-Edit:   minimal diff; ask if platform/UI scope unclear
-Prove:  macos_test.sh test + build.sh build
-        (+ build_foundation_targets.sh ios for iOS touch)
-Optional assist: XcodeBuildMCP (macos|ios-device) / Axiom / sosumi / browser / gh
-UI QA:  ui_test.sh only when explicitly requested
-Never:  Simulator app UI; second XcodeBuildMCP server; Mirroir / Peekaboo /
-        mobile-mcp / computer-use / coordinate-bridge UI drivers
-Publish: deterministic scripts only
-MCP:    .cursor/mcp.json (project) plus optional ~/.cursor/mcp.json (user)
-```
-
-### After a Cursor or toolchain reinstall
-
-1. Restore a clean `main` from `origin/main`; never discard a dirty tree without reviewing it.
-2. Confirm Xcode, its matching iOS Platform Support/runtime component, the paired physical iPhone,
-   signing identities, and the repository scripts before explicit frontend acceptance. Ordinary
-   deterministic development does not require a phone; the component check does not run a
-   Simulator.
-3. Reload Cursor MCP from [`.cursor/mcp.json`](.cursor/mcp.json). Confirm XcodeBuildMCP,
-   Axiom, and docs MCP are callable. Repository scripts and XCUITest remain authoritative.
-4. Run the deterministic development checks below. Run XCUITest only when frontend acceptance is
-   explicitly requested or when preparing the corresponding platform release.
 
 ## Hard rules
 
@@ -74,23 +44,37 @@ MCP:    .cursor/mcp.json (project) plus optional ~/.cursor/mcp.json (user)
 | **Generated output follows one contract** | `config/build-output-policy.json` owns native repository output under `build/`, child-artifact retention, and heavy-lane free-space floors. Persistent Xcode caches are `build/cache/xcode/{macos,ios-device}`; packages are shared; scratch, evidence, symbols, and distribution outputs stay in their classified trees. `website/dist` is Vite-owned website output. Run `python3 scripts/build_output_policy.py status|validate`; never add an ad hoc DerivedData or `.build`, bypass a storage preflight, or delete a whole cache when a selective cleanup suffices. |
 | **Release-only config** | The project has no Debug configuration or generic `DEBUG` symbol. Every production-affecting environment override is registered in `config/runtime-debug-knobs.json` and remains inert unless `QWENVOICE_DEBUG=1` enables the master runtime gate. Compile-time test isolation belongs in test targets or a narrowly named compilation condition, never hidden app behavior. |
 | **Concurrency exceptions are registered** | Every owned `@unchecked Sendable` or other unsafe concurrency declaration must be justified and covered by `config/concurrency-safety.json`. Prefer actors, `Mutex`, immutable adapters, or value types; run `python3 scripts/runtime_security_contract.py` after changing either registry or a covered declaration. |
-| **MLX pins in lockstep** | `mlx-swift` + `mlx-swift-lm` together; no Core ML. → [`.agents/backend-mlx.md`](.agents/backend-mlx.md) |
-| **Engine invariants** | Prewarm slots, event streams, cancellation, request-local sampling/memory policy, and actor/classified-session/product-finalization authority → [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`config/runtime-refactor-contract.json`](config/runtime-refactor-contract.json). Phase 4 source cutover and focused macOS/physical-iPhone acceptance have passed, but exploratory focused evidence is not clean repeated characterization or full-matrix promotion. A nested partial v9 projection in a shipping v8 row does not make the complete v9 path authoritative. |
+| **MLX pins in lockstep** | `mlx-swift` + `mlx-swift-lm` together; no Core ML. → [`.claude/rules/backend-mlx.md`](.claude/rules/backend-mlx.md) |
+| **Engine invariants** | Prewarm slots, event streams, cancellation, request-local sampling/memory policy, and actor/classified-session/product-finalization authority → [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`config/runtime-refactor-contract.json`](config/runtime-refactor-contract.json). The contract JSON is the status authority: Phase 4 `overallPromotion` passed 2026-07-20 with canonical matrices; Phases 7–13 and Phase 14 retirement remain open. Do not restate convergence status in prose — cite the contract. |
 | **Privacy** | No PII, device identity, usernames, absolute paths, prompts, transcripts, secrets, or private metadata in any tracked content. |
-| **All app UI = XCUITest** | XCUITest is the sole autonomous app UI driver for the native macOS test host and the paired physical iPhone. Do not drive native app UI with Simulator destinations, Mirroir, Peekaboo, mobile-mcp, computer-use, or coordinate/vision bridges. |
+| **All app UI = XCUITest** | XCUITest is the sole autonomous app UI driver for the native macOS test host and the paired physical iPhone. Do not drive native app UI with Simulator destinations or any alternate UI/coordinate/vision driver, including the computer-use MCP: computer use is assistive for the development environment only (Xcode GUI, Instruments, Finder/System Settings, reading screens, doc screenshots) and never drives Vocello's UI or substitutes for XCUITest evidence. |
 | **No hidden test UI** | XCUITest observes genuine visible controls. Test-only code belongs in test targets; shippable app targets must not contain preview routes, invisible state markers, seeded UI state, or onboarding bypasses. |
 | **One shared XcodeBuildMCP** | When an XcodeBuildMCP server is installed and callable, use one shared route. Call `session_show_defaults`, select `macos` or `ios-device`, and set a physical-device ID only at runtime. Never enable Simulator or UI-automation workflows for Vocello, and never configure a second server. Repository scripts remain the final gate. |
-| **Cursor + scripts-first** | Cursor is the supported agent IDE. Repository guidance, scripts, XCUITest, and machine-readable contracts remain the gates. Optional MCP servers from [`.cursor/mcp.json`](.cursor/mcp.json) (and user-scoped additions) assist only; they are never CI or packaging prerequisites. Gates enforce wiring (no retired harness artifacts, no Simulator UI workflows, no retired UI command aliases), not a prose keyword denylist. |
+| **Scripts-first** | Repository guidance, scripts, XCUITest, and machine-readable contracts remain the gates. User-scoped MCP servers and skills assist only; they are never CI or packaging prerequisites. Gates enforce wiring (no retired harness artifacts, no Simulator UI workflows, no retired UI command aliases), not a prose keyword denylist. |
 | **Publishing is deterministic-only** | Commits, pushes, pull requests, ordinary merges, ordinary CI, and release packaging require deterministic verification only. Missing models, a physical device, or XCUITest evidence must never block preserving, sharing, signing, notarizing, or uploading work. UI lanes run only for explicit frontend QA. |
 | **Release evidence is process- and command-bound** | Release candidates use schema-v2 `release-evidence.json` plus a hashed `release-verification.json` bundle. A clean full-tree source identity and every platform-required step must be produced by the managed release subprocess, with the contract-defined command identity, in the same invocation and within the six-hour freshness window. Self-authored, substituted-command, partial, stale, or cross-source PASS files cannot authorize publication. iOS candidates first run the deterministic macOS gate plus device-SDK compile in that ledger, then require the non-device archive/IPA identity, entitlement, provisioning, signature, and UUID-continuity verifier. |
 | **Benchmark history is PASS-only** | Successful memory-qualified benchmark runners publish one privacy-safe record under `benchmarks/runs/` and regenerate `benchmarks/HISTORY.md`. Raw telemetry, WAVs, screenshots, traces, and `.xcresult` bundles remain untracked. Publication never stages, commits, pushes, or turns model/device availability into a development gate. The telemetry-overhead observer-effect experiment is local-only because instrumenting its `off` lane would invalidate the comparison. |
 | **Raw profile traces are ephemeral** | Exact-PID profiles hash, validate, summarize, and publish before discarding the multi-gigabyte raw trace. Use `--keep-trace` only for an explicit Instruments debugging session. Failed traces stay diagnostic until superseded or explicitly acknowledged with `--compact-profile-failure RUN_ID`; status reports that space separately from automatically eligible cleanup. `--routine` prunes scratch without touching the current app, canonical caches, dSYMs, models, source, or tracked history. |
 | **Memory evidence must be qualified** | New publishable generation benchmarks require telemetry schema v8 plus benchmark-evidence manifest v2: exact run-scoped sample sidecars, start/stop and lifecycle boundaries, zero capture failures, ≥95% sampler coverage, and no critical pressure, memory warning/exit, `hardTrim`, or `fullUnload`. macOS app/engine totals are uptime-aligned; never add independent process peaks. |
 | **Audio QA is autonomous** | Engine/language promotion uses deterministic PCM QC, fixed-seed evidence, locale-locked ASR consensus, and the applicable prosody/delivery gates. Human listening is optional annotation only. A QC warning may be tracked as `passedWithWarnings`, but it is not promotion-quality until a deterministic rule or code fix clears it. |
-| **Derived catalogs stay fresh** | Fail-closed generated inventories must be rebuilt in the same change as their sources: owned-runtime `CURRENT_INVENTORY` / `FACADE_API_BASELINE`, `docs/project-health.md`, `docs/INDEX.md`, and the production model catalog when their inputs change. Prefer `python3 scripts/refresh_derived_artifacts.py refresh` then `validate` before commit/push. This does **not** auto-write narrative progress prose — when `config/runtime-refactor-contract.json` (or another meaning-bearing contract) changes status, update `docs/development-progress.md` and the matching ADR/status-report in the same change. Cursor rule: [`.cursor/rules/derived-artifacts.mdc`](.cursor/rules/derived-artifacts.mdc). |
+| **Derived catalogs stay fresh** | Fail-closed generated inventories must be rebuilt in the same change as their sources: owned-runtime `CURRENT_INVENTORY` / `FACADE_API_BASELINE`, `docs/project-health.md`, `docs/INDEX.md`, and the production model catalog when their inputs change. Prefer `python3 scripts/refresh_derived_artifacts.py refresh` then `validate` before commit/push. This does **not** auto-write narrative progress prose — when `config/runtime-refactor-contract.json` (or another meaning-bearing contract) changes status, update `docs/development-progress.md` and the matching ADR/status-report in the same change. Details: [`.claude/rules/derived-artifacts.md`](.claude/rules/derived-artifacts.md). |
 
-Every active invariant must live here, in a role playbook, in an authoritative reference document,
+Every active invariant must live here, in a domain rule, in an authoritative reference document,
 or in a machine-readable contract named by one of those surfaces.
+
+## Domain rule routing
+
+| Work | Read first / use |
+| --- | --- |
+| MLX / engine / model catalog | [`.claude/rules/backend-mlx.md`](.claude/rules/backend-mlx.md), `docs/reference/mlx-guide.md`; optional Axiom Swift/concurrency/performance skills |
+| iOS app (`Sources/iOS*`) | [`.claude/rules/ios.md`](.claude/rules/ios.md), `docs/reference/ios-app-guide.md`, `scripts/ios_device.sh` on a physical device only; optional XcodeBuildMCP `ios-device` |
+| macOS app / XPC stack | [`.claude/rules/macos.md`](.claude/rules/macos.md), `docs/reference/macos-app-guide.md`; optional XcodeBuildMCP `macos` |
+| Scripts / CI / release / benchmarks | [`.claude/rules/release-qa.md`](.claude/rules/release-qa.md); GitHub MCP when callable, otherwise `gh` |
+| Website (`website/`) | [`website/CLAUDE.md`](website/CLAUDE.md); browser MCP for localhost verification |
+| Derived/generated inventories | [`.claude/rules/derived-artifacts.md`](.claude/rules/derived-artifacts.md) |
+| macOS frontend QA (explicit request only) | `scripts/ui_test.sh macos smoke|benchmark`; native macOS target only |
+| iOS frontend QA (explicit request only) | `scripts/ui_test.sh ios smoke|benchmark`; paired physical iPhone only |
+| External systems and current APIs | sosumi / context7 / docs MCP when callable; otherwise primary vendor docs |
 
 ## Workflows
 
@@ -172,19 +156,9 @@ scripts/ios_device.sh lang-bench --diagnostic-cohort                  # fixed 15
 
 **Verify:** core-test + offline fixtures exit 0. iOS lang-bench must print **`hint_gate=PASS`**
 and **`output_gate=PASS`** (quick: 6/6 output cells; full: 18/18 — negative control is hint-only).
-`check_language_hints.py` matches `notes.languageHint` to `config/language-bench-matrix.json`.
-Phase 3 adds locale-locked ASR via `check_language_output.py`. **DE/ES/ZH/JA output cells**
-require on-device Speech assets. `speech-assets` explicitly resolves and installs the modern
-DictationTranscriber modules, then reports whether Vocello's legacy SFSpeechRecognizer gate is
-ready; setup and interpretation: [`language-bench.md`](docs/reference/language-bench.md)
-§ Phase 3 prerequisites.
+Setup and interpretation: [`docs/reference/language-bench.md`](docs/reference/language-bench.md).
 No listening verdict is required: exact fixed-seed WAV evidence, three-pass on-device ASR consensus,
 PCM QC, and the applicable prosody gates own the automated result.
-Corpus v2 requires at least 15 normalized words per alphabetic script and 24 normalized characters
-per CJK script. Design uses the known explicit target language; Custom uses a native-language
-speaker where the Qwen contract provides one. Custom pinned/Auto pairs prove hint equivalence, and
-the three ASR passes prove recognizer reproducibility; neither is statistically independent audio
-evidence.
 
 ### Release QA
 
@@ -230,10 +204,7 @@ gates. Listening remains optional independent annotation →
 | `Tests/VocelloCoreTests/`, `Tests/VocelloEngineIntegrationTests/` | Deterministic Core/output/telemetry and XPC transport tests |
 | `docs/project-map.html` | Canonical interactive feature, component, dependency, and workflow map |
 | `docs/development-progress.md` | Current implementation checkpoint and remaining release work |
-| `website/` | Marketing → [`website/AGENTS.md`](website/AGENTS.md) |
-
-Interactive feature/module map: [`docs/project-map.html`](docs/project-map.html). Deeper lifecycle
-narrative: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+| `website/` | Marketing → [`website/CLAUDE.md`](website/CLAUDE.md) |
 
 ## Commands (common)
 
@@ -266,37 +237,6 @@ scripts/clean_build_caches.sh --cache macos --dry-run
 ```
 
 Full lanes: [`docs/reference/macos-testing.md`](docs/reference/macos-testing.md), [`docs/reference/ios-device-testing.md`](docs/reference/ios-device-testing.md).
-
-## Cursor tool routing
-
-**Scripts first** for build/test and deterministic proof. XCUITest is the sole autonomous app UI
-driver on macOS and the paired physical iPhone. Project MCP defaults are in
-[`.cursor/mcp.json`](.cursor/mcp.json). Before using an optional MCP server or skill, read its
-instructions and keep actions inside the selected role's ownership boundary. MCP assists are never
-CI or packaging prerequisites.
-
-| Work | Start here / use |
-| --- | --- |
-| MLX / engine | `.agents/backend-mlx.md`, `docs/reference/mlx-guide.md`, shell scripts; optional Axiom Swift/concurrency/performance skills |
-| iOS | `.agents/ios-engineer.md`, `docs/reference/ios-app-guide.md`, `scripts/ios_device.sh` on a physical device only; optional XcodeBuildMCP `ios-device` |
-| macOS / XPC | `.agents/macos-engineer.md`, `docs/reference/macos-app-guide.md`, shell scripts; optional XcodeBuildMCP `macos` |
-| Scripts / CI / GitHub | `.agents/release-qa-engineer.md`, shell scripts, GitHub integration when callable, otherwise `gh` |
-| Website | `.agents/website-engineer.md`, Cursor browser MCP or attended browser for localhost verification |
-| macOS frontend QA | `scripts/ui_test.sh macos smoke|benchmark`; native macOS target only |
-| iOS frontend QA | `scripts/ui_test.sh ios smoke|benchmark`; paired physical iPhone only |
-| External systems and current APIs | sosumi / docs MCP when callable; otherwise primary vendor docs |
-
-## If you use Codex
-
-Optional operator-local Codex task/session hygiene is governed by
-[`docs/reference/codex-session-storage.md`](docs/reference/codex-session-storage.md) and
-`config/codex-session-storage-policy.json`. CI runs `python3 scripts/codex_session_storage.py validate`
-and synthetic fixtures only; it never inventories or mutates a real Codex home. Live deletion
-requires an exact temporary manifest, SHA-256, old-root approval, deepest-first supported
-`codex delete --force` calls, and post-verification. Never edit Codex SQLite or manually remove
-rollout files. Prefer a new top-level Codex task only at coherent major checkpoints and only when
-the operator explicitly requests it; use `codex exec --ephemeral` for disposable investigations.
-This workflow is never a repository or ordinary agent-development prerequisite.
 
 ## Active / deep reading
 

@@ -288,7 +288,7 @@ struct IOSSubtleGlassSurfaceModifier<S: InsettableShape>: ViewModifier {
             }
 
         if reduceTransparency {
-            // Solid-fill fallback required by AGENTS.md when Reduce Transparency
+            // Solid-fill fallback required by CLAUDE.md when Reduce Transparency
             // is on. `fill` already paints the base background; skip glassEffect.
             base
         } else if interactive {

@@ -126,7 +126,8 @@ REQUIRED_SURFACES=(
     "Tests/VocelloiOSUITests"
     "Tests/VocelloiOSLogicTests"
     ".xcodebuildmcp/config.yaml"
-    ".cursor/mcp.json"
+    "CLAUDE.md"
+    ".claude/rules"
     "project.yml"
 )
 
@@ -236,35 +237,6 @@ do
     grep -qF "$derived_data_path" "$XCODE_MCP_CONFIG" \
         || { echo "error: missing managed XcodeBuildMCP derivedDataPath: $derived_data_path" >&2; exit 1; }
 done
-
-CURSOR_MCP_CONFIG="$PROJECT_DIR/.cursor/mcp.json"
-if ! python3 - "$CURSOR_MCP_CONFIG" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-data = json.loads(path.read_text())
-servers = data.get("mcpServers") or {}
-xb = servers.get("XcodeBuildMCP")
-if not isinstance(xb, dict):
-    raise SystemExit("error: .cursor/mcp.json must define mcpServers.XcodeBuildMCP")
-env = xb.get("env") or {}
-workflows = str(env.get("XCODEBUILDMCP_ENABLED_WORKFLOWS", ""))
-expected = {"macos", "device", "debugging", "project-discovery"}
-actual = {part.strip() for part in workflows.split(",") if part.strip()}
-if actual != expected:
-    raise SystemExit(
-        "error: .cursor/mcp.json XcodeBuildMCP workflows must be exactly "
-        "macos,device,debugging,project-discovery"
-    )
-if any(token in workflows.lower() for token in ("simulator", "ui-automation")):
-    raise SystemExit("error: .cursor/mcp.json must not enable simulator or ui-automation workflows")
-print("Cursor MCP XcodeBuildMCP workflow gate: PASS")
-PY
-then
-    exit 1
-fi
 
 GENERATION_PREWARM_PATH="$PROJECT_DIR/Sources/Views/Generate"
 if [ -d "$GENERATION_PREWARM_PATH" ]; then

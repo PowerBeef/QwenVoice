@@ -1,6 +1,6 @@
-# Backend / MLX Engineer
+# Backend / MLX domain rule
 
-> Agent role for `QwenVoiceBackendCore`, `QwenVoiceCore`, the owned Qwen3 core package
+> Domain rule for `QwenVoiceBackendCore`, `QwenVoiceCore`, the owned Qwen3 core package
 > stack, and everything related to model loading, prompt construction, synthesis,
 > memory policy, and audio QC.
 
@@ -22,14 +22,14 @@
   overrides and explicit concurrency-safety exceptions
 
 **Does NOT own:**
-- macOS SwiftUI / XPC client wiring (`.agents/macos-engineer.md`)
-- iOS app UI / on-device coordination (`.agents/ios-engineer.md`)
-- Build scripts, CI, signing, release packaging (`.agents/release-qa-engineer.md`)
+- macOS SwiftUI / XPC client wiring (`.claude/rules/macos.md`)
+- iOS app UI / on-device coordination (`.claude/rules/ios.md`)
+- Build scripts, CI, signing, release packaging (`.claude/rules/release-qa.md`)
 
 **Consults:**
 - `docs/ARCHITECTURE.md` §4 (engine core), §11 (model management), §12 (telemetry)
 - `docs/reference/{mlx-guide,qwen3-tts-guide,mimi-codec-guide,metal-guide,swift-performance-guide,ios-engine-optimization,telemetry-and-benchmarking}.md`
-- Root `AGENTS.md` (Hard rules) + [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) (engine invariants)
+- Root `CLAUDE.md` (Hard rules) + [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) (engine invariants)
 
 ## Required pre-read
 
@@ -44,7 +44,7 @@ Before changing anything in this layer, read:
   - `scripts/build_foundation_targets.sh macos|ios` for compile-safety.
   - `scripts/build.sh cli` to build `vocello`.
   - `QWENVOICE_DEBUG=1 ./build/vocello bench …` for perf/quality gates.
-- When callable, use Swift/concurrency/performance skills (for example via an Axiom skills MCP) and
+- When callable, use Swift/concurrency/performance skills (for example the Axiom skills) and
   authoritative MLX / Hugging Face documentation for language, isolation, and profiling decisions.
   Read each selected skill before use.
 - Skills guide implementation and diagnosis; shell builds, tests, benchmarks, and their artifacts
@@ -53,9 +53,7 @@ Before changing anything in this layer, read:
 - Generated output must use `config/build-output-policy.json`. Backend work may consume the
   canonical macOS/iOS caches and the dedicated owned-runtime SwiftPM scratch path, but must not create
   another DerivedData root or a `.build` directory below `Packages/VocelloQwen3Core/`. Route policy
-  changes through `.agents/release-qa-engineer.md`.
-- Browser inspection may support website work, but never replaces benchmarks, compile checks, or
-  physical-device iOS gates.
+  changes through `.claude/rules/release-qa.md`.
 - XCUITest is the sole autonomous app UI driver. Smoke and benchmark UI lanes are explicit
   frontend acceptance only and never a prerequisite for a commit, push, pull request, ordinary
   merge, ordinary CI, or release package. Frontend observations do not prove backend completion;
@@ -97,8 +95,8 @@ warning.
   someone else's slot.
 - **Lossless core audio; non-dropping frontend events.** Final PCM crosses the actor-owned,
   single-consumer suspending channel. Frontend preview/status uses a separate per-generation,
-  bounded suspending router with yield accounting. Do not reintroduce `bufferingNewest` or another
-  eviction policy for audio-bearing events.
+  bounded suspending router with yield accounting. Do not reintroduce an eviction policy for
+  audio-bearing events.
 - **Cancellation ownership.** `MLXTTSEngine` conforms to `ActiveGenerationCancellable` on every
   platform. `ActiveGenerationCoordinator` owns one active generation, records the typed reason
   (`user`, `memoryPressure`, `superseded`, or `shutdown`), and awaits task termination before trim,
@@ -115,12 +113,10 @@ warning.
   process-global sampling override.
 - **Convergence authority is explicit.** `config/runtime-refactor-contract.json` records
   `VocelloQwen3Engine`, its classified session, and QwenVoiceCore's `GenerationOutputAdapter` as
-  the shipping generation path for Custom, Design, and Clone. Focused macOS and physical-iPhone
-  acceptance has passed, but exploratory focused runs are not clean repeated controls or full
-  canonical matrices and overall promotion remains pending. A schema-v8 row may carry the partial
-  v9 transition projection, but that nested evidence does not make the complete v9
-  writer/merger/publication path authoritative. The remaining prepared-model load/prewarm and
-  schema-3 conditioning bridge is available only through
+  the shipping generation path for Custom, Design, and Clone. Phase 4 `overallPromotion` passed
+  2026-07-20 with clean Phase 0 controls and canonical matrices; the contract JSON is the status
+  authority and later phases (7–13, 14 retirement) remain open. The remaining prepared-model
+  load/prewarm and schema-3 conditioning bridge is available only through
   `@_spi(VocelloQwen3LegacyCompatibility)`; do not describe the actor as the sole MLX mutator or add
   a normal-public mutation surface back to `VocelloQwen3LoadedModel`.
   Preserve the actor's explicit reserved/generating/aborting ownership: open must fail once abort

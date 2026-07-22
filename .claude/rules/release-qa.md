@@ -1,6 +1,6 @@
-# Release / QA Engineer
+# Release / QA domain rule
 
-> Agent role for build scripts, CI workflow, packaging, signing, notarization,
+> Domain rule for build scripts, CI workflow, packaging, signing, notarization,
 > benchmarks, UI smoke, crash/profile analysis, and release QA gates.
 
 ## Boundaries
@@ -30,13 +30,13 @@
   deterministic validation, and explicit delivery evidence pass.
 
 **Does NOT own:**
-- App source code (`.agents/backend-mlx.md`, `.agents/ios-engineer.md`, `.agents/macos-engineer.md`)
-- Marketing site (`website/AGENTS.md`)
+- App source code (`.claude/rules/backend-mlx.md`, `.claude/rules/ios.md`, `.claude/rules/macos.md`)
+- Marketing site (`website/CLAUDE.md`)
 
 **Consults:**
 - `docs/reference/{macos-release-qa,telemetry-and-benchmarking,cli,macos-testing,ios-device-testing}.md`
 - `docs/ARCHITECTURE.md` §12 (telemetry)
-- Root `AGENTS.md` (Workflows, Commands) + [`docs/project-map.html`](../docs/project-map.html)
+- Root `CLAUDE.md` (Workflows, Commands) + [`docs/project-map.html`](../../docs/project-map.html)
 
 ## Required pre-read
 
@@ -52,7 +52,7 @@ Before changing scripts or CI, read:
 - **Shell scripts are the source of truth**; run them directly and preserve their artifacts.
 - Use a GitHub integration when it is currently callable for PR, release, and Actions context;
   otherwise use `gh`. User-scoped installation state is not a repository prerequisite.
-- Optional skills MCP entries may assist with test triage, performance, signing, packaging, or
+- Optional skills may assist with test triage, performance, signing, packaging, or
   telemetry after their instructions are read. Start from script output and generated artifacts.
 - XCUITest is the sole autonomous app UI driver. It runs against the native macOS app or a paired
   physical iPhone and provides smoke and benchmark lanes; iOS adds pulled on-device
@@ -259,8 +259,8 @@ scripts/clean_build_caches.sh --compact-profile-failure <run-id> --dry-run
 - **Burn-in-safe iOS testing.** Headless generation, profiling, logs, and device diagnostics go
   through `scripts/ios_device.sh`; physical-device UI acceptance goes through `scripts/ui_test.sh`.
 - **macOS real-generation acceptance needs model fixtures.** XCUITest verifies readiness in Settings;
-  run `scripts/macos_test.sh models ensure` only to repair/bootstrap the debug link and clone voice. See [`scripts/lib/test_models.sh`](../scripts/lib/test_models.sh) and
-  [`docs/reference/testing-runbook.md`](../docs/reference/testing-runbook.md) "Model readiness".
+  run `scripts/macos_test.sh models ensure` only to repair/bootstrap the debug link and clone voice. See [`scripts/lib/test_models.sh`](../../scripts/lib/test_models.sh) and
+  [`docs/reference/testing-runbook.md`](../../docs/reference/testing-runbook.md) "Model readiness".
 - **Single XCUITest stack.** Keep shared waits, fixtures, evidence export, and benchmark contracts
   common across the macOS and physical-iPhone targets. Do not add coordinate hooks, hidden marker
   catalogs, or a second UI driver.
