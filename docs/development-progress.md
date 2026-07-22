@@ -419,6 +419,13 @@ failures were diagnosed in minutes from the harness's own desktop/element-tree e
 26 test runner cannot write `/tmp` (fixture synthesis moved into the lane), and SwiftUI propagates
 row identifiers onto child elements (History assertions count unique identifiers).
 
+2026-07-22 — Development-flow automation: gates are tiered (T0 iterate, T1 hook-enforced commit
+gate with a fingerprint cache, T2 path-aware CI, T3 tag-gated release), development is trunk-based
+on `main` with pushes watched and triaged from `gh run watch`, and branches are reserved for risky
+work landed via auto-merge. CI gained a change-routing job, a SwiftPM cache for the macOS test
+job, and a `CI required` aggregator that is now the sole branch-protection context. The commit
+hook blocked its first real defect (a stale project-health summary) within minutes of activation.
+
 ## Open release work
 
 - macOS 2.1.0 is released.
