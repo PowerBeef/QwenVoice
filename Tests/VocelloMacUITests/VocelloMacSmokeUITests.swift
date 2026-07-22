@@ -7,15 +7,20 @@ import AVFoundation
 /// never poisons the journeys after it and the suite passes back-to-back.
 @MainActor
 final class VocelloMacSmokeUITests: VocelloMacUITestCase {
-    /// Synthesized once per process; 12 s clears the 10 s minimum duration so
-    /// the virtual capture auto-stops into the review stage. Lives in shared
-    /// `/tmp` (like the benchmark take-manifest handshake) — the app reading
+    /// The 12 s fixture clears the 10 s minimum duration so the virtual
+    /// capture auto-stops into the review stage. It lives in shared `/tmp`
+    /// (like the benchmark take-manifest handshake) because the app reading
     /// a file from the test runner's per-app temporary directory triggers the
-    /// macOS "access data from other apps" TCC prompt, which stalls the run.
+    /// macOS "access data from other apps" TCC prompt. The lane
+    /// (`scripts/ui_test.sh`) synthesizes it — the Xcode 26 test runner
+    /// cannot write to `/tmp` itself — and this initializer only writes a
+    /// fallback for direct-from-Xcode runs, where the write may or may not
+    /// be permitted; `test04` asserts the file exists either way.
     private static let virtualClipURL: URL = {
         let url = URL(fileURLWithPath: "/tmp/vocello-ui-virtual-mic.wav")
-        try? FileManager.default.removeItem(at: url)
-        try? writeSpeechLikeClip(seconds: 12.0, to: url)
+        if !FileManager.default.fileExists(atPath: url.path) {
+            try? writeSpeechLikeClip(seconds: 12.0, to: url)
+        }
         return url
     }()
 

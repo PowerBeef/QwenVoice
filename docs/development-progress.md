@@ -410,6 +410,15 @@ Computer use remains assistive for exploratory QA and failure diagnosis
 ([`reference/interactive-ui-qa.md`](reference/interactive-ui-qa.md)) — during the trial it
 identified the app-data and speech-recognition TCC dialog classes no log surfaced.
 
+v2 acceptance (2026-07-22): macOS smoke passed 5/5 twice back-to-back (state hygiene; repeat-lane
+wall 295 s with the build skip active, cold 470 s), the canonical 29-take macOS benchmark passed
+with full validator/telemetry evidence and published
+`macos-xcui-benchmark-20260722-172102-48c4a193` (label `v2-stack-acceptance`), and the
+physical-iPhone smoke journey passed with pulled-diagnostics validation. The first v2 run's three
+failures were diagnosed in minutes from the harness's own desktop/element-tree evidence: the Xcode
+26 test runner cannot write `/tmp` (fixture synthesis moved into the lane), and SwiftUI propagates
+row identifiers onto child elements (History assertions count unique identifiers).
+
 ## Open release work
 
 - macOS 2.1.0 is released.

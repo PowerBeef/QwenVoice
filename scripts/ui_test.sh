@@ -583,6 +583,29 @@ if [[ "$platform" == "macos" ]]; then
   note "macOS XCUITest $lane → $out"
   required_step_run "$step_ledger" ui-preflight mac_ui_preflight
 
+  # Synthesize the shared virtual-microphone fixture for the recording
+  # journey. It must live in /tmp: the app cannot read the runner's per-app
+  # temporary directory without a TCC prompt, and the Xcode test runner
+  # cannot write /tmp itself.
+  python3 - <<'WAV'
+import math, struct, wave
+path = "/tmp/vocello-ui-virtual-mic.wav"
+sr = 24000
+frames = int(sr * 12.0)
+with wave.open(path, "wb") as w:
+    w.setnchannels(1)
+    w.setsampwidth(2)
+    w.setframerate(sr)
+    data = bytearray()
+    for i in range(frames):
+        t = i / sr
+        syllable = abs(math.sin(2 * math.pi * 2.4 * t))
+        phrase = 1.0 if math.sin(2 * math.pi * 0.22 * t) > -0.55 else 0.0
+        tone = 0.7 * math.sin(2 * math.pi * 175 * t) + 0.3 * math.sin(2 * math.pi * 330 * t)
+        data += struct.pack("<h", int(0.28 * tone * syllable * phrase * 32767))
+    w.writeframes(bytes(data))
+WAV
+
   # Two-phase execution: an explicitly skippable build-for-testing (repeat
   # lanes on an unchanged tree skip the multi-minute rebuild entirely),
   # followed by test-without-building against the already-built products.
@@ -617,6 +640,12 @@ if [[ "$platform" == "macos" ]]; then
     || die "macOS XCUITest failed (see $out/xcodebuild.log)"
   required_step_run "$step_ledger" crash-delta check_mac_crash_delta \
     || die "new Vocello crash report detected"
+  # The lane rebuilt the app/XPC products in the shared cache; re-preserve
+  # their dSYMs so the build-output symbol-identity check stays consistent
+  # (mirrors preserve_ios_ui_dsym on the device lane).
+  preserve_macos_dsyms "$MAC_DERIVED/Build/Products/Release" \
+    "$MAC_DERIVED/Build/Products/Release/Vocello.app" "$QVOICE_SYMBOLS_MACOS" \
+    || warn "could not preserve macOS UI-lane dSYMs"
   write_build_provenance "$MAC_DERIVED/last-build.json" \
     "scripts/ui_test.sh macos $lane" VocelloMacUI Release \
     "platform=macOS,arch=arm64" arm64 O ad-hoc \

@@ -273,6 +273,12 @@ from schema-v2 memory trends.
 |---|---|---|---|---|---|---:|---|---|---|---|
 | 2026-07-13 | [`macos-xcui-benchmark-20260713-094143-087ff425`](runs/ui-generation/macos-xcui-benchmark-20260713-094143-087ff425.json) | canonical | exploratory | passedWithWarnings | qualified-with-warnings | 29 | `04083b15a4e2` dirty | `excluded` | baseline | memory-v8-final-full |
 
+## ui-generation / macos / mac-mini-m2-8gb / config `55e5f9ce7b56`
+
+| completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |
+|---|---|---|---|---|---|---:|---|---|---|---|
+| 2026-07-22 | [`macos-xcui-benchmark-20260722-172102-48c4a193`](runs/ui-generation/macos-xcui-benchmark-20260722-172102-48c4a193.json) | canonical | exploratory | passedWithWarnings | qualified-with-warnings | 29 | `2f948a8b0491` dirty | `excluded` | baseline | v2-stack-acceptance |
+
 ## ui-generation / macos / mac-mini-m2-8gb / config `6684732ad0ff`
 
 | completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |

@@ -311,13 +311,17 @@ class VocelloMacUITestCase: XCTestCase {
                 + "OR identifier CONTAINS '_delete_' OR identifier CONTAINS '_play_')"
         )
         let rows = app.descendants(matching: .any).matching(rowPredicate)
-        let empty = element("history_emptyState")
+        // SwiftUI propagates each row's identifier onto every child element
+        // (play button, text fields, trailing group), so the raw match count
+        // is a multiple of the visible rows. Count unique identifiers — one
+        // per logical row. The zero case needs no empty-state probe: the
+        // "No results found" unavailable view exposes no row identifiers.
         XCTAssertTrue(
             VocelloUIWait.condition(
                 "history to show exactly \(expected) row(s) for '\(text)'",
                 timeout: 30
             ) {
-                expected == 0 ? empty.exists : (!empty.exists && rows.count == expected)
+                Set(rows.allElementsBoundByIndex.map { $0.identifier }).count == expected
             }
         )
     }
