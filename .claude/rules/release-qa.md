@@ -66,6 +66,9 @@ Before changing scripts or CI, read:
   device SDK compile into the same release ledger, then uses its signing, archive, entitlement,
   catalog, and artifact verification. XCUITest is optional
   explicit frontend QA and never a signing, notarization, packaging, or upload prerequisite.
+  Exception to "optional" in cadence only: the macOS smoke lane is a standing per-candidate step —
+  run it and record the verdict (or a deliberate skip) in the release notes; it still never blocks
+  packaging (`docs/reference/macos-release-qa.md` step 2b).
 - **Generated-output contract:** `config/build-output-policy.json` owns the persistent caches,
   scratch DerivedData, untracked evidence, current symbols, and distribution outputs. Do not add an
   ad hoc build root or allow an Xcode/SwiftPM invocation to choose its own cache. XcodeBuildMCP

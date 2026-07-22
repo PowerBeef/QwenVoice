@@ -1,6 +1,6 @@
 # Derived artifacts freshness
 
-CI fail-closes on stale generated inventories. Refresh them in the **same change** as the source edit. Do **not** auto-rewrite narrative progress prose.
+CI fail-closes on stale generated inventories. Refresh them in the **same change** as the source edit. Do **not** auto-rewrite narrative progress prose — but do keep it current by hand: the companion working norm (root `CLAUDE.md` "Before you edit") is that narrative docs land in the same change as the work they describe, with a `docs: currency pass` commit closing any dense workstream.
 
 ## Before commit/push after touching these paths
 

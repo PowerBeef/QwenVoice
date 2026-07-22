@@ -32,7 +32,13 @@ source. Static completeness does not substitute for explicit post-change live de
 2. **Read the domain rule** — before working in a domain, read the matching file under [`.claude/rules/`](.claude/rules/) (see the routing table below).
 3. **Inspect capabilities** — MCP servers and skills are user-scoped; verify a tool is currently callable before relying on it, and read every selected skill before use. Optional assists never substitute for the deterministic script gates.
 4. **Minimal diff** — no drive-by refactors; preserve module boundaries and stable `accessibilityIdentifier` values.
-5. **Ask** when the target platform or test scope is ambiguous. Commit/push policy is not
+5. **Close the loop in the same change** — a substantive arc lands together with its evidence and
+   its doc updates, including narrative docs (`docs/development-progress.md`, the matching ADR or
+   status report). The derived-catalogs hard rule enforces this for generated docs; this norm
+   extends it to prose.
+6. **Currency pass after dense workstreams** — close a multi-commit workstream with a
+   `docs: currency pass` commit that re-syncs narrative prose with the tree before moving on.
+7. **Ask** when the target platform or test scope is ambiguous. Commit/push policy is not
    ambiguous: deterministic verification is sufficient to preserve and share development work.
 
 ## Hard rules
@@ -163,9 +169,11 @@ PCM QC, and the applicable prosody gates own the automated result.
 ### Release QA
 
 Release packaging is gated by deterministic build, test, identity, signing, crash, and artifact
-checks. XCUITest smoke, UI benchmarks, and model-dependent engine benchmarks remain explicit quality
-QA, but their absence never blocks signing, notarization, artifact upload, a macOS package, or an iOS
-archive/TestFlight build.
+checks. The macOS smoke lane is a standing release-candidate step: run it per candidate and record
+the run ID and verdict — or a deliberate skip with its reason — in the release notes entry
+(`docs/releases/`). UI benchmarks and model-dependent engine benchmarks remain explicit quality
+QA. The absence of any UI or model evidence never blocks signing, notarization, artifact upload, a
+macOS package, or an iOS archive/TestFlight build.
 
 ```sh
 QWENVOICE_DEBUG=1 ./build/vocello bench --modes clone --variants speed \

@@ -4,8 +4,9 @@
 > [`docs/development-progress.md`](../development-progress.md).
 
 The standing pre-release procedure for a macOS (Vocello.app / DMG) release. First executed in full
-for v2.1.0 (2026-06-09); rerun the deterministic gates for every release and use the interactive
-UI lanes only when frontend acceptance is explicitly requested. If this doc disagrees with the code,
+for v2.1.0 (2026-06-09); rerun the deterministic gates for every release, run the standing
+release-candidate smoke lane and record its verdict (step 2b), and use the benchmark UI lane only
+when frontend acceptance is explicitly requested. If this doc disagrees with the code,
 the code wins.
 
 This is a release-only gate, not a commit, push, pull-request, ordinary-merge, or ordinary-CI
@@ -39,11 +40,18 @@ upload depend on deterministic release-readiness and artifact checks.
    not block signing, notarization, or upload. Its three mode-order rotations, raw PCM/timing
    evidence, verdict, and machine context stay local. It does not publish schema-v2 history because
    instrumenting the `off` lane would invalidate the observer-effect comparison.
-2b. **Optional explicit frontend acceptance** (never packaging-blocking):
+2b. **Standing release-candidate UI smoke + optional benchmark** (run and record; never
+   packaging-blocking):
    ```sh
-   scripts/ui_test.sh macos smoke       # includes visible model readiness
-   scripts/ui_test.sh macos benchmark
+   scripts/ui_test.sh macos smoke       # standing per-candidate lane; includes visible model readiness
+   scripts/ui_test.sh macos benchmark   # optional explicit frontend acceptance
    ```
+   Run the smoke lane for every release candidate and record its run ID and verdict — or a
+   deliberate skip with the reason — in that release's `docs/releases/<version>.md` entry. The
+   lane already writes `run.json` plus a per-run step ledger under the UI-test artifact tree; the
+   release-notes line only references that run ID. A missing or skipped run never blocks signing,
+   notarization, packaging, or upload — recording the skip keeps the omission visible instead of
+   silent.
    If the visible Settings state is incomplete, run `scripts/macos_test.sh models ensure` only as
    an explicit repair/bootstrap action, then start a fresh smoke run.
    XCUITest is the sole autonomous macOS app UI driver and targets its configured native test host.
