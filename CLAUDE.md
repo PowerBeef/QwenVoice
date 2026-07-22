@@ -94,11 +94,31 @@ QVOICE_GATES=quick ./scripts/check_project_inputs.sh   # fast loop (see below)
 ./scripts/build_foundation_targets.sh ios   # iOS app + pure policy-test bundle compile safety
 ```
 
-**Fast iteration:** `QVOICE_GATES=quick` skips only the ~75 s script self-test suite, and only
-while nothing under `scripts/` or `config/` has pending changes — the surfaces those tests cover.
-Every wiring, privacy, link, and contract scan still runs, so a quick pass is commit-sufficient
-for changes outside `scripts/`/`config/`. Ordinary CI and release lanes never set it and always
-run the full suite. Batch gate runs: verify once at the end of a change set, not after every edit.
+**Gate tiers** — fast by default, strict where it matters:
+
+| Tier | When | What runs | Cost |
+| --- | --- | --- | --- |
+| T0 iterate | while editing | build-as-typecheck, targeted checks | seconds |
+| T1 checkpoint | every `git commit` (hook-enforced, automatic) | `QVOICE_GATES=quick ./scripts/check_project_inputs.sh`; fingerprint-cached no-op when the tree is unchanged since the last pass | ~0–45 s |
+| T2 CI | every push/PR (automatic) | full deterministic suite on GitHub, path-aware (docs-only pushes skip the heavy jobs; `ci-required` aggregates) | minutes, non-blocking locally |
+| T3 release | `v*` tags only | the full evidence/signing/notarization chain | unchanged |
+
+`QVOICE_GATES=quick` skips only the ~75 s script self-test suite, and only while nothing under
+`scripts/` or `config/` has pending changes — the surfaces those tests cover. Every wiring,
+privacy, link, and contract scan still runs. Ordinary CI and release lanes never set it. The T1
+hook (`scripts/hooks/precommit_gate.sh`, wired in `.claude/settings.json`) runs this automatically
+before every commit; `QVOICE_SKIP_COMMIT_GATE=1` is the one-shot emergency bypass. Batch heavier
+suites (deterministic tests, foundation compiles) once at the end of a change set.
+
+### Trunk & branches
+
+Development is trunk-based: work on `main`, commit checkpoints freely (the T1 hook gates them),
+and push whenever a change set is coherent — CI validates every push and the agent watches the run
+(`gh run watch --exit-status` in the background) and triages any red immediately. Branches exist
+only for risky or experimental work (MLX pin bumps keep the throwaway-branch rule): name them
+`feat/…`, `fix/…`, or `chore/…`, land via `gh pr create` + `gh pr merge --auto --squash`, and rely
+on delete-branch-on-merge; delete stray merged branches on sight. Branch protection requires the
+single `CI required` context, which passes when path-skipped jobs are skipped by design.
 
 **Verify:** exit 0 (build is the typecheck; no formatter/linter).
 The iOS compile requires the selected Xcode's matching iOS component even though it needs no phone

@@ -27,6 +27,8 @@ scripts/macos_test.sh test
 ```
 
 The final four deterministic commands are sufficient for ordinary pull requests. Run only the checks relevant to the files you changed, then state exactly what you ran in the pull request.
+Pull requests need the single green `CI required` check; jobs skipped by
+path routing (for example docs-only changes) count as passing.
 
 The Xcode project is generated from [`project.yml`](project.yml). Never edit `QwenVoice.xcodeproj/project.pbxproj` directly. Native output belongs under the paths declared by [`config/build-output-policy.json`](config/build-output-policy.json); do not add another DerivedData root or a `.build` directory inside vendored source.
 
