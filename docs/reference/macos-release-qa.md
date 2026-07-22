@@ -5,12 +5,13 @@
 
 The standing pre-release procedure for a macOS (Vocello.app / DMG) release. First executed in full
 for v2.1.0 (2026-06-09); rerun the deterministic gates for every release, run the standing
-release-candidate interactive QA checklist and record its verdicts (step 2b). If this doc
-disagrees with the code, the code wins.
+release-candidate smoke lane and record its verdict (step 2b), and use the benchmark UI lane only
+when frontend acceptance is explicitly requested. If this doc disagrees with the code,
+the code wins.
 
 This is a release-only gate, not a commit, push, pull-request, ordinary-merge, or ordinary-CI
-check. Missing model or interactive-QA evidence never blocks a macOS package. Signing,
-notarization, and upload depend on deterministic release-readiness and artifact checks.
+check. Missing model or XCUITest evidence never blocks a macOS package. Signing, notarization, and
+upload depend on deterministic release-readiness and artifact checks.
 
 > For the macOS testing/debugging/profile lanes + the one-command `gate`, see
 > [`macos-testing.md`](macos-testing.md). For the macOS app map + test-driving, see
@@ -30,7 +31,7 @@ notarization, and upload depend on deterministic release-readiness and artifact 
    scripts/macos_test.sh release-readiness
    ```
    The packaging entry point invokes `release-readiness` before signing. It must remain independent
-   of installed models and interactive-QA evidence.
+   of installed models and XCUITest evidence.
 2a. **Optional model-dependent telemetry diagnostic** (never packaging-blocking):
    ```sh
    scripts/macos_test.sh telemetry-overhead
@@ -39,15 +40,27 @@ notarization, and upload depend on deterministic release-readiness and artifact 
    not block signing, notarization, or upload. Its three mode-order rotations, raw PCM/timing
    evidence, verdict, and machine context stay local. It does not publish schema-v2 history because
    instrumenting the `off` lane would invalidate the observer-effect comparison.
-2b. **Standing release-candidate interactive UI QA** (run and record; never packaging-blocking):
-   run the macOS checklist in [`interactive-ui-qa.md`](interactive-ui-qa.md) — agent-driven
-   computer use against `./scripts/build.sh run` — for every release candidate, and record its
-   run ID and per-item verdicts, or a deliberate skip with the reason, in that release's
-   `docs/releases/<version>.md` entry. Screenshot evidence stays untracked under the
-   interactive-QA artifacts tree. A missing or skipped run never blocks signing, notarization,
-   packaging, or upload — recording the skip keeps the omission visible instead of silent.
+2b. **Standing release-candidate UI smoke + optional benchmark** (run and record; never
+   packaging-blocking):
+   ```sh
+   scripts/ui_test.sh macos smoke       # standing per-candidate lane; includes visible model readiness
+   scripts/ui_test.sh macos benchmark   # optional explicit frontend acceptance
+   ```
+   Run the smoke lane for every release candidate and record its run ID and verdict — or a
+   deliberate skip with the reason — in that release's `docs/releases/<version>.md` entry. The
+   lane already writes `run.json` plus a per-run step ledger under the UI-test artifact tree; the
+   release-notes line only references that run ID. A missing or skipped run never blocks signing,
+   notarization, packaging, or upload — recording the skip keeps the omission visible instead of
+   silent.
    If the visible Settings state is incomplete, run `scripts/macos_test.sh models ensure` only as
-   an explicit repair/bootstrap action, then start a fresh QA run.
+   an explicit repair/bootstrap action, then start a fresh smoke run.
+   XCUITest is the sole autonomous macOS app UI driver and targets its configured native test host.
+   Smoke covers sidebar navigation, visible model and clone-reference readiness, one real Custom
+   generation, the completed player, and History. Benchmark owns the configurable
+   Custom/Design/Clone matrix and defaults to exactly 29 takes. Both lanes fail on a new crash;
+   benchmark additionally validates exact telemetry count/order, History, readable WAVs, and
+   audio-QC evidence for every take. On PASS, the benchmark automatically publishes one compact
+   `ui-generation` record; raw `.xcresult`, screenshots, telemetry, and WAVs stay untracked.
 3. **Engine regression net** (when any engine/Sources change since the last green bench):
    ```sh
    # Explicit model-dependent engine QA; repair fixtures only when this optional run is requested.

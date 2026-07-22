@@ -65,7 +65,7 @@ override; shipped production behavior ignores it:
 QVOICE_APP_SUPPORT_DIR=/path/to/custom/app-support
 ```
 
-For physical-device diagnostics, a single safe relative component such as
+For physical-device XCUITest, a single safe relative component such as
 `model-download-acceptance` resolves beneath the app's managed Application Support root. Path
 separators and traversal components are rejected. That managed leaf also receives a stable,
 one-way-digested background-session identity distinct from production; the leaf and any absolute
@@ -137,8 +137,8 @@ block byte-for-byte, so a manifest change cannot silently leave documentation st
 <!-- BEGIN GENERATED BUILD OUTPUT POLICY TABLE -->
 | Path | Owner | Class | Cleanup | Retention |
 | --- | --- | --- | --- | --- |
-| `build/cache/xcode/macos/` | macOS build lanes | `cache` | `aggressive` | Persistent incremental macOS Xcode cache |
-| `build/cache/xcode/ios-device/` | Physical-device iOS build lanes | `cache` | `aggressive` | Persistent incremental physical-device Xcode cache |
+| `build/cache/xcode/macos/` | macOS build and XCUITest lanes | `cache` | `aggressive` | Persistent incremental macOS Xcode cache |
+| `build/cache/xcode/ios-device/` | Physical-device iOS build and XCUITest lanes | `cache` | `aggressive` | Persistent incremental physical-device Xcode cache |
 | `build/cache/xcode/source-packages/` | Serialized Xcode SwiftPM resolver | `cache` | `aggressive` | Shared pinned Xcode package checkout and artifact store |
 | `build/cache/swiftpm/mlx-audio-runtime/` | Owned Vocello Qwen3 Core SwiftPM commands | `cache` | `aggressive` | Persistent package-specific SwiftPM scratch cache |
 | `build/scratch/derived-data/foundation/` | Foundation target compile-safety lane | `scratch` | `routine` | Delete after successful invocation and during routine cleanup |
@@ -151,7 +151,7 @@ block byte-for-byte, so a manifest change cannot silently leave documentation st
 | `build/scratch/derived-data/ci/` | GitHub Actions deterministic compile and archive lanes | `scratch` | `routine` | Ephemeral CI DerivedData |
 | `build/artifacts/macos/` | macOS deterministic, benchmark, and profile validators | `artifact` | `governed` | Retain compact summaries and publication-repair evidence; prune raw evidence only after validation |
 | `build/artifacts/ios/` | Physical-device iOS diagnostics, benchmarks, and profiles | `artifact` | `governed` | Retain compact summaries and publication-repair evidence; prune raw evidence only after validation |
-| `build/artifacts/ui-tests/` | Retired UI-test runner artifacts (read-only; cleanup only) | `artifact` | `prune-ui-results` | Keep policy-selected passing and failure result bundles |
+| `build/artifacts/ui-tests/` | Unified macOS and physical-device XCUITest runner | `artifact` | `prune-ui-results` | Keep policy-selected passing and failure result bundles |
 | `build/artifacts/diagnostics/` | Cross-platform logs, crash deltas, and local diagnostics | `artifact` | `governed` | Validator-owned; preserve unresolved failure and publication-repair evidence |
 | `build/artifacts/project-health/` | Generated project-health inventory and release-readiness diagnostics | `artifact` | `routine` | Local detailed reports are disposable; the compact reproducible snapshot is tracked under docs |
 | `build/artifacts/symbols/macos/` | macOS build and release identity checks | `artifact` | `preserve` | Keep only symbols whose UUIDs match the current macOS app and XPC products |
@@ -198,10 +198,10 @@ outputs, publication-repair evidence, and model stores. `--aggressive` additiona
 persistent compilation/package caches and the public aliases. `--prune-ui-results` and `--dist`
 target only their named class; `--clobber --yes` removes ignored repository-local generated state.
 `./scripts/build.sh clean` delegates to bounded aggressive cleanup rather than deleting the whole
-tree. Model deletion remains a separate explicit `--models` action. UI-result pruning covers the
-retired UI runner's smoke, benchmark, and model-download artifacts: it keeps the latest pass,
-preserves matching benchmark publication-repair evidence, and reduces resolved failures or
-unrepairable unpublished results to small lifecycle summaries. Legacy/malformed or explicitly pinned results stay blocked. A failed
+tree. Model deletion remains a separate explicit `--models` action. UI pruning includes smoke,
+benchmark, and model-download lanes: it keeps the latest pass, preserves matching benchmark
+publication-repair evidence, and reduces resolved failures or unrepairable unpublished results to
+small lifecycle summaries. Legacy/malformed or explicitly pinned results stay blocked. A failed
 profile trace is compacted only after a newer same-kind capture resolves it or through the exact,
 reviewable command `--compact-profile-failure RUN_ID`. An explicit retention pin always wins.
 Compaction keeps the required marker and summary plus at most 8 MiB of allowlisted auxiliary

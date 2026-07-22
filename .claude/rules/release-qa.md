@@ -1,7 +1,7 @@
 # Release / QA domain rule
 
 > Domain rule for build scripts, CI workflow, packaging, signing, notarization,
-> benchmarks, interactive QA policy, crash/profile analysis, and release QA gates.
+> benchmarks, UI smoke, crash/profile analysis, and release QA gates.
 
 ## Boundaries
 
@@ -54,22 +54,21 @@ Before changing scripts or CI, read:
   otherwise use `gh`. User-scoped installation state is not a repository prerequisite.
 - Optional skills may assist with test triage, performance, signing, packaging, or
   telemetry after their instructions are read. Start from script output and generated artifacts.
-- Interactive UI QA is agent-driven computer use (`docs/reference/interactive-ui-qa.md`): macOS
-  directly, iOS through iPhone Mirroring on the paired physical iPhone; iOS engine evidence stays
-  with the pulled on-device telemetry lanes.
+- XCUITest is the sole autonomous app UI driver. It runs against the native macOS app or a paired
+  physical iPhone and provides smoke and benchmark lanes; iOS adds pulled on-device
+  telemetry proof.
 - Development CI is deterministic-only. Commits, pushes, pull requests, and ordinary merges must
-  not wait for models, a paired phone, or interactive QA results.
+  not wait for models, a paired phone, or XCUITest results.
 - Release packaging is deterministic. macOS packaging is subordinate to
   `scripts/macos_test.sh release-readiness`, which requires project-input, build,
   deterministic-test, and crash-delta checks. Model-dependent telemetry remains optional explicit
   QA. iOS archive/TestFlight first binds `scripts/macos_test.sh gate` and the generic physical-
   device SDK compile into the same release ledger, then uses its signing, archive, entitlement,
-  catalog, and artifact verification. Interactive UI QA is optional
-  explicit frontend acceptance and never a signing, notarization, packaging, or upload
-  prerequisite. Exception to "optional" in cadence only: the interactive QA checklist is a
-  standing per-candidate step — run it and record the per-item verdicts (or a deliberate skip) in
-  the release notes; it still never blocks packaging
-  (`docs/reference/macos-release-qa.md` step 2b).
+  catalog, and artifact verification. XCUITest is optional
+  explicit frontend QA and never a signing, notarization, packaging, or upload prerequisite.
+  Exception to "optional" in cadence only: the macOS smoke lane is a standing per-candidate step —
+  run it and record the verdict (or a deliberate skip) in the release notes; it still never blocks
+  packaging (`docs/reference/macos-release-qa.md` step 2b).
 - **Generated-output contract:** `config/build-output-policy.json` owns the persistent caches,
   scratch DerivedData, untracked evidence, current symbols, and distribution outputs. Do not add an
   ad hoc build root or allow an Xcode/SwiftPM invocation to choose its own cache. XcodeBuildMCP
@@ -112,8 +111,12 @@ scripts/macos_test.sh models ensure   # explicit repair/bootstrap only; normal r
 scripts/macos_test.sh gate
 QWENVOICE_GATE_BENCH=1 scripts/macos_test.sh gate   # optional: bounded custom/speed/medium bench + audioQC
 
-# Explicit interactive UI QA (docs/reference/interactive-ui-qa.md); never a packaging prerequisite.
+# Explicit XCUITest evidence; never a packaging prerequisite.
+scripts/ui_test.sh macos smoke
+scripts/ui_test.sh macos benchmark
 scripts/macos_test.sh telemetry-overhead
+python3 scripts/check_macos_xpc_bench.py ~/Library/Application\ Support/QwenVoice-Debug/diagnostics \
+  --run-id macos-xcui-benchmark-YYYYMMDD-HHMMSS
 
 # Language-path verification (optional pre-release; Phases 1–3)
 scripts/macos_test.sh core-test
@@ -126,11 +129,13 @@ scripts/ios_device.sh lang-bench --subset quick --label release-QA   # Phases 2�
 # Phase 3 output (DE/ES/ZH/JA): language-bench.md § Phase 3 prerequisites — Speech Wi‑Fi assets
 # Current acceptance state and resume commands: docs/development-progress.md
 
+scripts/ui_test.sh ios smoke
+scripts/ui_test.sh ios benchmark
 scripts/ios_device.sh gate
 
 # Model fixture helpers
 scripts/macos_test.sh models check|ensure|install
-# Interactive QA reviews iOS model readiness visibly in Settings.
+# XCUITest reviews iOS model readiness visibly in Settings.
 
 # Release packaging
 ./scripts/build.sh release
@@ -195,9 +200,9 @@ scripts/clean_build_caches.sh --compact-profile-failure <run-id> --dry-run
   so every push and package still runs the full suite. Do not widen the skip's scope.
 - **Ordinary CI is deterministic-only.** GitHub CI compiles the `VocelloiOS` app and standalone
   `VocelloiOSLogicTests` bundle with `generic/platform=iOS`, runs macOS deterministic verification,
-  and never executes app-UI automation. Xcode 26 cannot execute the app-host-free tool-hosted
-  policy bundle on a physical-device destination, so it remains compile-only; device runtime proof
-  uses the existing diagnostics lanes. Missing matching iOS Platform Support/runtime
+  and never executes XCUITest. Xcode 26 cannot execute the app-host-free tool-hosted policy bundle
+  on a physical-device destination, so it remains compile-only; device runtime proof uses the
+  existing diagnostics and XCUITest lanes. Missing matching iOS Platform Support/runtime
   availability is classified as a host-toolchain readiness failure before package resolution, not
   as a source, phone, model, or UI failure. Repository automation never downloads that component.
 - **Committed benchmark records ≤256 KB.** Records use a strict privacy allowlist; raw JSONL,
@@ -259,22 +264,20 @@ scripts/clean_build_caches.sh --compact-profile-failure <run-id> --dry-run
   `model_catalog_contract.py validate --require-complete` and explicit post-change delivery evidence
   remain distinct proofs.
 - **Burn-in-safe iOS testing.** Headless generation, profiling, logs, and device diagnostics go
-  through `scripts/ios_device.sh`; physical-device UI acceptance is agent-driven interactive QA
-  through iPhone Mirroring, kept to a handful of generations per session.
-- **macOS real-generation acceptance needs model fixtures.** QA verifies readiness in Settings;
+  through `scripts/ios_device.sh`; physical-device UI acceptance goes through `scripts/ui_test.sh`.
+- **macOS real-generation acceptance needs model fixtures.** XCUITest verifies readiness in Settings;
   run `scripts/macos_test.sh models ensure` only to repair/bootstrap the debug link and clone voice. See [`scripts/lib/test_models.sh`](../../scripts/lib/test_models.sh) and
   [`docs/reference/testing-runbook.md`](../../docs/reference/testing-runbook.md) "Model readiness".
-- **No scripted UI-driver stack.** The XCUITest stack was retired 2026-07-22; the wiring gates
-  fail closed on its artifacts. Interactive QA drives genuine visible controls with vision; do not
-  add coordinate hooks, hidden marker catalogs, scenario configs, or attestation files (all
-  previously retired forms).
+- **Single XCUITest stack.** Keep shared waits, fixtures, evidence export, and benchmark contracts
+  common across the macOS and physical-iPhone targets. Do not add coordinate hooks, hidden marker
+  catalogs, or a second UI driver.
 
 ## Common mistakes
 
 - Adding a Debug configuration or generic `#if DEBUG` behavior fork. Use runtime diagnostics or a
   narrowly named test-target compilation condition instead.
-- Running iOS UI work in the Simulator or expecting ordinary CI to drive the UI. Interactive QA
-  through iPhone Mirroring is explicit frontend acceptance, never an archive/TestFlight or
+- Running iOS UI work in the Simulator or expecting ordinary CI to drive the UI. Use the physical-
+  iPhone XCUITest lanes for explicit frontend acceptance, never as an archive/TestFlight or
   development-publishing prerequisite.
 - Committing raw `.jsonl` telemetry to `benchmarks/`.
 - Editing `benchmarks/HISTORY.md` by hand or treating a failed/incomplete run as publishable.

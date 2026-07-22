@@ -50,7 +50,17 @@
     {
       "id": "ios-model-download-lifecycle",
       "kind": "device-ui",
-      "command": "interactive model-download lifecycle QA on the paired iPhone via iPhone Mirroring (docs/reference/interactive-ui-qa.md; isolated acceptance data root)"
+      "command": "scripts/ui_test.sh ios model-download"
+    },
+    {
+      "id": "macos-ui-benchmark",
+      "kind": "model-ui",
+      "command": "scripts/ui_test.sh macos benchmark"
+    },
+    {
+      "id": "ios-ui-benchmark",
+      "kind": "device-ui",
+      "command": "scripts/ui_test.sh ios benchmark"
     },
     {
       "id": "macos-engine-benchmark",
@@ -129,6 +139,8 @@
         "supply-chain-contract"
       ],
       "qualityEvidence": [
+        "macos-ui-benchmark",
+        "ios-ui-benchmark",
         "macos-engine-benchmark",
         "ios-engine-benchmark"
       ]

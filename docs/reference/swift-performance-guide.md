@@ -331,7 +331,7 @@ The prewarm slot gate in `NativeEngineRuntime` is a project-specific invariant. 
 ## 10. Promotion/release checklist for performance changes
 
 Ordinary development commits, pushes, pull requests, and merges use deterministic verification and
-do not wait for models, a device, or UI-QA evidence. Before promoting or releasing a
+do not wait for models, a device, or XCUITest evidence. Before promoting or releasing a
 Swift performance change, complete the deeper checklist:
 
 - [ ] Build the change optimized (`scripts/release.sh` or `-O` xcodebuild), not just `-Onone`.
@@ -341,9 +341,8 @@ Swift performance change, complete the deeper checklist:
 - [ ] Check for new `swift_retain` / `swift_release` hot spots in Time Profiler.
 - [ ] On iOS, confirm memory stays flat with length and no trims appear.
 - [ ] Run `./scripts/check_project_inputs.sh`.
-- [ ] When explicit frontend acceptance is requested, run the interactive UI QA checklist
-      ([`interactive-ui-qa.md`](interactive-ui-qa.md)). Its absence never blocks promotion or
-      release packaging.
+- [ ] When explicit frontend acceptance is requested, run the isolated UI lane:
+      `scripts/ui_test.sh macos smoke`. Its absence never blocks promotion or release packaging.
 - [ ] For audio-output changes, require clean deterministic QC plus the applicable fixed-seed
       language/prosody gates; optional listening is annotation only.
 

@@ -152,31 +152,29 @@ Deterministic tests are model-free and Simulator-free. Live delivery is an expli
 # isolated macOS/CLI data root
 ./scripts/build.sh cli models install pro_custom_speed \
   --data-dir "$PWD/build/scratch/transient/model-download-acceptance" --verbose
+
+# paired physical iPhone; safe leaf under managed Application Support,
+# never the canonical App Group model tree
+scripts/ui_test.sh ios model-download
 ```
 
-On the paired physical iPhone, delivery lifecycle observation is an opt-in interactive diagnostic:
-run the interactive UI QA checklist ([`interactive-ui-qa.md`](interactive-ui-qa.md)) against the
-visible Settings → Model Downloads controls, observing download, background/relaunch adoption,
-verified installation, and deletion. It is never part of CI, release, or packaging. The retired
-scripted iPhone lifecycle proof (retired 2026-07-22 with the XCUITest stack) used a safe isolated
-leaf under managed Application Support, never the canonical App Group model tree; it backgrounded
-and terminated the app during transfer, relaunched it, required non-regressing adopted progress,
-waited for exact verified installation, and deleted the isolated model through the visible UI.
-Its crash-delta snapshots retained hashes rather than duplicating the device's historical
-diagnostics, and it pulled only bounded model-download summaries into a local untracked result
-artifact.
+The iPhone proof backgrounds and terminates the app during transfer, relaunches it, requires
+non-regressing adopted progress, waits for exact verified installation, and deletes the isolated
+model through the visible UI. It is not part of smoke, benchmark, CI, release, or packaging.
+Crash-delta snapshots retain hashes rather than duplicating the device's historical diagnostics;
+the lane pulls only its bounded model-download summaries into the local untracked result artifact.
 
 The 2026-07-14 isolated Custom Speed acceptance passed on the Mac mini M2 8 GB and physical iPhone
 17 Pro. Both transfers moved the exact 2,312,057,897 expected bytes without retry or duplicate
 payload. Any control-plane traffic in earlier delivery routes was recorded separately and was never
-classified as duplicate model payload. The scripted iPhone lane (since retired) completed its
+classified as duplicate model payload. The iPhone XCUITest completed its
 background/relaunch/install/visible-delete lifecycle in
 81.6 seconds and reported HTTP/2 plus HTTP/1.1 with fair thermal state. This is lifecycle evidence,
 not a performance baseline, and did not change concurrency or range-chunking defaults.
 
-The retired lane also entered canonical Settings before and after the isolated lifecycle and
-required all three production models to remain installed with no visible canonical transfer in
-flight. The debug isolation override accepts only an absolute
+The lane also enters canonical Settings before and after the isolated lifecycle and requires all
+three production models to remain installed with no visible canonical transfer in flight. The
+debug isolation override accepts only an absolute
 diagnostic path or one safe relative leaf; traversal and nested relative paths fail closed. Only
 the managed relative leaf selects a separate app-lifetime background session, and its identifier
 contains a one-way digest rather than the leaf itself. Production and absolute diagnostic roots

@@ -1,16 +1,15 @@
 # Testing runbook
 
 Authority is `Sources/` → `project.yml` → repository scripts → this document. Deterministic checks
-are the routine development, CI, and packaging contract. Interactive UI QA (agent-driven computer
-use, [`interactive-ui-qa.md`](interactive-ui-qa.md)) is the app UI acceptance method and is
-reserved for explicit frontend acceptance; it is advisory and never a gate.
+are the routine development, CI, and packaging contract. XCUITest is the sole autonomous app UI
+driver and is reserved for explicit frontend acceptance.
 
 ## Routine development matrix
 
-| Platform | Required for development/CI/release packaging | Explicit UI acceptance |
+| Platform | Required for development/CI/release packaging | Explicit UI lanes |
 | --- | --- | --- |
-| macOS | `scripts/macos_test.sh test` + `./scripts/build.sh build` | Interactive UI QA checklist against `./scripts/build.sh run` |
-| iOS | `./scripts/check_project_inputs.sh` + `./scripts/build_foundation_targets.sh ios` | Interactive UI QA checklist through iPhone Mirroring on a paired physical iPhone |
+| macOS | `scripts/macos_test.sh test` + `./scripts/build.sh build` | `scripts/ui_test.sh macos smoke|benchmark` |
+| iOS | `./scripts/check_project_inputs.sh` + `./scripts/build_foundation_targets.sh ios` | `scripts/ui_test.sh ios smoke|benchmark` on a paired physical iPhone |
 
 No UI lane, model download, paired phone, or UI result is mandatory for ordinary development
 publishing.
@@ -41,12 +40,15 @@ own a managed scratch/cache root.
 scripts/macos_test.sh test
 ./scripts/build.sh build
 
-# Deterministic/runtime diagnostic; independent of interactive UI QA
+# Deterministic/runtime diagnostic; independent of XCUITest
 scripts/macos_test.sh gate
-```
 
-For explicit frontend acceptance only, run the interactive UI QA checklist
-([`interactive-ui-qa.md`](interactive-ui-qa.md)) against `./scripts/build.sh run`.
+# Explicit frontend acceptance only
+scripts/ui_test.sh macos smoke
+scripts/ui_test.sh macos benchmark
+# Filtered benchmark example
+scripts/ui_test.sh macos benchmark --modes custom --lengths short --warm 1 --label "focused"
+```
 
 ## iOS
 
@@ -54,37 +56,47 @@ For explicit frontend acceptance only, run the interactive UI QA checklist
 ./scripts/check_project_inputs.sh
 ./scripts/build_foundation_targets.sh ios
 
-# Physical-device diagnostics; independent of interactive UI QA
+# Physical-device diagnostics; independent of XCUITest
 scripts/ios_device.sh preflight
 scripts/ios_device.sh gate
+
+# Explicit frontend acceptance only; never Simulator
+scripts/ui_test.sh ios smoke
+scripts/ui_test.sh ios benchmark
+# Filtered benchmark example
+scripts/ui_test.sh ios benchmark --modes custom --lengths short --warm 1 --label "focused"
+
+# Opt-in ~2.3 GB background-session restoration proof; isolated data, genuine Settings controls
+scripts/ui_test.sh ios model-download
 ```
 
-For explicit frontend acceptance only, run the interactive UI QA checklist
-([`interactive-ui-qa.md`](interactive-ui-qa.md)) through iPhone Mirroring on the paired physical
-iPhone; never Simulator. Engine benchmark evidence stays headless via `scripts/ios_device.sh bench`.
+Both benchmark commands accept `--modes`, `--lengths`, `--warm`, and `--label`. Without filters,
+each runs the canonical 29-take matrix. Filtered runs are targeted diagnostics, not substitutes for
+the full matrix when full frontend benchmark acceptance is explicitly requested.
 
-Model-delivery lifecycle observation (download, background/relaunch adoption, install verification,
-and deletion through visible Settings controls) is an opt-in diagnostic, never routine CI or
-release work. See [`model-delivery.md`](model-delivery.md).
+`ios model-download` is not a third routine UI lane. It selects one isolated physical-device test
+directly, backgrounds and relaunches the app during transfer, checks adopted progress, verifies the
+install, and deletes the isolated model through Settings. It never runs in ordinary CI or release.
+See [`model-delivery.md`](model-delivery.md).
 
 ## Model readiness
 
-Interactive UI QA inspects Settings and requires Custom, Design, and Clone Speed to be ready,
-Generate to be enabled, and any required clone voice to exist before a generation is exercised. On
-macOS, use `scripts/macos_test.sh models ensure` or `scripts/macos_test.sh models install` only for
-explicit repair/bootstrap after that visible check fails. On iOS, install or repair models only
-through visible Settings → Model Downloads. Restart the affected QA session after either repair.
+Generation UI tests inspect Settings and require Custom, Design, and Clone Speed to be ready,
+Generate to be enabled, and the benchmark clone voice to exist before a take begins. On macOS,
+use `scripts/macos_test.sh models ensure` or `scripts/macos_test.sh models install` only for explicit
+repair/bootstrap after that visible check fails. On iOS, install or repair models only through
+visible Settings → Model Downloads. Restart the affected UI lane after either repair.
 
 ## Evidence
 
-Interactive UI QA records per-item verdicts and untracked screenshots under
-`build/artifacts/diagnostics/interactive-qa/<run-id>/`. Headless benchmark validators own exact
-take counts/order plus matching telemetry, History/database, readable-WAV, and audio-QC proof, and
-the deterministic runners own app/device identity and crash deltas.
+XCTest assertions, activities, attachments, and `.xcresult` bundles own UI truth. Benchmark
+validators own exact take counts/order plus matching telemetry, History/database, readable-WAV, and
+audio-QC proof. The runner owns app/device identity and crash deltas. Smoke intentionally stops at
+its visible journey, History assertion, and crash check rather than claiming benchmark evidence.
 
 ## Fail-closed orchestration
 
-The macOS gate and release-readiness command and the iOS gate write an
+The macOS gate and release-readiness command, the iOS gate, and every XCUITest lane write an
 untracked `required-steps.json` beside their other run artifacts. The expected steps come from
 `config/orchestration-contract.json`; final PASS is impossible while a required step is failed,
 missing, duplicated, interrupted, or unknown. Optional retention cleanup cannot replace a failed
@@ -125,11 +137,11 @@ an ordinary development gate.
 
 ## CI and release
 
-Ordinary CI builds app targets and runs deterministic checks; interactive UI QA never runs in CI.
+Ordinary CI builds app targets and runs deterministic checks; it neither compiles nor executes the
+isolated UI-test bundles.
 Release packaging uses deterministic build, test, signing, identity, crash, entitlement, and artifact
-checks. Interactive UI QA verdicts may accompany an explicit frontend review, but missing or stale
-UI observations never block signing, notarization, a macOS package, or an iOS archive/TestFlight
-build.
+checks. XCUITest results may accompany an explicit frontend review, but missing or stale UI results
+never block signing, notarization, a macOS package, or an iOS archive/TestFlight build.
 
 ## Artifacts
 

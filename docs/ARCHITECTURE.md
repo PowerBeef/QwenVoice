@@ -38,7 +38,7 @@ not yet distributed.
 ## 1. Module & target dependency graph
 
 The Xcode project is generated from [`project.yml`](../project.yml) (XcodeGen
-2.45.4). There are 11 targets split into **cross-platform frameworks**,
+2.45.4). There are 13 targets split into **cross-platform frameworks**,
 **macOS-only frameworks + XPC service**, and **apps/CLI/tests**.
 
 ```mermaid
@@ -107,28 +107,28 @@ graph.)
 | `VocelloCoreTests` | bundle.unit-test | macOS | `VocelloCoreTests` | `com.qwenvoice.core.tests` | Core semantics, typed telemetry compatibility, and atomic/readable output contracts. |
 | `VocelloiOSLogicTests` | bundle.unit-test | iOS | `VocelloiOSLogicTests` | `com.patricedery.vocello.logic-tests` | Standalone, app-host-free platform policy contracts for catalog/ledger, memory, cancellation, storage gating, and privacy-safe diagnostics. Ordinary CI compiles this bundle for the physical-device SDK. Xcode 26 does not support executing a tool-hosted app-free bundle on a physical-device destination, so it is compile-only. |
 | `VocelloEngineIntegrationTests` | bundle.unit-test | macOS | `VocelloEngineIntegrationTests` | `com.qwenvoice.engine-integration.tests` | Injectable XPC client/transport lifecycle and correlation contracts; never launches frontend UI. |
-
-The scripted XCUITest UI-testing targets were retired 2026-07-22; interactive UI QA is agent-driven
-computer use per [`docs/reference/interactive-ui-qa.md`](reference/interactive-ui-qa.md).
+| `VocelloMacUITests` | bundle.ui-testing | macOS | `VocelloMacUITests` | `com.qwenvoice.app.uitests` | Explicit native-app smoke and benchmark XCUITest lanes. |
+| `VocelloiOSUITests` | bundle.ui-testing | iOS | `VocelloiOSUITests` | `com.patricedery.vocello.uitests` | Explicit paired-physical-iPhone smoke/benchmark lanes plus the isolated opt-in model-delivery lifecycle proof; never Simulator. |
 
 ### Testing lanes (see [`docs/reference/testing-runbook.md`](reference/testing-runbook.md))
 
 | Layer | macOS | iOS | Development publishing policy |
 | --- | --- | --- | --- |
 | **Deterministic verification** | Core + XPC integration + `Qwen3RuntimeTests` + app build | Project-input checks + app and standalone logic-test bundle physical-device SDK compile | Required by ordinary CI; sufficient for commit, push, pull request, and merge |
-| **Platform runtime gate** | `macos_test.sh gate` | `ios_device.sh gate` | Deterministic/device diagnostics; independent of interactive UI QA |
-| **Interactive UI QA** | Agent-driven computer use against the native app ([`interactive-ui-qa.md`](reference/interactive-ui-qa.md)) | Agent-driven computer use through iPhone Mirroring on the paired physical iPhone | Advisory frontend QA only; never CI and never required for publishing or packaging |
-| **Model-delivery lifecycle** | Isolated CLI install | Interactive observation of visible Settings delivery state on the paired physical iPhone | Opt-in diagnostic only; never part of CI or release |
+| **Platform runtime gate** | `macos_test.sh gate` | `ios_device.sh gate` | Deterministic/device diagnostics; independent of XCUITest |
+| **UI regression** | `ui_test.sh macos smoke\|benchmark` XCUITest | `ui_test.sh ios smoke\|benchmark` XCUITest on a paired physical iPhone | Explicit frontend QA only; never required for publishing or packaging |
+| **Model-delivery lifecycle** | Isolated CLI install | `ui_test.sh ios model-download` on a paired physical iPhone | Opt-in diagnostic only; never part of smoke, benchmark, CI, or release |
 | **Headless engine** | `vocello bench`, `lang-bench` | `bench`, `lang-bench` device diagnostics | Explicit performance/release QA |
-| **UI evidence** | Interactive-QA screenshots and per-item verdicts (untracked) | Interactive-QA screenshots and per-item verdicts (untracked) | Independent advisory artifacts |
+| **UI evidence** | Named XCTest attachments from the native app | Named XCTest attachments from the physical iPhone | Independent explicit-acceptance artifacts |
 
 Release packaging is deterministic and does not consume UI results. Frontend evidence remains
 platform-specific and is created only when explicitly requested.
 
-**Four shared schemes**: the two XcodeGen schemes, `QwenVoice` (macOS app + deterministic unit/integration tests) and `VocelloiOS`
-(iOS app), plus the separately rendered `VocelloCLI` and `VocelloiOSLogic` (standalone iOS
+**Six shared schemes**: the four XcodeGen schemes, `QwenVoice` (macOS app + deterministic unit/integration tests), `VocelloiOS`
+(iOS app), `VocelloMacUI` (explicit macOS XCUITest), and `VocelloiOSUI` (explicit physical-device
+iOS XCUITest), plus the separately rendered `VocelloCLI` and `VocelloiOSLogic` (standalone iOS
 policy XCTest) schemes. XcodeGen 2.45.4 cannot directly render those tool and app-host-free test
-schemes, so checked-in templates bind to their generated target IDs. Ordinary CI only
+schemes, so checked-in templates bind to their generated target IDs. The UI schemes are isolated from ordinary test actions; ordinary CI only
 compiles `VocelloiOSLogic` for the generic device SDK and never executes it. A single shippable config,
 **`Release`**, is the only config — there is no `Debug` config or generic `DEBUG` symbol.
 
@@ -827,10 +827,10 @@ HTTPS; **no cloud inference**. iOS catalog validation: `scripts/check_ios_catalo
 install: `vocello models install <id>` (CLI) or the app Settings UI. Full lifecycle and storage
 contract: [`reference/model-delivery.md`](reference/model-delivery.md).
 
-**macOS test fixtures:** debug launches with `QWENVOICE_DEBUG=1` (including interactive UI QA
-sessions) read `QwenVoice-Debug/models`; `scripts/macos_test.sh models ensure` symlinks that path
-to the canonical `QwenVoice/models` store. See
-[`reference/testing-runbook.md`](reference/testing-runbook.md) "Model readiness"
+**macOS test fixtures:** UI smoke and bench lanes with `QWENVOICE_DEBUG=1` read
+`QwenVoice-Debug/models`; the test driver symlinks that path to the canonical
+`QwenVoice/models` store. See [`reference/testing-runbook.md`](reference/testing-runbook.md)
+"Model readiness"
 and [`scripts/lib/test_models.sh`](../scripts/lib/test_models.sh).
 
 ---
@@ -1016,7 +1016,7 @@ Most-frequent imports across `Sources/**/*.swift`:
 
 ## 17. Related documents
 
-- [`development-progress.md`](development-progress.md) — active checkpoint: deterministic development status, interactive UI QA posture, and the agent resume route.
+- [`development-progress.md`](development-progress.md) — active checkpoint: deterministic development status, the completed XCUITest stack, and the agent resume route.
 - [`project-map.html`](project-map.html) — canonical interactive project map: product features, build graph, runtime flows, source ownership, dependencies, contracts, and Codex routes.
 - [`CLAUDE.md`](../CLAUDE.md) — repo operating manual: build, conventions, engine invariants, dependency pinning, release/QA.
 - [`README.md`](../README.md) — product overview + install.

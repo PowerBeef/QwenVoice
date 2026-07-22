@@ -1217,7 +1217,7 @@ table.matrix .note {
       <li>macOS: SwiftUI → QwenVoiceNative → XPC EngineServiceHost → MLXTTSEngine.</li>
       <li>iOS: SwiftUI → in-process TTSEngineStore → MLXTTSEngine; physical-device testing only.</li>
       <li>CLI: vocello → CLIRuntime → MLXTTSEngine; built from source and not bundled in the DMG.</li>
-      <li>Sources/ and project.yml outrank documentation. Deterministic scripts govern development and release packaging; interactive UI QA (agent-driven computer use) is explicit advisory frontend acceptance only.</li>
+      <li>Sources/ and project.yml outrank documentation. Deterministic scripts govern development and release packaging; XCUITest smoke and benchmark lanes are explicit frontend acceptance only.</li>
       <li>Successful benchmarks publish privacy-safe records for the Mac mini Mac14,3 (M2, 8 GB) or iPhone18,1; raw telemetry, audio, screenshots, traces, and result bundles remain untracked.</li>
     </ul>
   </section>
@@ -1362,7 +1362,7 @@ table.matrix .note {
         <div class="mark"></div>
         <div>
           <h4>iOS = physical device only</h4>
-          <p>Gates never use Simulator. Interactive UI QA drives the paired physical iPhone through iPhone Mirroring.</p>
+          <p>Gates never use Simulator. XCUITest drives the paired physical iPhone.</p>
         </div>
       </div>
     </div>
@@ -1508,7 +1508,7 @@ table.matrix .note {
     <h2 class="section-title">Scripts, tests &amp; CI</h2>
     <p class="section-lede">
       Development is Claude Code + scripts-first; optional MCP tools assist only when callable.
-      Native builds are the typecheck. Commits, pushes, pull requests, ordinary merges, CI, and release packaging use deterministic checks only. Interactive UI QA (agent-driven computer use) is explicit advisory frontend acceptance work.
+      Native builds are the typecheck. Commits, pushes, pull requests, ordinary merges, CI, and release packaging use deterministic checks only. XCUITest smoke and benchmark lanes are explicit frontend acceptance work.
     </p>
 
     <div class="tool-tabs" id="toolTabs" role="tablist" aria-label="Build, test, release, and agent workflow categories"></div>
@@ -1528,7 +1528,7 @@ scripts/macos_test.sh test
       </article>
     </div>
     <p class="section-lede" style="margin-top:16px">
-      The interactive UI QA checklists remain available for explicit frontend acceptance. They
+      XCUITest smoke and benchmark lanes remain available for explicit frontend acceptance. They
       never block signing, notarization, archive creation, or artifact upload.
     </p>
   </section>
@@ -1959,10 +1959,12 @@ scripts/macos_test.sh test
       "children":[{"name":"Sources/VocelloQwen3Core/","desc":"Typed model-bundle, request-local sampling/memory, shipping engine lease, bounded epoch-bound Clone handles, classified session, terminal, cancellation, finalization, and diagnostic facade; product generation is actor-owned while load/prewarm and conditioning adoption remain quarantined behind VocelloQwen3LegacyCompatibility SPI"},{"name":"Package.swift","desc":"Exact MLX, MLXLM, and Hugging Face dependencies"}]
     },
     {
-      "name":"Tests/","plat":"macOS + physical-device iOS","desc":"Core/output/telemetry tests and macOS XPC integration; interactive UI QA is agent-driven and lives outside the test tree.",
+      "name":"Tests/","plat":"macOS + physical-device iOS","desc":"Core/output/telemetry tests, macOS XPC integration, and explicit UI automation.",
       "children":[
         {"name":"VocelloCoreTests/","desc":"Language, schema-v8 memory/coverage compatibility, sampler/QC, and atomic WAV tests"},
         {"name":"VocelloEngineIntegrationTests/","desc":"Injectable XPC lifecycle and correlation tests"},
+        {"name":"UIAutomationSupport/","desc":"Shared waits, fixtures, queries, and evidence helpers"},
+        {"name":"VocelloMacUITests/ · VocelloiOSUITests/","desc":"Explicit smoke and benchmark XCUITest lanes"},
         {"name":"VocelloiOSLogicTests/","desc":"App-host-free iOS catalog, ledger, memory, cancellation, storage-gate, and diagnostic policy tests; generic device-SDK compile in CI"}
       ]
     },
@@ -1972,6 +1974,7 @@ scripts/macos_test.sh test
         {"name":"build-output-policy.json · build_output_policy.py","desc":"Machine-readable cache/scratch/artifact/dist ownership, inventory, validation, and migration"},
         {"name":"generate_cli_scheme.py · generate_ios_logic_scheme.py","desc":"Two deterministic post-XcodeGen schemes for the CLI tool and app-host-free iOS policy tests"},
         {"name":"macos_test.sh","desc":"macOS deterministic test/gate, exact-PID profile, and retained-memory router"},
+        {"name":"ui_test.sh","desc":"Unified explicit XCUITest smoke and benchmark entry point"},
         {"name":"clean_build_caches.sh","desc":"Policy-bounded routine/aggressive/UI/dist/external/clobber cleanup"},
         {"name":"benchmark_history.py","desc":"Validate/publish privacy-safe records and reproduce HISTORY.md"},
         {"name":"backend-risk-spine.json","desc":"Tracked backend report-risk contract"},
@@ -2033,7 +2036,7 @@ scripts/macos_test.sh test
     {"name":"GitHub Actions / Releases","role":"Deterministic CI, security analysis, verified candidate/SBOM/provenance, and draft-last release publication","boundary":"UI acceptance remains explicit and local"},
     {"name":"Apple Developer services","role":"Developer ID signing, notarytool, App Store Connect, optional TestFlight","boundary":"Secrets stay in CI or local keychains"},
     {"name":"Xcode iOS Platform Support","role":"Makes generic/platform=iOS and physical-device destinations eligible","boundary":"Read-only preflight; repository cleanup never removes or downloads components, and no Simulator execution is authorized"},
-    {"name":"CoreDevice and paired iPhone","role":"Physical-device install, launch, diagnostics, interactive UI QA over iPhone Mirroring, and profiling","boundary":"Simulator is prohibited"},
+    {"name":"CoreDevice and paired iPhone","role":"Physical-device install, launch, diagnostics, XCUITest, and profiling","boundary":"Simulator is prohibited"},
     {"name":"Vercel","role":"Marketing-site deployment from website/","boundary":"Separate from native app runtime"},
     {"name":"On-device Speech assets","role":"Locale-locked language-output verification","boundary":"Some locales require Wi-Fi asset download"}
   ],
@@ -2050,7 +2053,8 @@ scripts/macos_test.sh test
     "macOS test":[
       {"cmd":"scripts/macos_test.sh models ensure","desc":"Explicit repair/bootstrap for real-engine Speed model fixtures"},
       {"cmd":"scripts/macos_test.sh test","desc":"Core, XPC transport, and owned Qwen3 runtime tests; no frontend driving"},
-      {"cmd":"Interactive UI QA checklist (macOS)","desc":"Agent-driven computer use against ./scripts/build.sh run: navigation, visible readiness, generation, cancellation, and screenshots (advisory)"},
+      {"cmd":"scripts/ui_test.sh macos smoke","desc":"Native-app navigation, visible readiness, one Custom generation, player, History, and screenshots"},
+      {"cmd":"scripts/ui_test.sh macos benchmark","desc":"Full 29-take UI matrix with complete app/XPC/engine evidence and PASS-only history"},
       {"cmd":"scripts/macos_test.sh telemetry-overhead","desc":"Local-only three-rotation PCM and RTF/TTFC observer-effect diagnostic"},
       {"cmd":"scripts/macos_test.sh profile --kind memory [--keep-trace]","desc":"Exact-PID memory profile; compact summary by default, raw trace opt-in"},
       {"cmd":"scripts/macos_test.sh memory","desc":"Custom→Design→Clone retained-memory policy qualification"},
@@ -2058,7 +2062,8 @@ scripts/macos_test.sh test
     ],
     "iOS device":[
       {"cmd":"scripts/ios_device.sh preflight","desc":"Paired-device, signing, state, app, and dSYM readiness"},
-      {"cmd":"Interactive UI QA checklist (iOS)","desc":"Agent-driven computer use through iPhone Mirroring on the paired physical iPhone: navigation, readiness, generation, and cancellation (advisory)"},
+      {"cmd":"scripts/ui_test.sh ios smoke","desc":"Physical-iPhone semantic, accessibility, generation, and screenshot assertions"},
+      {"cmd":"scripts/ui_test.sh ios benchmark","desc":"Physical-iPhone full UI matrix with run-scoped app/engine evidence"},
       {"cmd":"scripts/ios_device.sh lang-bench|profile|crashes","desc":"Headless language, exact-PID profiling, and crash evidence"},
       {"cmd":"scripts/ios_device.sh memory --voice-id ID","desc":"One-process nine-take retained-memory qualification"},
       {"cmd":"scripts/ios_device.sh clone-conditioning","desc":"Compile-gated local proof of transcript-backed versus genuine x-vector-only clone conditioning"},
@@ -2086,9 +2091,9 @@ scripts/macos_test.sh test
       {"cmd":".claude/settings.json","desc":"Project tool permissions; MCP servers (XcodeBuildMCP, Axiom, sosumi) are user-scoped"},
       {"cmd":"Optional Axiom / docs MCP","desc":"Read selected skill instructions completely before acting; never a packaging prerequisite"},
       {"cmd":"Optional shared XcodeBuildMCP","desc":"When installed and callable, one server for macOS and physical-device iOS profiles; repository scripts remain authoritative"},
-      {"cmd":"Interactive UI QA (docs/reference/interactive-ui-qa.md)","desc":"Agent-driven computer use is the app UI acceptance method; iOS requires the paired physical phone via iPhone Mirroring"},
+      {"cmd":"scripts/ui_test.sh macos|ios smoke|benchmark","desc":"Sole autonomous app UI stack; iOS requires the paired physical phone"},
       {"cmd":"scripts/macos_test.sh release-readiness","desc":"Project-input check, exact app build, deterministic tests, and crash delta before packaging"},
-      {"cmd":"Git publishing","desc":"Commit, push, pull request, and ordinary merge never require models, devices, or UI-QA observations"},
+      {"cmd":"Git publishing","desc":"Commit, push, pull request, and ordinary merge never require models, devices, or XCUITest results"},
       {"cmd":"GitHub integration / gh fallback","desc":"Use connector-backed repository context when callable; use gh for Actions logs or local branch gaps"},
       {"cmd":"Physical-device invariant","desc":"Do not use simulator-oriented skills or simulator MCP tools for Vocello iOS"}
     ]
@@ -2148,7 +2153,7 @@ scripts/macos_test.sh test
   ],
   "invariants": [
     "project.yml is the only project-manifest source; never hand-edit project.pbxproj",
-    "iOS real-engine work and UI QA use a paired physical device, never Simulator",
+    "iOS real-engine work and UI tests use a paired physical device, never Simulator",
     "mlx-swift and mlx-swift-lm pins move together after benchmark review",
     "macOS event draining stays off MainActor; expected XPC retirement is not an error",
     "Typed cancellation awaits the active task terminal barrier before ownership release; cancelled results never persist",
@@ -2164,8 +2169,8 @@ scripts/macos_test.sh test
     "Benchmark history is PASS-only; HISTORY.md is generated and raw evidence stays untracked",
     "Memory-qualified history requires telemetry v8, evidence v2, at least 95% sampler coverage, and no critical pressure or memory exit",
     "macOS app plus engine memory is uptime-aligned; independent process peaks are never added",
-    "Interactive UI QA (agent-driven computer use) observes only genuine visible controls; no hidden test markers or coordinate bridge",
-    "Interactive UI QA is advisory explicit acceptance, never CI or a packaging prerequisite",
+    "XCUITest is the sole autonomous app UI driver; no hidden UI-test markers or coordinate bridge",
+    "Smoke and benchmark are independent explicit acceptance lanes",
     "Batch generation stays absent from iOS unless a device-proven sequential streaming design replaces it"
   ]
 }

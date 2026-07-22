@@ -253,7 +253,7 @@ voice identity, then through an exact purpose-owned audio copy with no sidecar a
 identity. The compile-gated runner requires `transcript_backed` and `x_vector_only` runtime flags,
 distinct prompt-assembly digests, exact output/telemetry evidence, and cleanup of the temporary
 audio-only copy. This local acceptance command does not publish benchmark history and does not
-replace interactive UI QA for the visible saved-voice workflow.
+replace the XCUITest UI path for the visible saved-voice workflow.
 
 ---
 

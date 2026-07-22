@@ -55,11 +55,11 @@ Before changing iOS UI or behavior, read:
 - Use authoritative Apple documentation (docs MCP when callable) for current framework APIs. Use a
   GitHub integration when callable, otherwise `gh`, for repository context; scripts remain the test
   interface.
-- **Interactive iOS UI QA is agent-driven computer use through iPhone Mirroring** on the paired
-  physical iPhone, per `docs/reference/interactive-ui-qa.md` — run only on explicit request or as
-  the recorded release-candidate checklist. Missing device, UI, or model evidence never blocks a
-  commit, push, pull request, ordinary merge, or ordinary CI. Never add a Simulator route or a
-  scripted UI-driver stack; the wiring gates fail closed on the retired artifacts.
+- **XCUITest owns iOS UI.** It runs only on the paired physical iPhone. Run smoke and
+  benchmark lanes only for explicitly requested frontend acceptance.
+  Missing device, UI, or model evidence never blocks a commit, push, pull request, ordinary merge,
+  or ordinary CI. Never add a Simulator route, alternate UI driver, or coordinate table. The
+  computer-use MCP is dev-environment-assistive only and never drives the app UI.
 - iOS owns on-device capture, frontend/engine correlation, transport, memory-warning, MetricKit,
   and platform-pressure evidence. Typed field semantics remain backend-owned and schema/publication
   changes require release/QA review.
@@ -70,22 +70,24 @@ Before changing iOS UI or behavior, read:
 # Ordinary development (app + policy-test bundle compile only; no device/UI prerequisite)
 ./scripts/build_foundation_targets.sh ios
 
-# Explicit frontend acceptance only: agent-driven computer-use QA through
-# iPhone Mirroring (docs/reference/interactive-ui-qa.md). Never use Simulator.
+# Explicit frontend acceptance only. Never use Simulator.
 scripts/ios_device.sh preflight
+# XCUITest verifies all Speed tiers visibly in Settings before generation.
+scripts/ui_test.sh ios smoke
+scripts/ui_test.sh ios benchmark
 scripts/ios_device.sh gate            # deterministic physical-device/runtime proof
 ```
 
 ## Invariants (do not regress)
 
-- **All iOS runtime work is on-device only.** The MLX engine runs in-process on Metal. Interactive
-  UI QA runs through iPhone Mirroring; scripts handle the device and telemetry. The generic
+- **All iOS runtime work is on-device only.** The MLX engine runs in-process on Metal. XCUITest
+  drives the paired physical iPhone; scripts handle the device and telemetry. The generic
   physical-device SDK compile (app plus standalone policy-test bundle) is the sole no-phone iOS
   development lane. It still requires the selected Xcode's matching iOS Platform Support/runtime
   component; `scripts/lib/ios_platform_preflight.py check` verifies that external toolchain state
   without running a Simulator. Xcode 26 cannot execute its app-host-free, tool-hosted XCTest bundle on a
   physical-device destination, so the policy target is compile-only; runtime proof uses the
-  existing headless diagnostics lanes.
+  existing headless diagnostics and XCUITest lanes.
 - **Typed cancellation barrier.** The in-process `MLXTTSEngine` conforms to
   `ActiveGenerationCancellable`. iOS forwards user and memory-pressure reasons, awaits the active
   task's terminal barrier before trim/unload or ownership release, and treats `.cancelled` as a
@@ -107,9 +109,9 @@ scripts/ios_device.sh gate            # deterministic physical-device/runtime pr
   (`.withoutCloneEncoders`) depending on the entitled memory limit.
 - **`accessibilityIdentifier`s are stable.** Values like `voicesRow_*`, `textInput_*`,
   `studioChip_*` must survive refactors.
-- **No hidden test UI.** QA observes genuine visible controls. Do not add preview routes,
-  invisible state markers, onboarding bypasses, seeded UI text, or generic `#if DEBUG` app
-  behavior.
+- **No hidden test UI.** XCUITest observes genuine visible controls. Put test-only code in the UI
+  test target; do not add preview routes, invisible state markers, onboarding bypasses, seeded UI
+  text, or generic `#if DEBUG` app behavior.
 
 ## Common mistakes
 

@@ -186,6 +186,60 @@
           }
         ]
       }
+    },
+    "ui-ios-benchmark": {
+      "producer": "scripts/ui_test.sh",
+      "requiredSteps": [
+        "source-provenance",
+        "crash-baseline",
+        "xcuitest",
+        "crash-delta",
+        "benchmark-validation",
+        "history-publication"
+      ],
+      "optionalSteps": ["result-retention"]
+    },
+    "ui-ios-model-download": {
+      "producer": "scripts/ui_test.sh",
+      "requiredSteps": [
+        "source-provenance",
+        "crash-baseline",
+        "xcuitest",
+        "model-download-diagnostics",
+        "crash-delta"
+      ],
+      "optionalSteps": ["result-retention"]
+    },
+    "ui-ios-smoke": {
+      "producer": "scripts/ui_test.sh",
+      "requiredSteps": [
+        "source-provenance",
+        "crash-baseline",
+        "xcuitest",
+        "crash-delta",
+        "smoke-diagnostics"
+      ],
+      "optionalSteps": ["result-retention"]
+    },
+    "ui-macos-benchmark": {
+      "producer": "scripts/ui_test.sh",
+      "requiredSteps": [
+        "source-provenance",
+        "xcuitest",
+        "crash-delta",
+        "benchmark-validation",
+        "history-publication"
+      ],
+      "optionalSteps": ["result-retention"]
+    },
+    "ui-macos-smoke": {
+      "producer": "scripts/ui_test.sh",
+      "requiredSteps": [
+        "source-provenance",
+        "xcuitest",
+        "crash-delta"
+      ],
+      "optionalSteps": ["result-retention"]
     }
   }
 }

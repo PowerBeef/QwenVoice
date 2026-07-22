@@ -12,7 +12,7 @@ automation and coding agents use the additional durable instructions in [`CLAUDE
 - Check existing [issues](https://github.com/PowerBeef/QwenVoice/issues) and pull requests before starting overlapping work.
 - Keep changes focused. Do not mix unrelated refactors into a bug fix or feature.
 
-Models, a physical iPhone, and interactive UI QA are not required for ordinary source changes. They are needed only for the explicit model or frontend acceptance lane being exercised.
+Models, a physical iPhone, and UI automation are not required for ordinary source changes. They are needed only for the explicit model or frontend acceptance lane being exercised.
 
 ## Build and verify
 
@@ -32,13 +32,15 @@ The Xcode project is generated from [`project.yml`](project.yml). Never edit `Qw
 
 ## Platform and UI rules
 
-- macOS and iOS application UI acceptance is interactive UI QA: an agent drives the genuine app
-  with computer use per [`docs/reference/interactive-ui-qa.md`](docs/reference/interactive-ui-qa.md).
-- iOS runtime and UI work uses a paired physical iPhone (via iPhone Mirroring for UI QA).
-  Simulator is not supported for Vocello.
-- Interactive UI QA is advisory and runs only when frontend acceptance is explicitly needed: run
-  the interactive UI QA checklist ([`docs/reference/interactive-ui-qa.md`](docs/reference/interactive-ui-qa.md)).
-  It is never a CI step or a packaging prerequisite.
+- macOS and iOS application UI acceptance uses XCUITest only.
+- iOS runtime and UI work uses a paired physical iPhone. Simulator is not supported for Vocello.
+- UI suites run only when frontend acceptance is explicitly needed:
+
+```sh
+scripts/ui_test.sh macos smoke
+scripts/ui_test.sh ios smoke
+```
+
 - Preserve stable accessibility identifiers on real visible controls.
 - Do not add hidden test routes, seeded production UI, invisible markers, fixed-coordinate actions, or fixed sleeps.
 

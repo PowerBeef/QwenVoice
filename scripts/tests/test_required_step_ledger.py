@@ -42,8 +42,8 @@ class RequiredStepLedgerTests(unittest.TestCase):
     def write_fixture_contract(path: Path) -> None:
         """A synthetic workflow with optional steps for tool-semantics tests.
 
-        The production contract retired its optional-step UI workflows, so
-        these tests own their fixture instead of borrowing a real lane.
+        Tool-semantics tests own their fixture instead of borrowing a real
+        production lane, so contract workflow changes never break them.
         """
         payload = {
             "schemaVersion": 1,

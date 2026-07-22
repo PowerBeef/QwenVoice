@@ -41,6 +41,7 @@ Before changing macOS app or XPC code, read:
   - `scripts/macos_test.sh profile [--kind cpu|memory] [--keep-trace] [spec]`
   - `scripts/macos_test.sh memory [--label ID]` (fixed retained-memory qualification)
   - `scripts/macos_test.sh models check|ensure|install`
+  - `scripts/ui_test.sh macos smoke|benchmark`
   - `./scripts/regenerate_project.sh` after `project.yml` changes
 - When an XcodeBuildMCP server is installed and callable, use the one shared route for optional
   macOS project discovery, build, run, and debug: call `session_show_defaults`, select the `macos`
@@ -53,11 +54,11 @@ Before changing macOS app or XPC code, read:
   through `.claude/rules/release-qa.md`.
 - Use authoritative Apple documentation (docs MCP when callable) where current framework behavior
   matters, and a GitHub integration or `gh` for repository/CI context.
-- Interactive macOS UI QA is agent-driven computer use against `./scripts/build.sh run`, per
-  `docs/reference/interactive-ui-qa.md` — run only on explicit request or as the recorded
-  release-candidate checklist. Missing UI evidence never blocks committing, pushing, opening a
-  pull request, merging, ordinary CI, or release packaging. Do not reintroduce a scripted
-  UI-driver stack or Simulator lane.
+- XCUITest is the sole autonomous macOS app UI driver. Run the smoke and benchmark lanes
+  only for explicitly requested frontend acceptance. Missing UI evidence never blocks committing,
+  pushing, opening a pull request, merging, ordinary CI, or release packaging. The computer-use MCP
+  is dev-environment-assistive only (Xcode GUI, Instruments, system dialogs) and never drives
+  Vocello's UI.
 - macOS owns app/XPC capture, uptime alignment, transport, and platform-pressure evidence. Typed
   field semantics remain backend-owned and schema/publication changes require release/QA review.
 
@@ -75,8 +76,9 @@ scripts/macos_test.sh test
 # This symlinks QwenVoice-Debug/models → the canonical store; restart the UI lane afterward.
 scripts/macos_test.sh models ensure
 
-# Explicit frontend acceptance only: agent-driven computer-use QA against
-# ./scripts/build.sh run (docs/reference/interactive-ui-qa.md).
+# Explicit frontend acceptance only:
+scripts/ui_test.sh macos smoke
+scripts/ui_test.sh macos benchmark
 scripts/macos_test.sh gate            # deterministic macOS platform gate
 
 # XPC lifecycle / crash isolation is included in the deterministic test and gate lanes.
@@ -102,8 +104,9 @@ scripts/macos_test.sh gate            # deterministic macOS platform gate
 - **No color-only signal.** Mode colors pair with icon, label, or position cue.
 - **`accessibilityIdentifier`s are stable.** Values like `voicesRow_*`, `textInput_*`,
   `studioChip_*` must survive refactors.
-- **No hidden test UI.** QA observes genuine visible controls. Do not add invisible state markers,
-  seeded app state, or generic `#if DEBUG` app behavior.
+- **No hidden test UI.** XCUITest observes genuine visible controls. Put test-only code in the UI
+  test target; do not add invisible state markers, seeded app state, or generic `#if DEBUG` app
+  behavior.
 - **App sandbox disabled.** `Sources/QwenVoice.entitlements` keeps sandbox off for MLX; do not
   re-enable it.
 - **Do not sum unrelated memory peaks.** New memory-qualified macOS benchmark evidence pairs app

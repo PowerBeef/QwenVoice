@@ -3,7 +3,7 @@ name: CI
 # Pre-merge CI for Vocello (QwenVoice).
 #
 # iOS: compile the app and standalone pure-logic XCTest bundle against the physical-device SDK.
-# Neither bundle executes in ordinary CI; interactive UI QA remains explicit local work.
+# Neither bundle executes in ordinary CI; XCUITest remains explicit local work.
 #
 # Ordinary CI remains UI-free: project inputs, macOS Core/XPC/runtime tests, and compile checks.
 #

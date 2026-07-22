@@ -110,15 +110,12 @@ never trigger prompts.
 5. Reading the TCC database from a terminal needs Full Disk Access for that
    terminal; the doctor degrades gracefully without it.
 
-## Interactive UI QA setup (separate from mic/speech TCC)
+## XCUITest setup (separate from mic/speech TCC)
 
-macOS frontend acceptance is interactive UI QA: an agent drives the genuine app launched with
-`./scripts/build.sh run` using computer use (see
-[`interactive-ui-qa.md`](interactive-ui-qa.md)). The agent's screenshot/control tooling has its own
-host-level permissions, granted to the agent environment by the operator; these concerns are
-distinct from the application's microphone and speech permissions above. System permission (TCC)
-dialogs that appear during a QA session are always answered by the human operator, never by the
-agent.
+macOS frontend acceptance runs from the `VocelloMacUITests` target under Xcode's test runner.
+Configure its signing and test destination through the project and repository test script. XCTest
+screenshots need no separate screen-capture plugin route. These concerns are distinct from the
+application's microphone and speech permissions above.
 
 ## Virtual microphone (registered debug knob)
 
@@ -127,16 +124,15 @@ agent.
 the path points at a readable audio file, `ReferenceClipRecorder` simulates capture: elapsed time
 and level-meter values come from the clip's real amplitude envelope, auto-stop fires at clip end or
 the 20 s cap, and stop-and-save delivers a copy of the clip — so the record→review→enroll flow runs
-end to end with no input hardware and no mic TCC prompt. The interactive recording QA checklist
-uses this knob with a synthesized speech-like clip; the flow it drives is the genuine visible
-recording sheet, and it cancels at the review stage unless an operator is present — accepting a
-clip starts transcript auto-fill, whose speech-recognition TCC dialog only a human may answer
-(see "Manual testing / TCC caveat").
+end to end with no input hardware and no mic TCC prompt. The recording XCUITest journey uses this
+knob with a synthesized speech-like clip; the flow it drives is the genuine visible recording sheet,
+and it deliberately cancels at the review stage — accepting a clip starts transcript auto-fill,
+whose speech-recognition TCC dialog only a human may answer (see "Manual testing / TCC caveat").
 Inert in production: the knob is ignored without the master gate, which Finder launches never set.
 
 ## Manual testing / TCC caveat
 
-TCC permission dialogs require a **human** to answer; an interactive QA session must pause before
-a permission-sensitive scenario when the grant is absent and let the operator settle the dialog. After a permission reset, answer the prompt and
+TCC permission dialogs require a **human** to answer; UI tests must stop before a permission-
+sensitive scenario when the grant is absent. After a permission reset, answer the prompt and
 verify the outcome with `scripts/permissions_doctor.sh` (or the TCC query). With stable dev signing
 this is now a once-per-machine event rather than an every-rebuild hazard.
