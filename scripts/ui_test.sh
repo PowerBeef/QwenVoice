@@ -191,10 +191,14 @@ export_attachments() {
 }
 
 # Advisory only: an undecided mic/speech TCC grant means macOS can raise a
-# system-modal permission dialog mid-run, which blocks every UI-test click.
-# Warn so the operator settles the grant once (docs/reference/macos-permissions.md);
-# never blocks the lane. Degrades gracefully when the terminal lacks Full Disk
-# Access to read the TCC database.
+# system permission dialog mid-run. Warn so the operator settles the grant once
+# (docs/reference/macos-permissions.md); never blocks the lane. Degrades
+# gracefully when the terminal lacks Full Disk Access to read the TCC database.
+# Known limitation: this checks row EXISTENCE for the bundle id only — TCC keys
+# grants to bundle id + code identity, and the lane's ad-hoc-signed app may not
+# match an existing row, so a prompt can still appear despite a decided row.
+# That path is only reachable when the virtual-microphone fixture is broken;
+# the smoke suite asserts the fixture explicitly.
 mac_ui_preflight() {
   local tcc_db="$HOME/Library/Application Support/com.apple.TCC/TCC.db"
   local svc rows
@@ -206,7 +210,7 @@ mac_ui_preflight() {
       continue
     fi
     if [[ -z "$rows" ]]; then
-      warn "ui-preflight: no $svc decision recorded for com.qwenvoice.app — a system permission dialog may appear mid-run and block UI tests; settle it once (docs/reference/macos-permissions.md)"
+      warn "ui-preflight: no $svc decision recorded for com.qwenvoice.app — a system permission dialog may appear mid-run; settle it once (docs/reference/macos-permissions.md). Note: an existing row keyed to a different code identity can still prompt for the ad-hoc lane build."
     fi
   done
   return 0

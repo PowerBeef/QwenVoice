@@ -48,6 +48,14 @@ the recurring permission pain.
   ("codesign wants to sign…") — choose **Always Allow**.
 - Switching ad-hoc → certificate leaves stale TCC rows behind; reset once:
   `scripts/permissions_doctor.sh --reset-tcc` (then grant on next launch).
+- **UI-lane builds are ad-hoc signed** (`scripts/ui_test.sh` builds with
+  `CODE_SIGN_IDENTITY="-"`), so they never match the dev identity's TCC grant: any *real*
+  microphone request from a lane-built app prompts fresh, and answering it re-keys the row to that
+  build's throwaway identity (the next real-mic use of the dev-signed app may then prompt once —
+  grant it; stable signing keeps it). In practice lane builds only reach the real-mic path when the
+  virtual-microphone fixture is broken, which the smoke suite asserts explicitly. The lane's
+  advisory `ui-preflight` checks TCC row existence per bundle id and cannot see this identity
+  mismatch.
 
 ## Permission map (which process touches what)
 
