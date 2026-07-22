@@ -3,9 +3,9 @@
   "native": {
     "xcode": {"version": "26.6", "versionCommand": ["xcodebuild", "-version"]},
     "swift": {"version": "6.3.3", "versionCommand": ["swift", "--version"]},
-    "xcodegen": {"version": "2.45.4", "versionCommand": ["xcodegen", "--version"]},
+    "xcodegen": {"version": "2.46.0", "versionCommand": ["xcodegen", "--version"]},
     "xcbeautify": {"version": "3.2.1", "versionCommand": ["xcbeautify", "--version"]},
-    "ripgrep": {"version": "15.1.0", "versionCommand": ["rg", "--version"]},
+    "ripgrep": {"version": "15.2.0", "versionCommand": ["rg", "--version"]},
     "shellcheck": {"version": "0.11.0", "versionCommand": ["shellcheck", "--version"]},
     "numpy": {"version": "2.5.1", "versionCommand": ["brew", "list", "--versions", "numpy"]}
   },

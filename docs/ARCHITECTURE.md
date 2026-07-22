@@ -38,7 +38,7 @@ not yet distributed.
 ## 1. Module & target dependency graph
 
 The Xcode project is generated from [`project.yml`](../project.yml) (XcodeGen
-2.45.4). There are 13 targets split into **cross-platform frameworks**,
+2.46.0). There are 13 targets split into **cross-platform frameworks**,
 **macOS-only frameworks + XPC service**, and **apps/CLI/tests**.
 
 ```mermaid
