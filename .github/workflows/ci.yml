@@ -24,8 +24,63 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Cheap path router: computes which surfaces changed so heavy macos-26 jobs
+  # skip for docs-only pushes. The local commit-gate hook still runs the
+  # documentation/link contracts on every commit, and any native change
+  # re-runs the full suite here. `ci-required` aggregates results (skipped
+  # counts as pass) and is the single branch-protection context.
+  changes:
+    name: Change routing
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      native: ${{ steps.classify.outputs.native }}
+      website: ${{ steps.classify.outputs.website }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+
+      - name: Classify changed paths
+        id: classify
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          native=true
+          website=true
+          changed=""
+          if [[ "$EVENT_NAME" == "pull_request" && -n "$BASE_REF" ]]; then
+            git fetch --quiet origin "$BASE_REF"
+            changed="$(git diff --name-only "origin/$BASE_REF...HEAD")"
+          elif [[ "$EVENT_NAME" == "push" && -n "$BEFORE_SHA"               && "$BEFORE_SHA" != "0000000000000000000000000000000000000000"               && "$(git cat-file -t "$BEFORE_SHA" 2>/dev/null || true)" == "commit" ]]; then
+            changed="$(git diff --name-only "$BEFORE_SHA..$HEAD_SHA")"
+          fi
+          if [[ -n "$changed" ]]; then
+            native=false
+            website=false
+            while IFS= read -r path; do
+              case "$path" in
+                Sources/*|Tests/*|Packages/*|config/*|scripts/*|benchmarks/*|project.yml|QwenVoice.xcodeproj/*|.github/*|Package.resolved)
+                  native=true ;;
+              esac
+              case "$path" in
+                website/*) website=true ;;
+              esac
+            done <<<"$changed"
+          fi
+          echo "native=$native" >>"$GITHUB_OUTPUT"
+          echo "website=$website" >>"$GITHUB_OUTPUT"
+          echo "routing: native=$native website=$website (empty diff ⇒ run everything)"
+
   ios-compile-check:
     name: iOS compile check (device SDK)
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
     runs-on: macos-26
     timeout-minutes: 30
     steps:
@@ -111,6 +166,8 @@ jobs:
 
   macos-deterministic-tests:
     name: macOS deterministic tests
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
     runs-on: macos-26
     timeout-minutes: 60
     steps:
@@ -135,6 +192,14 @@ jobs:
           python3 -c 'import numpy; print(numpy.__version__)'
           python3 scripts/supply_chain_contract.py --installed native
 
+      - name: Cache SwiftPM dependencies
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: build/cache/xcode/source-packages
+          key: spm-macos-tests-${{ runner.os }}-xcode26-${{ hashFiles('QwenVoice.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            spm-macos-tests-${{ runner.os }}-xcode26-
+
       - name: Regenerate Xcode project
         run: ./scripts/regenerate_project.sh
 
@@ -155,6 +220,8 @@ jobs:
 
   website-deterministic:
     name: Website deterministic checks
+    needs: changes
+    if: needs.changes.outputs.website == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -179,3 +246,22 @@ jobs:
 
       - name: Lint, test, and build website
         run: npm --prefix website run check
+
+  ci-required:
+    name: CI required
+    needs: [changes, ios-compile-check, macos-deterministic-tests, website-deterministic]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Aggregate required results
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          echo "$RESULTS"
+          if printf '%s' "$RESULTS" | grep -Eq '"result": *"(failure|cancelled)"'; then
+            echo "::error::a required CI job failed or was cancelled"
+            exit 1
+          fi
+          echo "all required jobs succeeded or were skipped by path routing"
