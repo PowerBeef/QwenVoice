@@ -114,6 +114,21 @@ Review when: source manifest or benchmark record changes.
 - [`benchmarks/HISTORY.md`](../benchmarks/HISTORY.md)
 - [`docs/project-health.md`](../docs/project-health.md)
 
+## Imported research corpus (point-in-time)
+
+Status: **historical** · Owner: **backend-mlx** · Audience: maintainers.
+
+Authority: external research snapshots counter-verified 2026-07-22; superseded figures carry inline editor's notes; contract JSON remains status authority.
+
+Review when: runtime refactor phase changes; canonical benchmark supersession.
+
+- [`docs/research/README.md`](../docs/research/README.md)
+- [`docs/research/audio-quality-review-system-2026-07-16.md`](../docs/research/audio-quality-review-system-2026-07-16.md)
+- [`docs/research/exhaustive-project-review-2026-07-16.md`](../docs/research/exhaustive-project-review-2026-07-16.md)
+- [`docs/research/performance-deep-dive-2026-07-17.md`](../docs/research/performance-deep-dive-2026-07-17.md)
+- [`docs/research/qwen3tts-leverage-assessment-2026-07-16.md`](../docs/research/qwen3tts-leverage-assessment-2026-07-16.md)
+- [`docs/research/refactor-blueprint-2026-07-17.md`](../docs/research/refactor-blueprint-2026-07-17.md)
+
 ## Historical evidence
 
 Status: **historical** · Owner: **archive** · Audience: research and provenance review.

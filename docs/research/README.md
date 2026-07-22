@@ -1,0 +1,33 @@
+# Research corpus (imported point-in-time snapshots)
+
+The five documents in this directory are the research bundle that shaped the staged backend
+runtime convergence program (`config/runtime-refactor-contract.json`). They were authored
+externally on 2026-07-16/17 against `main` at `079757ab` and imported into the repository on
+2026-07-22 so that corrections, review history, and provenance stay tracked next to the work
+they direct.
+
+| Document | Role |
+| --- | --- |
+| [`refactor-blueprint-2026-07-17.md`](refactor-blueprint-2026-07-17.md) | Master plan: the R0–R9 performance/streaming/quality refactor program the contract phases realize |
+| [`performance-deep-dive-2026-07-17.md`](performance-deep-dive-2026-07-17.md) | Performance evidence review and optimization roadmap |
+| [`qwen3tts-leverage-assessment-2026-07-16.md`](qwen3tts-leverage-assessment-2026-07-16.md) | External Qwen3-TTS research bundle: what to adopt, adapt, or reject |
+| [`audio-quality-review-system-2026-07-16.md`](audio-quality-review-system-2026-07-16.md) | Autonomous audio-quality review system reference |
+| [`exhaustive-project-review-2026-07-16.md`](exhaustive-project-review-2026-07-16.md) | Whole-project review; its P0/P1 findings (H-01, H-02) are fixed on `main` |
+
+## Verification status
+
+The 2026-07-22 backend refactor review counter-verified ~90 claims from this corpus against
+the tree, the benchmark registry, pinned Hugging Face artifacts, MLX sources, and the cited
+external papers. Outcome: **zero fabricated citations, zero invented numbers, zero wrong
+mechanisms, zero outright factual errors.** Every external citation is genuine and fairly
+characterized. The corpus's one systematic defect is that measured figures are not
+date-stamped, and several were superseded by later canonical evidence — most importantly the
+macOS RTF picture, which fell sub-realtime in the 2026-07-20 post-Phase-4-cutover canonical
+matrix. Those sites now carry inline **Editor's note (2026-07-22)** blocks; the notes are the
+current reading, the surrounding text is the historical snapshot.
+
+These documents are research input, not status authority. Current phase status lives in
+[`config/runtime-refactor-contract.json`](../../config/runtime-refactor-contract.json);
+current performance evidence lives in the canonical records under
+[`benchmarks/runs/`](../../benchmarks/runs/) and
+[`benchmarks/OPTIMIZATION.md`](../../benchmarks/OPTIMIZATION.md).
