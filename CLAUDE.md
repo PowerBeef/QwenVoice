@@ -89,10 +89,16 @@ or in a machine-readable contract named by one of those surfaces.
 ```sh
 ./scripts/regenerate_project.sh      # if project.yml changed
 python3 scripts/refresh_derived_artifacts.py refresh   # if owned-runtime/docs/catalog inputs changed
-./scripts/check_project_inputs.sh
+QVOICE_GATES=quick ./scripts/check_project_inputs.sh   # fast loop (see below)
 ./scripts/build.sh build             # macOS compile check
 ./scripts/build_foundation_targets.sh ios   # iOS app + pure policy-test bundle compile safety
 ```
+
+**Fast iteration:** `QVOICE_GATES=quick` skips only the ~75 s script self-test suite, and only
+while nothing under `scripts/` or `config/` has pending changes — the surfaces those tests cover.
+Every wiring, privacy, link, and contract scan still runs, so a quick pass is commit-sufficient
+for changes outside `scripts/`/`config/`. Ordinary CI and release lanes never set it and always
+run the full suite. Batch gate runs: verify once at the end of a change set, not after every edit.
 
 **Verify:** exit 0 (build is the typecheck; no formatter/linter).
 The iOS compile requires the selected Xcode's matching iOS component even though it needs no phone

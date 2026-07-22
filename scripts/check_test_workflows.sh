@@ -599,6 +599,15 @@ out="$(git grep -nE '/Users/[A-Za-z0-9._-]+/' -- ':!scripts/check_test_workflows
 
 python3 scripts/validate_backend_risk_spine.py
 
+# Script self-tests validate the gate/tooling scripts themselves (~75 s).
+# QVOICE_GATES=quick may skip them ONLY while nothing under scripts/ or
+# config/ has pending changes — the fast wiring/privacy/contract scans above
+# always run. Default (unset) behavior is unchanged; ordinary CI and release
+# lanes never set this and therefore always run the full suite.
+if [[ "${QVOICE_GATES:-}" == "quick" ]] \
+    && [[ -z "$(git status --porcelain -- scripts config 2>/dev/null)" ]]; then
+  echo "==> quick gate mode: scripts/config unchanged — skipping script self-tests" >&2
+else
 python3 -m unittest \
   scripts.tests.test_build_output_policy \
   scripts.tests.test_codex_session_storage \
@@ -640,5 +649,6 @@ python3 -m unittest \
   scripts.test_check_language_output \
   scripts.test_device_state_classifier \
   scripts.test_validate_backend_risk_spine
+fi
 
 echo "==> XCUITest workflow consistency check passed" >&2

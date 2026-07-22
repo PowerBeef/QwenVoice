@@ -101,6 +101,7 @@ Before changing scripts or CI, read:
 ```sh
 # Ordinary development / CI (no model, device, or UI prerequisite)
 ./scripts/check_project_inputs.sh
+QVOICE_GATES=quick ./scripts/check_project_inputs.sh   # local fast loop: self-tests skipped only while scripts/ + config/ are untouched
 scripts/macos_test.sh test
 ./scripts/build.sh build
 ./scripts/build_foundation_targets.sh ios
@@ -194,6 +195,9 @@ scripts/clean_build_caches.sh --compact-profile-failure <run-id> --dry-run
   checked-in templates to generated target IDs because XcodeGen 2.45.4 cannot render those schemes.
 - **Developer ID signing + notarization.** macOS release uses Developer ID Application cert,
   hardened runtime, and `notarytool` stapling. CI uses App Store Connect API key auth.
+- **Gate quick mode is local-only.** `QVOICE_GATES=quick` may skip the script self-test suite
+  only while `scripts/` and `config/` have no pending changes; CI and release lanes never set it,
+  so every push and package still runs the full suite. Do not widen the skip's scope.
 - **Ordinary CI is deterministic-only.** GitHub CI compiles the `VocelloiOS` app and standalone
   `VocelloiOSLogicTests` bundle with `generic/platform=iOS`, runs macOS deterministic verification,
   and never executes XCUITest. Xcode 26 cannot execute the app-host-free tool-hosted policy bundle
