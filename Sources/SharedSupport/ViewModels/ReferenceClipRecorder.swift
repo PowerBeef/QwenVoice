@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import QwenVoiceCore
 
 /// Records a 10–20 s reference clip as a 24 kHz mono Int16 PCM WAV for Voice Cloning enrollment,
 /// exposing a live amplitude history that drives the level meters on both platforms (iOS
@@ -34,7 +35,24 @@ final class ReferenceClipRecorder: NSObject, ObservableObject {
     /// true on iPhone; on a Mac without a microphone the record UI should
     /// disable capture and explain instead of failing silently.
     static var hasAvailableInputDevice: Bool {
+        if virtualMicrophoneURL != nil { return true }
         return AVCaptureDevice.default(for: .audio) != nil
+    }
+
+    /// Registered debug-knob virtual microphone for machines without an input
+    /// device: when the master runtime gate is enabled and
+    /// `QWENVOICE_FAKE_MIC_WAV` points at a readable audio file, `start()`
+    /// simulates capture — elapsed time and meter levels come from the clip's
+    /// real amplitude envelope — and `stopAndSave()` delivers a copy of the
+    /// clip, so the record→review→enroll flow runs end-to-end with no input
+    /// hardware and no mic TCC prompt. Inert in production: the knob is
+    /// registered in `config/runtime-debug-knobs.json` and ignored unless
+    /// `QWENVOICE_DEBUG` enables the master gate.
+    static var virtualMicrophoneURL: URL? {
+        guard let path = RuntimeDebugGate.value(for: "QWENVOICE_FAKE_MIC_WAV"),
+              !path.isEmpty else { return nil }
+        let url = URL(fileURLWithPath: path)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
     /// ~80 ms/sample × 48 ≈ a 3.8 s scrolling window.
@@ -43,6 +61,8 @@ final class ReferenceClipRecorder: NSObject, ObservableObject {
     private var recorder: AVAudioRecorder?
     private var meteringTimer: Timer?
     private var startedAt: Date?
+    /// Active virtual-microphone session (see `virtualMicrophoneURL`).
+    private var virtualSource: (url: URL, duration: Double, envelope: [Double])?
     #if os(iOS)
     private var interruptionObserver: NSObjectProtocol?
     #endif
@@ -62,6 +82,10 @@ final class ReferenceClipRecorder: NSObject, ObservableObject {
     /// app becomes active again so a grant made in System Settings clears the
     /// denied UI without a relaunch.
     func refreshPermissionState() {
+        guard Self.virtualMicrophoneURL == nil else {
+            permissionDenied = false
+            return
+        }
         switch AVAudioApplication.shared.recordPermission {
         case .granted:
             permissionDenied = false
@@ -75,6 +99,7 @@ final class ReferenceClipRecorder: NSObject, ObservableObject {
     }
 
     func requestPermissionIfNeeded() async {
+        guard Self.virtualMicrophoneURL == nil else { return }
         switch AVAudioApplication.shared.recordPermission {
         case .undetermined:
             _ = await AVAudioApplication.requestRecordPermission()
@@ -90,6 +115,11 @@ final class ReferenceClipRecorder: NSObject, ObservableObject {
 
     func start() async {
         guard !isRecording else { return }
+
+        if let virtualURL = Self.virtualMicrophoneURL {
+            startVirtualCapture(from: virtualURL)
+            return
+        }
 
         switch AVAudioApplication.shared.recordPermission {
         case .denied:
@@ -195,6 +225,21 @@ final class ReferenceClipRecorder: NSObject, ObservableObject {
 
     @discardableResult
     func stopAndSave() -> URL? {
+        if let virtualSource {
+            meteringTimer?.invalidate()
+            meteringTimer = nil
+            isRecording = false
+            let dest = makeOutputURL()
+            do {
+                try? FileManager.default.removeItem(at: dest)
+                try FileManager.default.copyItem(at: virtualSource.url, to: dest)
+                lastSavedURL = dest
+                return dest
+            } catch {
+                recordingFailed = true
+                return nil
+            }
+        }
         guard let recorder else { return nil }
         recorder.stop()
         meteringTimer?.invalidate()
@@ -209,6 +254,15 @@ final class ReferenceClipRecorder: NSObject, ObservableObject {
     }
 
     func stopWithoutSaving() {
+        if virtualSource != nil {
+            // Mirror the real path: the in-progress/saved file is discarded
+            // (callers stash a copy before dismissal, exactly like the
+            // hardware flow).
+            if let lastSavedURL {
+                try? FileManager.default.removeItem(at: lastSavedURL)
+            }
+            virtualSource = nil
+        }
         recorder?.stop()
         if let url = recorder?.url {
             try? FileManager.default.removeItem(at: url)
@@ -243,7 +297,74 @@ final class ReferenceClipRecorder: NSObject, ObservableObject {
         }
     }
 
+    /// Begin a simulated capture session driven by the virtual-microphone
+    /// clip: same published-state lifecycle as the hardware path, with meter
+    /// levels read from the clip's amplitude envelope so the UI stays honest.
+    private func startVirtualCapture(from url: URL) {
+        guard let file = try? AVAudioFile(forReading: url) else {
+            recordingFailed = true
+            return
+        }
+        let sampleRate = max(file.fileFormat.sampleRate, 1)
+        let duration = Double(file.length) / sampleRate
+        let envelope = Self.amplitudeEnvelope(of: file, windowSeconds: 0.08)
+        virtualSource = (url, duration, envelope)
+        isRecording = true
+        recordingFailed = false
+        wasInterrupted = false
+        startedAt = Date()
+        elapsed = 0
+        amplitude = 0
+        levels = []
+        startMetering()
+    }
+
+    /// RMS per `windowSeconds` window across the whole file, mapped to the
+    /// same 0…1 visual range the dBFS metering path produces.
+    private static func amplitudeEnvelope(of file: AVAudioFile, windowSeconds: Double) -> [Double] {
+        let format = file.processingFormat
+        let windowFrames = AVAudioFrameCount(max(1, format.sampleRate * windowSeconds))
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: windowFrames) else {
+            return []
+        }
+        var envelope: [Double] = []
+        file.framePosition = 0
+        while file.framePosition < file.length {
+            buffer.frameLength = 0
+            guard (try? file.read(into: buffer, frameCount: windowFrames)) != nil,
+                  buffer.frameLength > 0,
+                  let channel = buffer.floatChannelData?[0] else { break }
+            var sum: Double = 0
+            for i in 0..<Int(buffer.frameLength) {
+                let sample = Double(channel[i])
+                sum += sample * sample
+            }
+            let rms = (sum / Double(buffer.frameLength)).squareRoot()
+            // Speech RMS sits around 0.05–0.3; scale + soft gamma so the bars
+            // move through most of the meter's range like live input does.
+            envelope.append(min(1.0, pow(rms * 4.0, 0.8)))
+        }
+        return envelope
+    }
+
     private func tickMeter() {
+        if let virtualSource {
+            guard let startedAt else { return }
+            elapsed = Date().timeIntervalSince(startedAt)
+            let index = Int(elapsed / 0.08)
+            amplitude = index < virtualSource.envelope.count
+                ? virtualSource.envelope[index]
+                : 0
+            levels.append(amplitude)
+            if levels.count > maxLevels {
+                levels.removeFirst(levels.count - maxLevels)
+            }
+            if elapsed >= min(virtualSource.duration, Self.maxDuration + 0.4) {
+                // Clip exhausted or hardware cap reached; auto-stop and keep it.
+                _ = stopAndSave()
+            }
+            return
+        }
         guard let recorder, let startedAt else { return }
         recorder.updateMeters()
         // averagePower is in dBFS (-160 ... 0). Map to 0...1 with light

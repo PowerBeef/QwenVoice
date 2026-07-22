@@ -215,7 +215,11 @@ if errors:
     raise SystemExit("\n".join(errors))
 PY
 
-hidden_hook_pattern='HiddenAccessibilityMarker|QWENVOICE_UI_TEST_HOOKS|QWENVOICE_FAKE_MIC_WAV|QVOICE_IOS_SKIP_ONBOARDING|QVOICE_IOS_TEST_CUSTOM_TEXT|screenPresenceMarker|MacUITestSurfaceMarkers|IOSStudioBenchHooks|IOSPreviewRuntime|IOSPreviewCaptureBridge|QVOICE_PREVIEW_|mainWindow_(?:ready|activeScreen|disabledSidebarItems|lastGenerationComplete|lastTelemetryFlushed|composeReady)|iosStudio_(?:lastGenerationComplete|generationError|benchClearScript)'
+# QWENVOICE_FAKE_MIC_WAV left this list 2026-07-22 by explicit maintainer
+# decision: it is now a registered input-substitution knob in
+# config/runtime-debug-knobs.json (master-gated), feeding the genuine visible
+# recording flow rather than hiding test UI.
+hidden_hook_pattern='HiddenAccessibilityMarker|QWENVOICE_UI_TEST_HOOKS|QVOICE_IOS_SKIP_ONBOARDING|QVOICE_IOS_TEST_CUSTOM_TEXT|screenPresenceMarker|MacUITestSurfaceMarkers|IOSStudioBenchHooks|IOSPreviewRuntime|IOSPreviewCaptureBridge|QVOICE_PREVIEW_|mainWindow_(?:ready|activeScreen|disabledSidebarItems|lastGenerationComplete|lastTelemetryFlushed|composeReady)|iosStudio_(?:lastGenerationComplete|generationError|benchClearScript)'
 out="$(rg -n "$hidden_hook_pattern" Sources Tests scripts docs project.yml \
   --glob '!scripts/check_test_workflows.sh' 2>/dev/null || true)"
 [[ -z "$out" ]] || fail "hidden UI-test marker/hook returned; assert real visible state instead:\n$out"

@@ -114,6 +114,7 @@ struct RecordReferenceClipSheet: View {
                 )
                 .frame(height: 64)
                 .opacity(recorder.isRecording ? 1 : (recorder.elapsed > 0 ? 0.8 : 0.4))
+                .accessibilityIdentifier("recordClip_levelMeter")
 
                 Text(statusLabel)
                     .font(.callout)
