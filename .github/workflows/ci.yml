@@ -98,7 +98,11 @@ jobs:
 
       - name: Install deterministic tooling
         run: |
-          brew install xcodegen xcbeautify ripgrep shellcheck numpy
+          brew install xcbeautify shellcheck numpy
+          # xcodegen + ripgrep are SHA-pinned release artifacts (mixed runner
+          # image pools make brew's formula index nondeterministic mid-roll).
+          ./scripts/install_pinned_tools.sh
+          export PATH="$HOME/.qwenvoice-pinned-tools/bin:$PATH"
           xcodegen --version
           xcbeautify --version
           rg --version
@@ -184,7 +188,11 @@ jobs:
 
       - name: Install deterministic tooling
         run: |
-          brew install xcodegen xcbeautify ripgrep shellcheck numpy
+          brew install xcbeautify shellcheck numpy
+          # xcodegen + ripgrep are SHA-pinned release artifacts (mixed runner
+          # image pools make brew's formula index nondeterministic mid-roll).
+          ./scripts/install_pinned_tools.sh
+          export PATH="$HOME/.qwenvoice-pinned-tools/bin:$PATH"
           xcodegen --version
           xcbeautify --version
           rg --version

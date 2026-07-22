@@ -185,8 +185,10 @@ def validate(root: Path, installed: str | None = None) -> list[str]:
     else:
         if "runner: macos-26" not in codeql:
             errors.append("Swift CodeQL must retain the macos-26 ARM runner")
-        if "arch -arm64 /opt/homebrew/bin/brew install xcodegen xcbeautify ripgrep shellcheck numpy" not in codeql:
+        if "arch -arm64 /opt/homebrew/bin/brew install xcbeautify shellcheck numpy" not in codeql:
             errors.append("Swift CodeQL tooling must invoke ARM Homebrew explicitly on the macos-26 runner")
+        if "./scripts/install_pinned_tools.sh" not in codeql:
+            errors.append("Swift CodeQL must install SHA-pinned xcodegen/ripgrep release artifacts")
         if "xcodebuild -downloadComponent metalToolchain" not in codeql:
             errors.append("Swift CodeQL must install Xcode 26's optional Metal Toolchain when absent")
         if "xcrun metal --version" not in codeql:

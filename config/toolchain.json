@@ -9,6 +9,20 @@
     "shellcheck": {"version": "0.11.0", "versionCommand": ["shellcheck", "--version"]},
     "numpy": {"version": "2.5.1", "versionCommand": ["brew", "list", "--versions", "numpy"]}
   },
+  "artifactPins": {
+    "xcodegen": {
+      "version": "2.46.0",
+      "url": "https://github.com/yonaskolb/XcodeGen/releases/download/2.46.0/xcodegen.zip",
+      "sha256": "4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806",
+      "archivePath": "xcodegen/bin/xcodegen"
+    },
+    "ripgrep": {
+      "version": "15.2.0",
+      "url": "https://github.com/BurntSushi/ripgrep/releases/download/15.2.0/ripgrep-15.2.0-aarch64-apple-darwin.tar.gz",
+      "sha256": "3750b2e93f37e0c692657da574d7019a101c0084da05a790c83fd335bad973e4",
+      "archivePath": "ripgrep-15.2.0-aarch64-apple-darwin/rg"
+    }
+  },
   "release": {
     "gh": {"version": "2.95.0", "versionCommand": ["gh", "--version"]}
   },

@@ -59,7 +59,8 @@ jobs:
     steps:
       - name: Select and validate native toolchain
         run: |
-          arch -arm64 /opt/homebrew/bin/brew install xcodegen xcbeautify ripgrep shellcheck numpy
+          arch -arm64 /opt/homebrew/bin/brew install xcbeautify shellcheck numpy
+          ./scripts/install_pinned_tools.sh
           if ! xcrun metal --version >/dev/null 2>&1; then
             xcodebuild -downloadComponent metalToolchain
           fi
@@ -284,12 +285,19 @@ jobs:
         text = path.read_text(encoding="utf-8")
         path.write_text(
             text.replace(
-                "arch -arm64 /opt/homebrew/bin/brew install xcodegen xcbeautify ripgrep shellcheck numpy",
-                "brew install xcodegen xcbeautify ripgrep shellcheck numpy",
+                "arch -arm64 /opt/homebrew/bin/brew install xcbeautify shellcheck numpy",
+                "brew install xcbeautify shellcheck numpy",
             ),
             encoding="utf-8",
         )
         self.assertTrue(any("ARM Homebrew" in value for value in module.validate(self.root)))
+        path.write_text(
+            text.replace("./scripts/install_pinned_tools.sh", "echo skip-pinned-tools"),
+            encoding="utf-8",
+        )
+        self.assertTrue(
+            any("SHA-pinned xcodegen/ripgrep" in value for value in module.validate(self.root))
+        )
         path.write_text(text.replace("runner: macos-26", "runner: macos-15"), encoding="utf-8")
         self.assertTrue(any("macos-26 ARM runner" in value for value in module.validate(self.root)))
 

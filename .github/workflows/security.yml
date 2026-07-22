@@ -121,7 +121,11 @@ jobs:
           # CodeQL's tracing shell currently runs through Rosetta on the ARM
           # macos-26 image. Invoke the ARM Homebrew binary explicitly so its
           # architecture guard does not reject the otherwise native runner.
-          arch -arm64 /opt/homebrew/bin/brew install xcodegen xcbeautify ripgrep shellcheck numpy
+          arch -arm64 /opt/homebrew/bin/brew install xcbeautify shellcheck numpy
+          # xcodegen + ripgrep are SHA-pinned release artifacts (mixed runner
+          # image pools make brew's formula index nondeterministic mid-roll).
+          ./scripts/install_pinned_tools.sh
+          export PATH="$HOME/.qwenvoice-pinned-tools/bin:$PATH"
           # Xcode 26 ships Metal as an optional component, and GitHub's fresh
           # macos-26 images do not consistently include it. MLX compiles Metal
           # sources, so install the component before CodeQL starts tracing.
