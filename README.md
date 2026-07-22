@@ -94,7 +94,7 @@ Storage locations and deletion behavior are documented in [`docs/reference/priva
 
 | | |
 | --- | --- |
-| ![Vocello Studio running on iPhone](docs/screenshots/vocello-ios-studio.png) | The iPhone app uses the same local Qwen3-TTS and MLX foundation with an iPhone-specific in-process runtime. It provides Custom Voice, Voice Design, Voice Cloning, recording and Files import, local history, and the memory-conscious Speed models. On-device generation, physical-iPhone XCUITest, and an optional signed archive/TestFlight lane are implemented. A fresh full multilingual physical-iPhone run passed all 19 hint/QC and 18 output gates with policy-accepted warnings; its exploratory record is excluded from clean performance trends. Public distribution still requires the maintainer-owned App Store Connect release process. |
+| ![Vocello Studio running on iPhone](docs/screenshots/vocello-ios-studio.png) | The iPhone app uses the same local Qwen3-TTS and MLX foundation with an iPhone-specific in-process runtime. It provides Custom Voice, Voice Design, Voice Cloning, recording and Files import, local history, and the memory-conscious Speed models. On-device generation, agent-driven interactive UI QA over iPhone Mirroring, and an optional signed archive/TestFlight lane are implemented. A fresh full multilingual physical-iPhone run passed all 19 hint/QC and 18 output gates with policy-accepted warnings; its exploratory record is excluded from clean performance trends. Public distribution still requires the maintainer-owned App Store Connect release process. |
 
 Current implementation and acceptance status: [`docs/development-progress.md`](docs/development-progress.md).
 
@@ -136,12 +136,13 @@ scripts/macos_test.sh test
 The iOS command compiles both the app and its standalone, app-host-free platform-policy XCTest
 bundle for the physical-device SDK. It does not execute tests or require a connected phone. Xcode
 26 does not support executing a tool-hosted, app-host-free XCTest bundle on a physical-device
-destination, so this bundle is compile-only; physical runtime and UI acceptance use the explicit
-device diagnostics and XCUITest lanes. The selected Xcode must still have matching iOS Platform
+destination, so this bundle is compile-only; physical runtime proof uses the explicit device
+diagnostics lanes, and UI acceptance uses the interactive UI QA checklist
+([`docs/reference/interactive-ui-qa.md`](docs/reference/interactive-ui-qa.md)). The selected Xcode must still have matching iOS Platform
 Support/runtime availability for `generic/platform=iOS`; the repository checks this before package
 resolution and never downloads or runs a Simulator component automatically.
 
-These checks are sufficient for normal commits, pull requests, and merges. XCUITest is explicit frontend acceptance: native macOS or a paired physical iPhone, never Simulator. Models, a phone, and UI evidence are not prerequisites for sharing development work.
+These checks are sufficient for normal commits, pull requests, and merges. Interactive UI QA (agent-driven computer use, [`docs/reference/interactive-ui-qa.md`](docs/reference/interactive-ui-qa.md)) is explicit frontend acceptance: native macOS directly, or the paired physical iPhone through iPhone Mirroring, never Simulator. Models, a phone, and UI evidence are not prerequisites for sharing development work.
 
 Start with [`CONTRIBUTING.md`](CONTRIBUTING.md) for the human contribution flow. Maintainers and
 Coding agents should also read [`CLAUDE.md`](CLAUDE.md). Deeper references:

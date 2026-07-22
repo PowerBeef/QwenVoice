@@ -34,7 +34,6 @@ class BuildRoutingContractTests(unittest.TestCase):
             "scripts/build_foundation_targets.sh",
             "scripts/macos_test.sh",
             "scripts/ios_device.sh",
-            "scripts/ui_test.sh",
             "scripts/release.sh",
         ):
             with self.subTest(relative=relative):
@@ -66,7 +65,6 @@ class BuildRoutingContractTests(unittest.TestCase):
             "scripts/build.sh",
             "scripts/build_foundation_targets.sh",
             "scripts/macos_test.sh",
-            "scripts/ui_test.sh",
             "scripts/release.sh",
         ):
             with self.subTest(relative=relative):
@@ -190,8 +188,6 @@ class BuildRoutingContractTests(unittest.TestCase):
             "release": [("$SCHEME", "$CONFIGURATION", "platform=macOS,arch=arm64")],
             "macos-test": [("QwenVoice", "Release", "platform=macOS,arch=arm64")],
             "ios-device": [("VocelloiOS", "Release", "generic/platform=iOS")],
-            "ui-macos": [("VocelloMacUI", "Release", "platform=macOS,arch=arm64")],
-            "ui-ios": [("VocelloiOSUI", "Release", "generic/platform=iOS")],
         }
         self.assertEqual(calls, expected)
 
@@ -209,10 +205,6 @@ class BuildRoutingContractTests(unittest.TestCase):
         main = foundation[foundation.index('case "$MODE" in', foundation.index("build_ios()")) :]
         self.assertLess(main.index("require_ios_xcode_platform"), main.index("prepare_paths"))
         self.assertLess(main.index("require_ios_xcode_platform"), main.index("build_macos"))
-
-        ui = self.text("scripts/ui_test.sh")
-        self.assertLess(ui.index("require_ios_xcode_platform"), ui.index('require_build_free_space "ui-$lane"'))
-        self.assertLess(ui.index("require_ios_xcode_platform"), ui.index("ensure_spm_resolved"))
 
         device = self.text("scripts/ios_device.sh")
         build_start = device.index("cmd_build() {")
@@ -322,16 +314,6 @@ class BuildRoutingContractTests(unittest.TestCase):
         self.assertLess(late_xctrace_index, launch_index)
         self.assertEqual(profile.count('xctrace_dev="$(resolve_xctrace_device "$dev")"'), 2)
 
-    def test_ui_lifecycle_metadata_is_atomic_and_failure_aware(self) -> None:
-        text = self.text("scripts/ui_test.sh")
-        for token in (
-            "write_run_metadata running",
-            "write_run_metadata failed",
-            "write_run_metadata passed",
-            "os.replace(temporary, path)",
-        ):
-            self.assertIn(token, text)
-
     def test_heavy_lanes_fail_fast_through_the_storage_contract(self) -> None:
         cache = self.text("scripts/lib/build_cache.sh")
         self.assertIn("require_build_free_space()", cache)
@@ -341,7 +323,6 @@ class BuildRoutingContractTests(unittest.TestCase):
             "scripts/build_foundation_targets.sh": (
                 "require_build_free_space foundation-compile",
             ),
-            "scripts/ui_test.sh": ('require_build_free_space "ui-$lane"',),
             "scripts/macos_test.sh": (
                 "require_build_free_space language-benchmark",
                 "require_build_free_space memory-qualification",

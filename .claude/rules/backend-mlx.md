@@ -54,7 +54,7 @@ Before changing anything in this layer, read:
   canonical macOS/iOS caches and the dedicated owned-runtime SwiftPM scratch path, but must not create
   another DerivedData root or a `.build` directory below `Packages/VocelloQwen3Core/`. Route policy
   changes through `.claude/rules/release-qa.md`.
-- XCUITest is the sole autonomous app UI driver. Smoke and benchmark UI lanes are explicit
+- Interactive UI QA is agent-driven computer use (`docs/reference/interactive-ui-qa.md`), explicit
   frontend acceptance only and never a prerequisite for a commit, push, pull request, ordinary
   merge, ordinary CI, or release package. Frontend observations do not prove backend completion;
   typed app/XPC/backend rows must still join by `generationID`.

@@ -1,7 +1,8 @@
 # iOS physical-device testing
 
 Vocello's iOS runtime and UI acceptance run on a paired physical iPhone. Simulator build, launch,
-and UI automation are unsupported. XCUITest is the sole autonomous iOS app UI driver.
+and UI automation are unsupported. Interactive UI QA (agent-driven computer use through iPhone
+Mirroring, [`interactive-ui-qa.md`](interactive-ui-qa.md)) is the app UI acceptance method.
 
 ## Ordinary development
 
@@ -38,7 +39,8 @@ That app-host-free bundle covers catalog and delivery-ledger validation, memory 
 cancellation semantics, app-support path gating, and privacy-safe diagnostics at compile time. Xcode
 26 reports tool-hosted testing as unavailable for physical-device destinations, so the repository
 does not expose a device execution command for this target. Physical runtime assurance remains in
-the existing headless diagnostics and genuine XCUITest lanes; no Simulator substitute is used.
+the existing headless diagnostics, with interactive UI QA for visible frontend behavior; no
+Simulator substitute is used.
 
 ## Device preparation
 
@@ -50,44 +52,28 @@ scripts/ios_device.sh device-state
 `preflight` and `device-state` verify the paired CoreDevice identity and reachability; preflight
 also checks the selected Xcode's iOS Platform Support, signing, and the existing app-build and dSYM
 readiness. `device-state` treats
-reachability as its only blocker. The XCUITest runner independently rejects a phone that
-CoreDevice reports as locked before invoking `xcodebuild`. Install or repair iOS models through the
-visible Settings → Model Downloads UI; neither device scripts nor normal UI tests install them.
-The sole exception is the separately selected `scripts/ui_test.sh ios model-download` lifecycle
-diagnostic, which uses an isolated app-support root and is never part of smoke or benchmark.
+reachability as its only blocker. Install or repair iOS models through the
+visible Settings → Model Downloads UI; device scripts do not install them.
 
-## Explicit XCUITest lanes
+## Explicit interactive UI QA
 
-```sh
-scripts/ui_test.sh ios smoke
-scripts/ui_test.sh ios benchmark
-# Filtered benchmark example:
-scripts/ui_test.sh ios benchmark --modes custom --lengths short --warm 1 --label "focused"
+For explicitly requested frontend acceptance, run the interactive UI QA checklist
+([`interactive-ui-qa.md`](interactive-ui-qa.md)): an agent drives the genuine app with computer
+use through iPhone Mirroring on the paired physical iPhone, observing only real visible controls
+named by the stable accessibility identifiers in [`ios-ui-reference.md`](ios-ui-reference.md).
+It is advisory acceptance QA — never CI and never a publishing or packaging prerequisite. Keep
+sessions burn-in-safe: a handful of generations, with headless engine evidence staying in
+`scripts/ios_device.sh`.
 
-# Explicit isolated background-transfer lifecycle proof, not a normal UI lane:
-scripts/ui_test.sh ios model-download
-```
+The retired scripted XCUITest smoke, benchmark, and model-download lanes (retired 2026-07-22)
+previously covered launch/navigation/cancellation journeys, the canonical 29-take UI matrix, and
+an isolated background-transfer delivery proof; their committed `ui-generation` records remain
+immutable history. Model-delivery lifecycle observation is now an opt-in interactive diagnostic
+through visible Settings controls (see [`model-delivery.md`](model-delivery.md)).
 
-The iPhone matrix keeps the shared short/medium/long ordering, but its long script is exactly the
+The iPhone corpus keeps the shared short/medium/long ordering, but its long script is exactly the
 production 150-character on-device boundary. macOS retains the extended >220-character long corpus;
-the iPhone lane never bypasses its user-facing script limit.
-
-| Lane | Scope |
-| --- | --- |
-| Smoke | Exact app launch, Studio mode and tab navigation, visible model and clone-reference readiness, one visible user cancellation, one run-scoped critical-memory cancellation with cancel-before-unload diagnostics, post-pressure engine reuse, no cancelled History rows, and one real completed Custom History row |
-| Benchmark | Ordered, configurable Studio matrix with pulled telemetry, readable audio, audio QC, thermal and timing evidence; the default is exactly 29 takes |
-| Model delivery | One isolated Custom Speed install; background/process relaunch adoption, monotonic progress, integrity, and visible cleanup |
-
-Every lane uses the paired physical-device destination. Tests use stable accessibility identifiers,
-condition-based waits, XCTest activities, screenshots, and failure attachments. Coordinate tables,
-OCR taps, alternate UI drivers, and fixed sleeps are not supported.
-The smoke runner pulls its exact diagnostics and fails unless the one-shot event sequence is
-`debug_force_critical_once` → `critical_memory_action` → typed `memory_pressure` cancellation →
-`fullUnload`, followed by a successful generation from the same relaunched app process.
-
-Benchmark accepts `--modes`, `--lengths`, `--warm`, and `--label`. Filters are explicit diagnostic
-runs; invoking the command without filters is the canonical 29-take matrix on the tracked iPhone 17
-Pro `iPhone18,1` profile. Dirty-source successes are exploratory even on that hardware.
+the iPhone never bypasses its user-facing script limit.
 
 ## Headless device diagnostics
 
@@ -126,22 +112,21 @@ app's aggregate score.
 
 ## Model readiness
 
-Before generation, XCUITest visibly requires Custom, Design, and Clone Speed to report ready,
-Generate to be enabled, and the required clone voice to exist. iOS has no command-line model
+Before generation, interactive UI QA visibly requires Custom, Design, and Clone Speed to report
+ready, Generate to be enabled, and the required clone voice to exist. iOS has no command-line model
 ensure/install path: repair missing models in visible Settings → Model Downloads, then restart the
-UI lane. Device scripts retain headless engine diagnostics, but normal acceptance never substitutes
-a headless inventory for the visible Settings state.
+QA session. Device scripts retain headless engine diagnostics, but normal acceptance never
+substitutes a headless inventory for the visible Settings state.
 
 ## Deterministic evidence retained
 
-The benchmark result is joined with exact device/app identity, current-run engine and app telemetry,
-History/database correlation, readable WAV validation, audio QC, crash deltas, thermal state,
-matrix ordering, and take counts. The app mints the generation UUID across Custom, Design, and Clone
-and writes its frontend row durably before only the matching run rows/verbose sidecars are mirrored.
+Historical `ui-generation` benchmark records (from the retired UI benchmark lane) were joined with
+exact device/app identity, current-run engine and app telemetry, History/database correlation,
+readable WAV validation, audio QC, crash deltas, thermal state, matrix ordering, and take counts;
+they remain immutable history. The app mints the generation UUID across Custom, Design, and Clone
+and writes its frontend row durably before matching run rows/verbose sidecars are mirrored.
 The 150-character boundary case remains explicitly `long`; no prompt-length inference is used.
-Smoke asserts visible active-cancellation recovery, absence of a cancelled History row, subsequent
-completion and History persistence, plus the runner's device/crash checks. It does not claim the
-benchmark's per-take telemetry matrix or synthesize an operating-system pressure event. Headless `bench`, `lang-bench`, `profile`,
+Headless `bench`, `lang-bench`, `profile`,
 `crashes`, logs, and console operations remain supported physical-device diagnostics.
 
 Profile commands launch or attach to the exact target PID, record CPU Profiler and `os_signpost`
@@ -179,8 +164,7 @@ summary and retention status remain in compact evidence; `--keep-trace` opts int
 Raw traces and sample rows remain untracked.
 
 Device builds require 10 GiB of host free space before compilation. Language, generation benchmark,
-memory, clone-conditioning, and gate lanes require 15 GiB; UI smoke, benchmark, and isolated model
-download require 12, 15, and 18 GiB respectively. These host-side checks run before adding another
+memory, clone-conditioning, and gate lanes require 15 GiB. These host-side checks run before adding another
 cache/result tree and do not contact, pair, or alter the phone. The exact-PID profile lane retains
 its separate tracer-stage 5/15 GiB CPU/memory check. Because every profile rebuilds the exact app,
 the full CPU-profile command is also subject to the 10 GiB device-build floor; memory remains
@@ -211,7 +195,8 @@ exact purpose-owned copy without a `.txt` sidecar or prepared voice ID for the x
 Both takes must pass typed conditioning flags, distinct prompt identities, strict output/ASR,
 telemetry-v8 memory coverage, app/engine correlation, crash delta, and interruption checks. The
 runner removes the audio-only scratch copy before PASS. It writes only local untracked validation
-evidence and never creates or repairs benchmark history; XCUITest remains the visible UI proof.
+evidence and never creates or repairs benchmark history; interactive UI QA remains the visible UI
+proof.
 
 MetricKit supplies a complementary delayed field view, not per-take benchmark attribution. After a
 normal explicit pull, summarize only the already-local privacy-reduced aggregate with:
@@ -239,9 +224,9 @@ relevant change.
 
 ## Generated-output ownership
 
-Physical-device development and UI lanes reuse only `build/cache/xcode/ios-device/`; Xcode package
-checkouts are shared under `build/cache/xcode/source-packages/`. Pulled diagnostics, UI results,
-profiles, gates, and current UUID-matched symbols live under `build/artifacts/`, never inside the
+Physical-device development lanes reuse only `build/cache/xcode/ios-device/`; Xcode package
+checkouts are shared under `build/cache/xcode/source-packages/`. Pulled diagnostics, interactive-QA
+screenshots, profiles, gates, and current UUID-matched symbols live under `build/artifacts/`, never inside the
 incremental cache. Archive/export products live only under `build/dist/ios/`. Local release
 DerivedData is isolated under `build/scratch/derived-data/release-ios/`; CI uses its
 own `build/scratch/derived-data/ci/ios-archive/` leaf. See the authoritative owner/lifetime table in
@@ -250,7 +235,7 @@ own `build/scratch/derived-data/ci/ios-archive/` leaf. See the authoritative own
 ## Release boundary
 
 An iOS archive/TestFlight candidate uses deterministic signing, entitlement, catalog, archive, and
-artifact checks. Physical-device smoke and benchmark results are independent frontend QA artifacts
+artifact checks. Interactive UI QA observations are independent advisory frontend QA artifacts
 and never an archive, upload, or Git-publishing prerequisite.
 
 See also [`testing-runbook.md`](testing-runbook.md) and

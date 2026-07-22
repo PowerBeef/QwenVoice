@@ -24,7 +24,7 @@ peaks**, **first-chunk latency**, or **audio quality**:
 - Model load path, prewarm, clone conditioning
 - Before explicitly promoting engine-adjacent work or cutting a macOS/iOS release
 
-Benchmarks that require models, a device, or XCUITest are not prerequisites for a
+Benchmarks that require models or a device are not prerequisites for a
 commit, push, pull request, ordinary merge, ordinary CI run, or release package. They remain useful
 promotion and release-QA evidence when explicitly requested.
 
@@ -44,9 +44,11 @@ A benchmark pass requires **all** of the following:
 ### Design constraints
 
 1. **Primary backend driver is headless** — `vocello bench` drives the matrix in-process with exact
-   cold/warm control. **`scripts/ui_test.sh macos benchmark`** is the supplementary XPC integration net (§4.10).
+   cold/warm control. The scripted UI benchmark lanes were retired 2026-07-22; interactive UI QA
+   ([`interactive-ui-qa.md`](interactive-ui-qa.md)) is the advisory frontend acceptance method and
+   is not a benchmark publisher.
 2. **Telemetry is runtime-gated** — identical code in Release; off unless debug env/toggle/handshake.
-3. **No CI execution gate** — model-dependent benchmarks are local and explicitly requested. CI validates the compact registry and reproducible index but does not run models, devices, XCUITest, or Instruments.
+3. **No CI execution gate** — model-dependent benchmarks are local and explicitly requested. CI validates the compact registry and reproducible index but does not run models, devices, or Instruments.
 4. **Lazy MLX caveat** — decode breakdown columns measure Swift wall-clock around lazy graph
    ops, not per-stage GPU compute. Use Instruments signposts for GPU attribution (§6.3).
 5. **PASS-only publication** — a successful repository benchmark publishes one allowlisted JSON
@@ -73,11 +75,13 @@ UI heartbeat        —                       yes                    yes
 | Path | Driver | Engine topology | Best for |
 |------|--------|-----------------|----------|
 | **CLI** | `./build/vocello bench` | In-process `MLXTTSEngine` | Deterministic RTF/decode/memory matrix; release QA step 3 |
-| **macOS UI** | App + `QwenVoiceEngineService` XPC | Out-of-process engine | Submit-to-first-chunk, playback scheduling, delayed-heartbeat, and XPC transport evidence; UI smoke tests |
-| **macOS XPC UI benchmark** | `scripts/ui_test.sh macos benchmark` | Out-of-process engine | Full UI matrix through real app + XPC; merged 3-layer telemetry |
+| **macOS UI** | App + `QwenVoiceEngineService` XPC | Out-of-process engine | Submit-to-first-chunk, playback scheduling, delayed-heartbeat, and XPC transport evidence; interactive UI QA observations |
 | **macOS profile** | `scripts/macos_test.sh profile --kind cpu|memory` | In-process via CLI inside exact-PID trace | CPU/signpost or allocation/VM validation |
 | **iOS device** | `scripts/ios_device.sh bench` | In-process | iPhone tier, Jetsam, on-device RTF (headless diagnostics, single take) |
-| **iOS UI benchmark** | `scripts/ui_test.sh ios benchmark` | In-process | Full UI matrix through XCUITest on the paired physical iPhone; telemetry gated per take |
+
+The scripted macOS/iOS UI benchmark lanes (full 29-take UI matrices with merged telemetry) were
+retired 2026-07-22 with the XCUITest stack; their committed `ui-generation` records remain
+immutable history.
 
 **Important:** CLI bench numbers are **not** identical to macOS XPC UI numbers. Compare like with
 like (CLI vs CLI, UI vs UI). Use CLI for backend optimization; use UI/XPC for integration regressions.
@@ -129,7 +133,7 @@ Set `QVOICE_REQUIRE_TEST_MODELS=1` is automatic on script paths; bare `xcodebuil
 | Check | Action |
 |-------|--------|
 | Quiet machine | Quit heavy apps; watch thermals (see §6.4). |
-| Single Vocello session | Quit any separately installed Vocello first. The XCUITest runner verifies exact executable paths and signals only its own Release products. |
+| Single Vocello session | Quit any separately installed Vocello first so telemetry and evidence come from one known Release product. |
 | Debug data dir | `QWENVOICE_DEBUG=1` → `~/Library/Application Support/QwenVoice-Debug/` |
 | Floor-tier simulation | `QWENVOICE_FORCE_MEMORY_CLASS=floor_8gb_mac` (propagates to engine via handshake) |
 | Suppress proactive warm | `QWENVOICE_SUPPRESS_WARMUP=1` for accurate Custom/Design **cold** rows in UI runs |
@@ -137,7 +141,7 @@ Set `QVOICE_REQUIRE_TEST_MODELS=1` is automatic on script paths; bare `xcodebuil
 ### iOS device
 
 - Paired physical iPhone (never Simulator for real engine)
-- Speed models visibly verified in Settings through XCUITest
+- Speed models visibly verified ready in Settings (interactive UI QA observation when explicitly requested)
 - `scripts/ios_device.sh preflight` before bench/gate
 - Physical-device playbook: [`ios-device-testing.md`](ios-device-testing.md)
 
@@ -257,34 +261,20 @@ scripts/ios_device.sh bench --memory-profile iphone15pro custom:speed:
 Pulls diagnostics from the device, runs the summarizer, and exits non-zero unless
 `device-diagnostics-done.json` reports success.
 
-### 4.7b iOS UI benchmark (Studio matrix — XCUITest)
+### 4.7b iOS UI benchmark (retired 2026-07-22)
 
-This uses the same 29-take matrix semantics as the macOS UI benchmark. The shared lane policy is
-in [`testing-runbook.md`](testing-runbook.md).
+The scripted iOS UI benchmark lane ran the same 29-take matrix semantics as the retired macOS UI
+benchmark, through XCUITest on the paired physical iPhone with run-scoped engine/app telemetry and
+an atomic `benchmark-evidence.json`. It was retired with the XCUITest stack; its committed
+`ui-generation` records remain immutable history. On-device engine benchmarking continues headless
+via `scripts/ios_device.sh bench` (§4.7), and frontend acceptance is the advisory interactive UI QA
+checklist ([`interactive-ui-qa.md`](interactive-ui-qa.md)) over iPhone Mirroring.
 
-```sh
-scripts/ios_device.sh device-state
-# Verify Custom, Design, and Clone Speed visibly in Settings, then run the matrix.
-scripts/ui_test.sh ios benchmark
+For the retired iPhone UI matrix, the `long` cell was the production 150-character boundary case;
+the extended >220-character corpus below remains the macOS/CLI definition, and nothing overrides
+iOS's on-device input limit.
 
-# Targeted diagnostic example (not the full-matrix acceptance result):
-scripts/ui_test.sh ios benchmark --modes custom --lengths short --warm 1 --label "focused"
-```
-
-For iPhone UI automation, the `long` cell is the production 150-character boundary case. The
-extended >220-character corpus below remains the macOS/CLI definition; the device UI benchmark
-does not override iOS's on-device input limit.
-
-Requires a paired, unlocked physical iPhone and a valid XCUITest destination. Simulator is not
-supported. The benchmark accepts `--modes`, `--lengths`, `--warm`, and `--label`; without filters it
-runs the canonical 29-take matrix.
-
-Artifacts are the `.xcresult` bundle, exported XCTest screenshots, run-scoped engine/app telemetry,
-and the atomic `benchmark-evidence.json`. The validator maps the test-owned ordered matrix directly
-to the matching generation IDs; the 150-character case remains explicitly `long`. Test assertions,
-the crash delta, and the deterministic telemetry/audio validators form the gate.
-
-The Instruments profile is a separate headless lane, not an attachment to the XCUITest matrix:
+The Instruments profile is a separate headless lane:
 
 ```sh
 scripts/ios_device.sh profile
@@ -294,9 +284,9 @@ scripts/ios_device.sh profile --kind memory
 It builds and installs the diagnostic app, launches one headless generation suspended, attaches
 CPU Profiler plus `os_signpost` to that exact PID, resumes it, waits for the success sentinel, pulls
 its run-scoped diagnostics, and publishes an independent `instrument-profile` record. The memory
-kind additionally records Allocations and VM Tracker in the same trace. Run it before
-or after a UI benchmark when profiling evidence is useful; do not treat its trace, generation, or
-history record as part of the UI benchmark's `.xcresult` or evidence manifest.
+kind additionally records Allocations and VM Tracker in the same trace. Run it whenever
+profiling evidence is useful; its trace, generation, and history record stand alone and are never
+folded into another lane's evidence manifest.
 
 Retained-memory qualification is a separate one-process nine-take lane:
 
@@ -322,14 +312,14 @@ the untracked iOS artifact tree.
 
 ### 4.7c iOS benchmark ownership
 
-The XCUITest benchmark lane validates the only supported UI matrix. For engine RTF without UI
-friction, use the headless §4.7 `ios_device.sh bench` lane.
+Engine RTF evidence is owned by the headless §4.7 `ios_device.sh bench` lane. There is no scripted
+UI benchmark lane; frontend behavior is reviewed through the advisory interactive UI QA checklist.
 
 | Phase | Tool |
 |-------|------|
 | Independent trace capture | `scripts/ios_device.sh profile --kind cpu|memory` (separate headless generation/profile lane) |
 | Trace analysis | Instruments / `xcrun xctrace`; optional `xcprof` on `PATH` |
-| UI failure | `.xcresult` activities, failure diagnostics, and screenshot attachments |
+| UI failure | Interactive-QA screenshots and per-item verdicts |
 | Crash post-mortem | Xcode Organizer; optional `xcsym` on `PATH` |
 
 Use `$axiom-tools` for workflow selection. Physical-device setup is documented in
@@ -399,61 +389,25 @@ an accepted run publishes `memory-qualification` and carries no trace.
 
 ### 4.9 UI-driven generation (macOS XPC)
 
-Real generation through the macOS frontend is driven only by XCUITest. Deterministic completion
-comes from matching History/WAV state and typed XPC/backend probes:
+Real generation through the macOS frontend is exercised by interactive UI QA (agent-driven
+computer use). For explicit frontend acceptance, run `scripts/macos_test.sh models ensure` if the
+visible Settings readiness check fails, then run the interactive UI QA checklist
+([`interactive-ui-qa.md`](interactive-ui-qa.md)) against `./scripts/build.sh run`. Completion is
+observed through the visible player and History state; it is advisory and is not an RTF matrix
+driver.
 
-```sh
-scripts/macos_test.sh models ensure
-scripts/ui_test.sh macos smoke
-```
+### 4.10 macOS XPC UI benchmark (retired 2026-07-22)
 
-This validates semantic frontend behavior plus the matching History/WAV/XPC/backend state. It is
-not the primary RTF matrix driver.
+**Primary backend regression remains `vocello bench` (§4.1).** The supplementary UI matrix was
+driven by XCUITest through the real app + XPC service, stamping `notes.benchRunID`,
+`benchTakeIndex`, `benchCell`, and `benchWarmState` via `QVOICE_MAC_BENCH_RUN_ID`, and running
+exactly 29 takes with runner-owned crash-delta and evidence-manifest gating. That lane and its
+validator were retired with the XCUITest stack; the committed `ui-generation` records remain
+immutable history. XPC-topology performance evidence now comes from the deterministic
+`scripts/macos_test.sh gate` bench option and headless telemetry lanes, while interactive UI QA
+covers advisory frontend behavior.
 
-### 4.10 macOS XPC UI benchmark (supplementary integration net)
-
-**Primary backend regression remains `vocello bench` (§4.1).** The supplementary UI matrix is
-driven by XCUITest through the real app + XPC service. Shared fixtures own the take definitions;
-deterministic tooling owns timestamps, typed telemetry validation, and aggregation.
-
-Telemetry rows stamp `notes.benchRunID`, `benchTakeIndex`, `benchCell`, and `benchWarmState` when
-`QVOICE_MAC_BENCH_RUN_ID` is set. Completion requires matching generation, History, WAV, and typed
-probe evidence; there are no hidden UI-test flush markers. The authoritative runner supplies the
-matrix arguments, run ID, crash-delta assertion, and evidence-manifest path together. A direct
-run-ID-only validator call is useful for diagnosis, but it is not a publishable benchmark contract:
-
-```sh
-# Diagnostic only: inspect the default matrix rows already present for one run ID.
-python3 scripts/check_macos_xpc_bench.py ~/Library/Application\ Support/QwenVoice-Debug/diagnostics \
-  --run-id macos-xcui-benchmark-YYYYMMDD-HHMMSS
-```
-
-For the strict contract, use `scripts/ui_test.sh macos benchmark`. Internally it passes the exact
-`--modes`, `--lengths`, `--warm`, and `--label` values plus
-`--evidence-manifest <run-artifact-dir>/benchmark-evidence.json --crash-delta-passed`. Never add the
-crash-delta assertion to a manual command unless the caller actually captured and compared the
-pre/post crash snapshots.
-
-**One-time machine setup:** configure Xcode UI-test runner signing, build the native test host, and
-install the required models.
-
-See [`macos-testing.md`](macos-testing.md) for the complete lane contract.
-
-**Full matrix:**
-
-```sh
-scripts/ui_test.sh macos benchmark
-
-# Targeted diagnostic example (not the full-matrix acceptance result):
-scripts/ui_test.sh macos benchmark --modes custom --lengths short --warm 1 --label "focused"
-```
-
-The test target consumes the canonical matrix and wraps every UI-driven generation in a named
-XCTest activity. The command accepts `--modes`, `--lengths`, `--warm`, and `--label`; without filters
-it runs exactly 29 takes. Cold Custom and Design cells are exact-path relaunches; a cell cannot
-complete without its matching deterministic History/WAV assertion.
-
-The benchmark `.xcresult`, smoke result, and seeded telemetry-overhead result are independent.
+The seeded telemetry-overhead result remains independent.
 For telemetry/backend changes, run the model-dependent overhead parity lane directly when its
 fixture is available; it does not consume or require UI evidence:
 
@@ -470,11 +424,6 @@ and is not
 published to schema-v2 history: adding the in-process memory sampler to the `off` lane would change
 the observer whose overhead is being measured. This fail-closed exception preserves the experiment
 without admitting memory-incomplete records.
-
-The UI runner performs the strict post-run gate and freezes its ordered evidence before summary and
-publication. For post-mortem inspection only, the run-ID-only diagnostic command shown above can
-re-read the default matrix; filtered runs require their exact matrix arguments and remain
-non-authoritative without the runner-owned crash delta and evidence manifest.
 
 | Phase | Tool |
 |-------|------|
@@ -493,7 +442,7 @@ Cold takes: app relaunch + `QWENVOICE_DEBUG=1` + `QWENVOICE_SUPPRESS_WARMUP=1` +
 ### Fixed corpus
 
 Defined in `BenchMatrixSpec` (`Sources/QwenVoiceCore/BenchMatrixSpec.swift`; shared with
-`BenchCommand` and XPC UI bench) — do not change without updating baselines:
+`BenchCommand`, and formerly with the retired XPC UI bench) — do not change without updating baselines:
 
 | Bucket | Chars (approx) | Text role |
 |--------|----------------|-----------|
@@ -647,7 +596,7 @@ crash inspection, preflight, and standalone analysis tools do not publish benchm
 
 | Kind | Publisher | Minimum publishable success |
 |---|---|---|
-| `ui-generation` | `ui_test.sh macos|ios benchmark` | XCTest, exact selected matrix/order, complete required telemetry layers, memory qualification, readable atomic WAVs, QC, and crash delta |
+| `ui-generation` | Retired UI benchmark runner (2026-07-22); existing records are immutable history | Historically: XCTest, exact selected matrix/order, complete required telemetry layers, memory qualification, readable atomic WAVs, QC, and crash delta |
 | `engine-generation` | `vocello bench`, iOS headless bench, optional gate bench | Exact selected rows, memory qualification, successful finishes, readable/QC-accepted output, and command PASS |
 | `language` | macOS/iOS `lang-bench` | Requested hint/output gates; hint-only is explicitly `partial` |
 | `instrument-profile` | macOS/iOS profile commands | Memory-qualified target generation PASS, exact PID, tracer success, valid trace TOC, non-empty exported performance rows, and run/generation/take/cell-correlated signposts |
@@ -703,9 +652,9 @@ regression signal:
 |------|-------|----------|-----------------------------------|
 | `build.sh` CLI bench | `-Onone` | in-process | RTF ≈ 1.0 |
 | local release / `-O` CLI | optimized | in-process | RTF ≈ 1.7 |
-| macOS `ui_test.sh macos benchmark` | Release app | app + XPC service | RTF ≈ 1.7 |
+| macOS UI benchmark (retired lane; historical records) | Release app | app + XPC service | RTF ≈ 1.7 |
 | iOS `ios_device.sh bench` | `-Onone` device | in-process on iPhone | RTF ≈ 1.6–1.9 |
-| iOS `ui_test.sh ios benchmark` | `-O` Release app | in-process, real Studio UI | optimized frontend/device result; do not compare with the `-Onone` headless lane |
+| iOS UI benchmark (retired lane; historical records) | `-O` Release app | in-process, real Studio UI | optimized frontend/device result; do not compare with the `-Onone` headless lane |
 
 Compare a record only against one with the same generated comparison key. That key includes lane,
 platform/hardware, matrix (including CLI streaming/seed and overhead rotation settings),
@@ -784,10 +733,10 @@ labels. **Never commit raw JSONL, WAVs, screenshots, result bundles, or traces**
 ### CI / automation
 
 - `.github/workflows/ci.yml` — `ios-compile-check` (compile-only; no attended UI, no bench)
-- `.github/workflows/release.yml` — deterministic signing and packaging; UI lanes remain explicit/local
+- `.github/workflows/release.yml` — deterministic signing and packaging; interactive UI QA remains explicit/local
 - `scripts/check_project_inputs.sh` — validates all compact records and checks that `HISTORY.md` is reproducible
-- Explicit frontend acceptance: `scripts/ui_test.sh macos smoke|benchmark`
-- Deterministic macOS platform gate: `scripts/macos_test.sh gate` (does not consume UI results)
+- Explicit frontend acceptance: run the interactive UI QA checklist ([`interactive-ui-qa.md`](interactive-ui-qa.md))
+- Deterministic macOS platform gate: `scripts/macos_test.sh gate` (does not consume UI observations)
 
 Engine regression net remains **manual local** until a self-hosted macOS bench job exists.
 

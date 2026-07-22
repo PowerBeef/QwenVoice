@@ -1,7 +1,7 @@
 name: Release
 
 # Vocello release packaging. Signing and notarization start only after deterministic
-# release-readiness checks pass. UI acceptance is an explicit XCUITest run outside hosted CI.
+# release-readiness checks pass. UI acceptance is explicit interactive QA outside hosted CI.
 #
 # Triggers:
 #   - protected v* tag push: verify the tag/source/version identity, build and
@@ -15,7 +15,7 @@ name: Release
 #     deterministic release checks.
 #   - compile-ios: iOS compile-safety only. Runs in parallel with
 #     `package` and does NOT block macOS publishing if it fails.
-#   - archive-ios: optional manual signed archive / TestFlight lane. Physical-device XCUITest is an
+#   - archive-ios: optional manual signed archive / TestFlight lane. Physical-device interactive QA is an
 #     independent explicit frontend-QA lane and is not required before dispatch.
 #
 # Toolchain pinning is validated against config/toolchain.json:
@@ -455,7 +455,7 @@ jobs:
     # SELF-SERVE (no Apple approval) and is enabled on com.patricedery.vocello
     # (the engine runs in-process — there is no separate extension App ID);
     # local on-device build/test tooling is established (scripts/ios_device.sh plus
-    # IOSDeviceDiagnosticsRunner; optional physical-device XCUITest is documented in
+    # IOSDeviceDiagnosticsRunner; optional physical-device interactive QA is documented in
     # docs/reference/ios-device-testing.md). Dispatching the signed lane still needs:
     #   1. iOS Distribution certificate enrolled in the Apple Developer team.
     #   2. A Distribution provisioning profile for the com.patricedery.vocello

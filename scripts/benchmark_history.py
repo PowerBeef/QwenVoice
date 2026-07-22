@@ -809,10 +809,7 @@ def default_inputs(record: dict[str, Any]) -> dict[str, Any]:
         REPO_ROOT / "Packages/VocelloQwen3Core/Package.resolved",
     ]
     harness_paths = [
-        REPO_ROOT / "scripts" / "ui_test.sh",
         REPO_ROOT / "scripts" / "check_test_workflows.sh",
-        REPO_ROOT / "scripts" / "check_macos_xpc_bench.py",
-        REPO_ROOT / "scripts" / "check_ios_ui_benchmark.py",
         REPO_ROOT / "scripts" / "summarize_generation_telemetry.py",
         REPO_ROOT / "scripts" / "benchmark_memory.py",
         REPO_ROOT / "scripts" / "benchmark_history.py",
@@ -828,9 +825,6 @@ def default_inputs(record: dict[str, Any]) -> dict[str, Any]:
         REPO_ROOT / "scripts" / "prosody_quality_gate.py",
         REPO_ROOT / "scripts" / "check_language_hints.py",
         REPO_ROOT / "scripts" / "check_language_output.py",
-        REPO_ROOT / "Tests" / "UIAutomationSupport" / "VocelloUIAutomationSupport.swift",
-        REPO_ROOT / "Tests" / "VocelloMacUITests" / "VocelloMacBenchmarkUITests.swift",
-        REPO_ROOT / "Tests" / "VocelloiOSUITests" / "VocelloiOSBenchmarkUITests.swift",
         REPO_ROOT / "Sources" / "QwenVoiceCore" / "BenchMatrixSpec.swift",
         REPO_ROOT / "Sources" / "VocelloCLI" / "BenchCommand.swift",
         REPO_ROOT / "Sources" / "QwenVoiceCore" / "GenerationTelemetryRecord.swift",
@@ -844,7 +838,6 @@ def default_inputs(record: dict[str, Any]) -> dict[str, Any]:
         REPO_ROOT / "config" / "memory-qualification-policy.json",
     ]
     corpus_paths = [
-        REPO_ROOT / "Tests" / "UIAutomationSupport" / "VocelloUIAutomationSupport.swift",
         REPO_ROOT / "Sources" / "QwenVoiceCore" / "BenchMatrixSpec.swift",
         REPO_ROOT / "Sources" / "VocelloCLI" / "BenchCommand.swift",
     ]

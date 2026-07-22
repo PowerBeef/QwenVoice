@@ -37,6 +37,43 @@ class RequiredStepLedgerTests(unittest.TestCase):
         payload["identityDigest"] = hashlib.sha256(canonical).hexdigest()
         path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
+
+    @staticmethod
+    def write_fixture_contract(path: Path) -> None:
+        """A synthetic workflow with optional steps for tool-semantics tests.
+
+        The production contract retired its optional-step UI workflows, so
+        these tests own their fixture instead of borrowing a real lane.
+        """
+        payload = {
+            "schemaVersion": 1,
+            "faultInjection": {
+                "enableEnvironmentVariable": "QWENVOICE_TEST_ORCHESTRATION_FAULTS",
+                "stepEnvironmentVariable": "QWENVOICE_TEST_FAIL_REQUIRED_STEP",
+            },
+            "workflows": {
+                "fixture-optional-lane": {
+                    "producer": "scripts/tests/test_required_step_ledger.py",
+                    "requiredSteps": ["source-provenance", "primary-run", "crash-delta"],
+                    "optionalSteps": ["result-retention"],
+                }
+            },
+        }
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    def run_tool_with(
+        self, contract: Path, *arguments: str, check: bool = False
+    ) -> subprocess.CompletedProcess[str]:
+        completed = subprocess.run(
+            ["python3", str(TOOL), "--contract", str(contract), *arguments],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if check and completed.returncode != 0:
+            self.fail(completed.stdout + completed.stderr)
+        return completed
+
     def run_tool(self, *arguments: str, check: bool = False) -> subprocess.CompletedProcess[str]:
         completed = subprocess.run(
             ["python3", str(TOOL), "--contract", str(CONTRACT), *arguments],
@@ -141,22 +178,27 @@ class RequiredStepLedgerTests(unittest.TestCase):
     def test_optional_failure_cannot_change_required_success(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             ledger = Path(directory) / "ledger.json"
-            workflow = "ui-macos-smoke"
-            contract = json.loads(CONTRACT.read_text(encoding="utf-8"))["workflows"][workflow]
-            self.run_tool(
+            fixture = Path(directory) / "contract.json"
+            self.write_fixture_contract(fixture)
+            workflow = "fixture-optional-lane"
+            contract = json.loads(fixture.read_text(encoding="utf-8"))["workflows"][workflow]
+            self.run_tool_with(
+                fixture,
                 "init", "--ledger", str(ledger), "--workflow", workflow,
                 "--run-id", "optional", check=True,
             )
             for step in contract["requiredSteps"]:
-                self.run_tool(
+                self.run_tool_with(
+                    fixture,
                     "record", "--ledger", str(ledger), "--step", step,
                     "--exit-code", "0", check=True,
                 )
-            self.run_tool(
+            self.run_tool_with(
+                fixture,
                 "record", "--ledger", str(ledger), "--step", "result-retention",
                 "--exit-code", "23", check=True,
             )
-            self.run_tool("finalize", "--ledger", str(ledger), check=True)
+            self.run_tool_with(fixture, "finalize", "--ledger", str(ledger), check=True)
             payload = json.loads(ledger.read_text(encoding="utf-8"))
             self.assertEqual(payload["status"], "passed")
             self.assertEqual(payload["results"]["result-retention"]["status"], "failed")
@@ -185,17 +227,20 @@ class RequiredStepLedgerTests(unittest.TestCase):
 set -euo pipefail
 ROOT_DIR={ROOT!s}
 . {LIBRARY!s}
-required_steps_init {ledger!s} ui-macos-smoke fixture
-for step in source-provenance xcuitest crash-delta; do
+required_steps_init {ledger!s} fixture-optional-lane fixture
+for step in source-provenance primary-run crash-delta; do
   required_step_run {ledger!s} "$step" true || true
 done
 required_step_run {ledger!s} result-retention true || true
 required_steps_finalize {ledger!s}
 """
+            fixture = root / "contract.json"
+            self.write_fixture_contract(fixture)
             environment = os.environ.copy()
             environment.update({
                 "QWENVOICE_TEST_ORCHESTRATION_FAULTS": "1",
-                "QWENVOICE_TEST_FAIL_REQUIRED_STEP": "ui-macos-smoke:xcuitest",
+                "QWENVOICE_TEST_FAIL_REQUIRED_STEP": "fixture-optional-lane:primary-run",
+                "QVOICE_ORCHESTRATION_CONTRACT": str(fixture),
             })
             completed = subprocess.run(
                 ["bash", "-c", script], text=True, capture_output=True,
@@ -203,18 +248,22 @@ required_steps_finalize {ledger!s}
             )
             self.assertNotEqual(completed.returncode, 0, completed.stdout + completed.stderr)
             payload = json.loads(ledger.read_text(encoding="utf-8"))
-            self.assertEqual(payload["results"]["xcuitest"]["exitCode"], 97)
+            self.assertEqual(payload["results"]["primary-run"]["exitCode"], 97)
             self.assertEqual(payload["results"]["result-retention"]["status"], "passed")
             self.assertEqual(payload["status"], "failed")
 
     def test_managed_timeout_records_failure_and_cannot_finalize_pass(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             ledger = Path(directory) / "ledger.json"
-            self.run_tool(
-                "init", "--ledger", str(ledger), "--workflow", "ui-macos-smoke",
+            fixture = Path(directory) / "contract.json"
+            self.write_fixture_contract(fixture)
+            self.run_tool_with(
+                fixture,
+                "init", "--ledger", str(ledger), "--workflow", "fixture-optional-lane",
                 "--run-id", "timeout", check=True,
             )
-            completed = self.run_tool(
+            completed = self.run_tool_with(
+                fixture,
                 "run", "--ledger", str(ledger), "--step", "source-provenance",
                 "--timeout-seconds", "1", "--", "python3", "-c", "import time; time.sleep(30)",
             )
@@ -392,13 +441,16 @@ required_steps_finalize {ledger!s}
     def test_sigterm_records_terminated_step_and_cannot_finalize_pass(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             ledger = Path(directory) / "ledger.json"
-            self.run_tool(
-                "init", "--ledger", str(ledger), "--workflow", "ui-macos-smoke",
+            fixture = Path(directory) / "contract.json"
+            self.write_fixture_contract(fixture)
+            self.run_tool_with(
+                fixture,
+                "init", "--ledger", str(ledger), "--workflow", "fixture-optional-lane",
                 "--run-id", "sigterm", check=True,
             )
             process = subprocess.Popen(
                 [
-                    "python3", str(TOOL), "--contract", str(CONTRACT), "run",
+                    "python3", str(TOOL), "--contract", str(fixture), "run",
                     "--ledger", str(ledger), "--step", "source-provenance",
                     "--timeout-seconds", "30", "--", "python3", "-c", "import time; time.sleep(30)",
                 ],

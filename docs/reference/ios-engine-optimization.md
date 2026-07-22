@@ -247,8 +247,8 @@ focuses on 1.7B variants only (mlx-swift bump when gated review passes, kernel-l
 
 ## 6. Measured on-device performance
 
-Latest clean canonical record: iPhone 17 Pro · Speed (4-bit) · in-process · streaming · 29 XCUITest
-takes · source `bcb5265a…` ·
+Latest clean canonical record: iPhone 17 Pro · Speed (4-bit) · in-process · streaming · 29 takes
+from the since-retired scripted UI benchmark lane · source `bcb5265a…` ·
 [`ios-xcui-benchmark-20260716-184106-48e3a3a6`](../../benchmarks/runs/ui-generation/ios-xcui-benchmark-20260716-184106-48e3a3a6.json).
 Warm rows below are per-cell medians across three takes; cold rows contain one take. Peak footprint is
 the maximum within the cell. This record directly covers the current owned-core runtime source.

@@ -1,7 +1,9 @@
 # macOS testing
 
 Vocello separates routine deterministic development verification from explicit native-app UI
-acceptance. XCUITest is the sole autonomous macOS app UI driver.
+acceptance. Interactive UI acceptance is agent-driven computer use
+([`interactive-ui-qa.md`](interactive-ui-qa.md)); the scripted XCUITest stack was retired
+2026-07-22.
 
 ## Ordinary development
 
@@ -15,66 +17,39 @@ These checks are sufficient to commit, push, open a pull request, merge ordinary
 run ordinary CI. They do not require UI execution, installed generation models, or release
 evidence.
 
-## Explicit XCUITest lanes
+## Interactive UI acceptance
 
-Run only when frontend acceptance is explicitly requested:
-
-```sh
-scripts/ui_test.sh macos smoke
-scripts/ui_test.sh macos benchmark
-# Filtered benchmark example:
-scripts/ui_test.sh macos benchmark --modes custom --lengths short --warm 1 --label "focused"
-```
-
-| Lane | Scope |
-| --- | --- |
-| Smoke | Exact app launch, sidebar navigation, visible model and clone-reference readiness, one real Custom generation, completed player, and History |
-| Benchmark | Ordered, configurable Custom/Design/Clone matrix with cold/warm classification and per-take deterministic proof; the default is exactly 29 takes |
-
-The runner targets the configured native Vocello test host. Before launch it resolves every matching
-Vocello and engine-service PID to its executable, fails fast if any process belongs to another app
-path, and signals only the exact app/service products under the runner's Release build directory.
-It uses stable accessibility identifiers and condition waits, preserves saved voices, visibly
-enables the persistent Clone consent preference for acceptance, restores temporary Auto-play
-changes, and records failures as XCTest activities and attachments. It never retries through a
-display name or alternate app path.
-
-Benchmark accepts `--modes`, `--lengths`, `--warm`, and `--label`. Filters are explicit diagnostic
-runs; invoking the command without filters is the canonical 29-take matrix on the tracked Mac mini
-`Mac14,3` / Apple M2 / 8 GB profile. Dirty-source successes are exploratory even on that hardware.
+Run only when frontend acceptance is explicitly requested, or as the recorded release-candidate
+checklist: the agent-driven computer-use checklist in
+[`interactive-ui-qa.md`](interactive-ui-qa.md) against `./scripts/build.sh run` — navigation and
+visible readiness, one completed nonced generation asserted in History, mid-generation
+cancellation with a clean reset and no History row, the virtual-microphone recording flow, and the
+library surfaces. Screenshot evidence lands under the untracked interactive-QA artifacts tree with
+a per-item verdict list.
 
 ## Model-dependent tests
 
-Before generation, XCUITest must visibly confirm that Custom, Design, and Clone Speed are ready,
-Generate is enabled, and the benchmark clone voice is present. Use
-`scripts/macos_test.sh models ensure` only to repair/bootstrap fixtures, then begin a fresh test
-run. Do not download models implicitly inside a normal UI lane.
+Before generation, QA must visibly confirm that Custom, Design, and Clone Speed are ready,
+Generate is enabled, and the prepared clone voice is present. Use
+`scripts/macos_test.sh models ensure` only to repair/bootstrap fixtures, then begin a fresh QA
+run. Do not download models implicitly during QA.
 
-## Deterministic evidence retained
+## Benchmark evidence (headless)
 
-The benchmark validator joins UI completion with:
+UI-driven benchmark lanes were retired with the XCUITest stack; the committed
+`benchmarks/runs/ui-generation/` records remain immutable history. Engine benchmark evidence runs
+headless:
 
-- History/database correlation and a readable WAV;
-- audio QC and complete typed frontend/XPC/backend telemetry by `generationID`;
-- crash delta and XPC process lifecycle evidence;
-- benchmark order, take count, cold/warm class, and timing.
+```sh
+QWENVOICE_DEBUG=1 ./build/vocello bench --modes clone --variants speed \
+  --lengths short,medium,long --warm 3 --voice <prepared-voice> --label "release-QA"
+```
 
-The validator atomically writes an untracked `benchmark-evidence.json` containing only the run's
-ordered generation IDs/cells and verdicts. The summarizer consumes that manifest plus the run ID,
-never the diagnostics directory's historical population. A PASS publishes one privacy-safe record
-under `benchmarks/runs/ui-generation/` and regenerates `benchmarks/HISTORY.md`. Raw telemetry, WAVs,
-screenshots, and `.xcresult` remain untracked; publication never stages, commits, or pushes.
-
-New publishable generation runs use telemetry schema v8 and evidence manifest v2. Their exact
-`samples-<generationID>.jsonl` files must begin/end with one start/stop sample, contain the required
-load/stream/finalization boundaries, match summary counts, have zero capture failures, and retain at
-least 95% periodic coverage. macOS UI/XPC totals are calculated only from app and engine samples
-paired by absolute uptime within one 500 ms cadence; independent process maxima are never added.
-Critical pressure, app memory warning/exit, `hardTrim`, or `fullUnload` fails publication. Guarded
-pressure, `softTrim`, or 95–<100% coverage publishes only as an explicit warning.
-
-Smoke is intentionally smaller: it asserts visible completion and History plus the runner's
-single-process/crash-delta checks; it does not claim the benchmark's per-take telemetry matrix.
+A PASS publishes one privacy-safe record under `benchmarks/runs/` and regenerates
+`benchmarks/HISTORY.md`. Raw telemetry and WAVs remain untracked; publication never stages,
+commits, or pushes. New publishable generation runs use telemetry schema v8 and evidence manifest
+v2 with the standing memory-qualification rules (exact sample sidecars, ≥95% sampler coverage, no
+critical pressure/`hardTrim`/`fullUnload`; guarded states publish only as explicit warnings).
 
 ## Instruments profiles
 
@@ -141,8 +116,8 @@ authoritative owner/lifetime table in [`privacy-storage.md`](privacy-storage.md)
 
 ## Release boundary
 
-macOS signing, notarization, and packaging use deterministic release-readiness checks. Smoke and
-benchmark XCUITest results are independent frontend QA artifacts and never a packaging prerequisite.
+macOS signing, notarization, and packaging use deterministic release-readiness checks. Interactive
+QA results are independent frontend acceptance artifacts and never a packaging prerequisite.
 
 See also [`testing-runbook.md`](testing-runbook.md),
 [`benchmarking-procedure.md`](benchmarking-procedure.md), and

@@ -5,8 +5,8 @@ The end-to-end steps to ship **Vocello for iPhone** (`com.patricedery.vocello`) 
 Source-of-truth rule: if this disagrees with the code, the code wins.
 
 This runbook is release-only. Commits, pushes, pull requests, merges, CI, archive, and TestFlight
-packaging use deterministic verification and do not require a phone, models, or XCUITest evidence.
-Physical-device UI results are optional explicit frontend QA artifacts.
+packaging use deterministic verification and do not require a phone, models, or UI-QA evidence.
+Interactive UI QA observations are optional advisory frontend QA artifacts.
 
 **Historical device checkpoint (2026-06-13, iPhone 17 Pro):** the development build signed, installed, and ran
 end-to-end. `scripts/ios_device.sh` now **auto-derives the signing team** from the keychain's Apple
@@ -14,7 +14,7 @@ Development certificate (no `QWENVOICE_DEVELOPMENT_TEAM` needed for local dev bu
 offline manual signing if no Apple ID is in Xcode). The development provisioning profile already carries
 `increased-memory-limit`, and that dated run passed its generation and audio-QC checks. Current performance
 and memory truth comes from the schema-v2 records in `benchmarks/HISTORY.md`, not these historical figures.
-Physical-device XCUITest can be run
+Interactive UI QA on the paired physical iPhone (via iPhone Mirroring) can be run
 independently when explicit frontend acceptance is requested; ordinary GitHub CI and archive
 packaging are deterministic-only — see
 [`testing-runbook.md`](testing-runbook.md); and the UI
@@ -75,8 +75,9 @@ non-functional under Guideline 2.1.
 
 - [ ] iPhone screenshots (6.9" and 6.5" required). Capture from the **device** for all
       surfaces (generation, model install, sheets). Studio (with a script + voice), Voice Design, Voice
-      Cloning, Voices import/enrollment, History, and model-install Settings. Export named screenshots from a current
-      `scripts/ui_test.sh ios smoke` result bundle.
+      Cloning, Voices import/enrollment, History, and model-install Settings. Capture named
+      screenshots during an interactive UI QA session
+      ([`interactive-ui-qa.md`](interactive-ui-qa.md)) or directly on the device.
 - [ ] App name, subtitle (≤30 chars each), description, keywords (≤100), support URL (the GitHub repo or the
       website), marketing URL (`https://vocello.vercel.app`), copyright.
 
@@ -166,8 +167,9 @@ does not replace the mandatory archive/IPA contract above and does not gate pack
 ./scripts/verify_ios_release_archive.sh build/dist/ios/Vocello.xcarchive build/dist/ios/export release_metadata.txt
 ```
 
-When frontend acceptance is explicitly requested, run `scripts/ui_test.sh ios smoke` and
-`scripts/ui_test.sh ios benchmark` separately; their result bundles do not gate the archive.
+When frontend acceptance is explicitly requested, run the interactive UI QA checklist
+([`interactive-ui-qa.md`](interactive-ui-qa.md)) separately; its observations do not gate the
+archive.
 
 Upload the IPA via Transporter or `xcrun altool --upload-app -f build/dist/ios/export/Vocello.ipa -t ios \
   --apiKey <KEY_ID> --apiIssuer <ISSUER_ID>` (with `AuthKey_<KEY_ID>.p8` in `~/.appstoreconnect/private_keys/`).

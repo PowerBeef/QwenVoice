@@ -1,8 +1,8 @@
 # Vocello for Mac — app guide + test-driving reference
 
 A consolidated map of the Vocello macOS app: what every screen/element/option does and how
-XCUITest addresses it (identifier → action → expected). Use this to maintain the smoke and
-benchmark tests and stable accessibility surface.
+interactive UI QA addresses it (visible control named by its identifier → action → expected). Use
+this to run the interactive UI QA checklist and maintain the stable accessibility surface.
 
 > **Where this fits:** the canonical "macOS app + driving" reference. Running the tests
 > lives in [`macos-testing.md`](macos-testing.md); the engine/XPC internals live in
@@ -35,9 +35,9 @@ has **both Speed (4-bit) and Quality (8-bit)** variants.
 
 ### Semantic state surfaces
 
-XCUITest inspects the real accessibility state. Destination containers use `screen_*`, primary
-controls expose stable identifiers, and `{mode}_readiness` values report `ready=true/false`.
-Tests assert these visible production surfaces directly.
+Interactive UI QA (and assistive technology) inspects the real accessibility state. Destination
+containers use `screen_*`, primary controls expose stable identifiers, and `{mode}_readiness`
+values report `ready=true/false`. QA observes these visible production surfaces directly.
 
 ### Custom Voice (`sidebar_customVoice` → `screen_customVoice`)
 
@@ -157,19 +157,21 @@ higher-fidelity output.
 
 ## 5. Driving the macOS UI like a human
 
-### Test infrastructure (XCUITest)
+### QA infrastructure (interactive UI QA)
 
-`VocelloMacUITests` is the sole autonomous macOS frontend driver. It launches its configured
-Vocello test host, uses the shared UI automation support, and re-queries stable accessibility state
-before and after each logical action. There is no hidden test-marker surface.
+Interactive UI QA is the macOS frontend acceptance method: an agent launches the app with
+`./scripts/build.sh run`, drives it with computer use (screenshots, vision, clicks on real visible
+controls), and re-observes visible state before and after each logical action. There is no hidden
+test-marker surface. Run the interactive UI QA checklist
+([`interactive-ui-qa.md`](interactive-ui-qa.md)) for explicit frontend acceptance; it is advisory
+and never a gate.
 
 The shell harness owns deterministic proof and evidence:
 
 | Lane | Purpose |
 |------|---------|
 | `scripts/macos_test.sh test` | Core, XPC transport, and runtime tests; no UI driving |
-| `scripts/ui_test.sh macos smoke` | Semantic UI journeys, accessibility assertions, and named screenshots |
-| `scripts/ui_test.sh macos benchmark` | UI-driven generation matrix plus merged telemetry proof |
+| Interactive UI QA checklist | Semantic UI journeys, visible readiness/cancellation observations, and named screenshots |
 
 ### macOS-specific patterns (vs iOS)
 
@@ -179,7 +181,7 @@ The shell harness owns deterministic proof and evidence:
   macOS menus (NSMenu), not iOS-style sheets. Re-observe after opening before selecting.
 - **Keyboard shortcuts** — Cmd+1..6 for sidebar (Cmd+6 is labeled "Models" in the Navigate menu but opens the unified Settings/Models surface); Cmd+, for the Settings window.
 - **File pickers** — reference import uses NSOpenPanel. Import is product functionality but is not
-  part of the minimal smoke or benchmark lane.
+  part of the minimal interactive-QA checklist.
 - **Screenshots** — attach named screenshots at important states and on failures; do not use
   coordinates as a control-selection fallback.
 
@@ -208,7 +210,7 @@ The shell harness owns deterministic proof and evidence:
 
 ## 6. Identifier gaps
 
-macOS controls not currently targeted by the minimal smoke/benchmark lanes:
+macOS controls not currently targeted by the minimal interactive-QA checklist:
 - Individual delivery/language menu items.
 - Model "Manage" popover menu items.
 - Batch item rows (derived from `BatchGenerationItemState`, no per-item id).

@@ -83,7 +83,7 @@
       "id": "xcode-macos-derived-data",
       "path": "build/cache/xcode/macos",
       "class": "cache",
-      "owner": "macOS build and XCUITest lanes",
+      "owner": "macOS build lanes",
       "cleanup": "aggressive",
       "retention": "Persistent incremental macOS Xcode cache",
       "env": "QVOICE_XCODE_MACOS_DERIVED"
@@ -92,7 +92,7 @@
       "id": "xcode-ios-device-derived-data",
       "path": "build/cache/xcode/ios-device",
       "class": "cache",
-      "owner": "Physical-device iOS build and XCUITest lanes",
+      "owner": "Physical-device iOS build lanes",
       "cleanup": "aggressive",
       "retention": "Persistent incremental physical-device Xcode cache",
       "env": "QVOICE_XCODE_IOS_DERIVED"
@@ -209,7 +209,7 @@
       "id": "artifacts-ui-tests",
       "path": "build/artifacts/ui-tests",
       "class": "artifact",
-      "owner": "Unified macOS and physical-device XCUITest runner",
+      "owner": "Retired UI-test runner artifacts (read-only; cleanup only)",
       "cleanup": "prune-ui-results",
       "retention": "Keep policy-selected passing and failure result bundles",
       "env": "QVOICE_ARTIFACTS_UI_TESTS"

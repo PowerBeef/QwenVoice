@@ -1,17 +1,18 @@
 # Vocello for iPhone — app guide + test-driving reference
 
 A consolidated map of the Vocello iOS app: what every screen/element/option does (user
-view) and how XCUITest drives it (stable identifier → action → expected). Use this to understand the
-app before touching `Sources/iOS/`. All iOS UI work runs on a paired physical device; MLX cannot
-initialize on the iOS Simulator.
+view) and how interactive UI QA drives it (visible control, named by its stable identifier →
+action → expected). Use this to understand the app before touching `Sources/iOS/`. All iOS UI work
+runs on a paired physical device; MLX cannot initialize on the iOS Simulator.
 
 > **Where this fits:** this is the canonical "what the app is + how to drive it" reference.
 > The testing strategy lives in [`testing-runbook.md`](testing-runbook.md);
 > device lanes (`scripts/ios_device.sh`) in [`ios-device-testing.md`](ios-device-testing.md);
 > generation-engine internals in [`../ARCHITECTURE.md`](../ARCHITECTURE.md);
 > tone/delivery prompt-writing in [`../qwen_tone.md`](../qwen_tone.md).
-> The compact UI state map is [`ios-ui-reference.md`](ios-ui-reference.md). XCUITest is the only
-> autonomous iOS app UI driver.
+> The compact UI state map is [`ios-ui-reference.md`](ios-ui-reference.md). Interactive UI QA
+> (agent-driven computer use through iPhone Mirroring, [`interactive-ui-qa.md`](interactive-ui-qa.md))
+> is the app UI acceptance method.
 
 ---
 
@@ -33,7 +34,7 @@ Three generation modes (Studio segmented control `generateSection_*`):
 - **Voice Cloning** (`generateSection_clone`) — use a reference clip (record on-device or a saved voice).
 
 The UI is what this guide drives. Headless, non-UI device diagnostics are documented in
-[`ios-device-testing.md`](ios-device-testing.md); that path is separate from XCUITest.
+[`ios-device-testing.md`](ios-device-testing.md); that path is separate from interactive UI QA.
 
 ---
 
@@ -182,8 +183,9 @@ So "is this mode ready to generate?" is **test-readable from the Studio surface*
 
 ### Generation-test preconditions
 
-**Always confirm the mode's model is installed before composing/generating.** XCUITest requires
-Generate rather than Install. Destructive install/cancel/delete actions are outside normal lanes.
+**Always confirm the mode's model is installed before composing/generating.** Interactive UI QA
+requires Generate rather than Install. Destructive install/cancel/delete actions are outside the
+normal checklist.
 
 ### Model lifecycle sequence
 
@@ -248,10 +250,12 @@ Italian. The instruction/brief language is independent of the spoken-text langua
 
 ---
 
-## 5. Driving through XCUITest
+## 5. Driving through interactive UI QA
 
-`VocelloiOSUITests` uses stable accessibility identifiers, condition-based waits, and shared test
-support. Coordinates, OCR taps, and label-only fallback tables are not accepted test selectors.
+Interactive UI QA (agent-driven computer use through iPhone Mirroring,
+[`interactive-ui-qa.md`](interactive-ui-qa.md)) observes and operates only genuine visible
+controls, named by their stable accessibility identifiers. Hidden markers, seeded state, and
+coordinate tables are not accepted.
 
 Canonical flows remain:
 
@@ -263,7 +267,7 @@ Canonical flows remain:
   Generate, and verify telemetry.
 - Import: Voices → `voices_importAudioFile` → choose a supported file in the native picker → confirm
   name/transcript through `saveVoice_*` → verify the saved row and Clone handoff. System-picker
-  interaction is explicit product acceptance, not part of the minimal smoke or benchmark lane.
+  interaction is explicit product acceptance, not part of the minimal checklist.
 - History: open the History tab, find the generated take, and replay it.
 - Settings: review model and preference state; visibly enable persistent Clone consent for
   acceptance, and restore temporary reversible changes such as Auto-play.
@@ -273,10 +277,10 @@ Gotchas:
 1. Picker selection is provisional until its visible Confirm action is activated.
 2. Dismiss the keyboard before Generate when it obscures the button.
 3. Wait for cold model loading rather than repeating a click.
-4. Attach named screenshots at important semantic states and failures.
-5. Recording and destructive model lifecycle actions are outside smoke and benchmark. The isolated
-   physical-device model-delivery proof is selected explicitly with
-   `scripts/ui_test.sh ios model-download` and cleans up through visible Settings controls.
+4. Save named screenshots at important semantic states and failures.
+5. Recording and destructive model lifecycle actions are outside the normal checklist. Model-
+   delivery lifecycle observation is an explicit opt-in diagnostic that cleans up through visible
+   Settings controls (see [`model-delivery.md`](model-delivery.md)).
 
 ---
 

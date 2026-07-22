@@ -14,10 +14,11 @@ If anything here disagrees with the code, the code wins — fix this file.
 > `summarize_generation_telemetry.py`. Benchmarking + output‑quality checks are **first‑class**:
 > successful benchmark records, historical baselines, and generated indexes are permitted
 > (bounded by the `benchmarks/` cap). Raw telemetry, audio, screenshots, traces, and result
-> bundles remain untracked. XCUITest is the sole autonomous app UI driver; deterministic
-> history/WAV/XPC/backend probes validate its smoke and benchmark results. iOS UI tests
-> and real-engine generation remain **on-device only** on a paired physical iPhone. GitHub CI is
-> compile-only for iOS.
+> bundles remain untracked. Interactive UI QA (agent-driven computer use,
+> [`interactive-ui-qa.md`](interactive-ui-qa.md)) is the advisory frontend acceptance method;
+> deterministic history/WAV/XPC/backend probes remain the validation surface for generation
+> evidence. iOS UI QA and real-engine generation remain **on-device only** on a paired physical
+> iPhone (UI QA through iPhone Mirroring). GitHub CI is compile-only for iOS.
 > See [`testing-runbook.md`](testing-runbook.md) and [`ios-device-testing.md`](ios-device-testing.md).
 
 ---
@@ -79,7 +80,7 @@ scripts/macos_test.sh telemetry-overhead
 ```
 
 This is a real generation lane with its own read-only model integrity check. It never invokes
-`models ensure`, downloads weights, bootstraps a clone fixture, or depends on an XCUITest result.
+`models ensure`, downloads weights, bootstraps a clone fixture, or depends on any UI observation.
 
 It applies one fixed `vocello bench --seed` through three deterministic mode-order rotations.
 Each rotation runs one warm-up and two measured Custom/Speed/medium takes per mode, yielding six
@@ -469,7 +470,7 @@ warm. See [`benchmarking-procedure.md`](benchmarking-procedure.md) for supported
 ## 11. Benchmark result interpretation
 
 This document is the telemetry schema and interpretation reference. The sole operational source for
-benchmark preflight, model and clone-fixture preparation, exact matrices, commands, UI lanes,
+benchmark preflight, model and clone-fixture preparation, exact matrices, commands,
 artifact handling, and troubleshooting is
 [`benchmarking-procedure.md`](benchmarking-procedure.md). In particular, do not derive a Clone
 fixture from a Custom Voice output: the canonical fixture is generated through Voice Design and its

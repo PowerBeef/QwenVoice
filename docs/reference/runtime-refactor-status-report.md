@@ -25,7 +25,7 @@ mechanical retirement is unblocked but not started; Phases 7–13 remain open.
 | --- | --- |
 | `Sources/` | First-party Swift: macOS app UI, Core/Backend/Native/XPC, iOS, SharedSupport, CLI |
 | `Packages/VocelloQwen3Core/` | Owned Qwen3-TTS + Mimi runtime (XcodeGen alias `MLXAudio`) |
-| `Tests/` | Core, XPC integration, macOS/iOS XCUITest, iOS logic (compile-only) |
+| `Tests/` | Core, XPC integration, iOS logic (compile-only); the macOS/iOS XCUITest targets were retired 2026-07-22 |
 | `scripts/` | Authoritative build/test/release/contract gates |
 | `config/` | Machine-readable contracts |
 | `docs/` | Architecture, progress, ADR, reference guides |

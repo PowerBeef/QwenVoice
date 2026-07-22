@@ -901,8 +901,7 @@ cmd_test() {
 }
 
 cmd_telemetry_overhead() {
-  # Explicit model-dependent diagnostic. UI readiness is checked separately by
-  # scripts/ui_test.sh before every UI-driven generation.
+  # Explicit model-dependent diagnostic.
   check_mac_test_models --strict
   "$SCRIPT_DIR/build.sh" cli >/dev/null
   local verdict_path

@@ -81,8 +81,7 @@
       ],
       "testGlobs": [
         "Tests/VocelloCoreTests/ModelDownloadLifecycleTests.swift",
-        "Tests/VocelloiOSLogicTests/*.swift",
-        "Tests/VocelloiOSUITests/VocelloiOSModelDownloadUITests.swift"
+        "Tests/VocelloiOSLogicTests/*.swift"
       ],
       "hardwarePlatforms": ["macos", "ios"]
     },
@@ -106,7 +105,6 @@
         "scripts/check_*benchmark.py",
         "scripts/benchmark_history.py",
         "scripts/publish_benchmark_history.py",
-        "scripts/ui_test.sh",
         "scripts/ios_device.sh",
         "scripts/macos_test.sh"
       ],

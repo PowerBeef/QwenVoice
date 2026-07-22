@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Keep the repository on one app-UI automation stack: XCUITest.
+# Keep the repository's test wiring consistent: deterministic script gates,
+# no scripted app-UI driver stack (interactive UI QA is agent-driven per
+# docs/reference/interactive-ui-qa.md), and retired harness artifacts absent.
 
 set -euo pipefail
 
@@ -9,7 +11,7 @@ cd "$ROOT_DIR"
 fail() { printf '\033[0;31m[test-workflow]\033[0m %s\n' "$*" >&2; exit 1; }
 command -v rg >/dev/null 2>&1 || fail "ripgrep is required"
 
-echo "==> XCUITest workflow consistency check" >&2
+echo "==> Test workflow consistency check" >&2
 
 # The memory-pressure synchronization stress suite has an explicit sanitizer
 # escape hatch, but ordinary deterministic checks must remain sanitizer-free.
@@ -78,13 +80,6 @@ done
 python3 scripts/build_output_policy.py validate \
   || fail "build-output policy validation failed"
 
-for required in \
-  Tests/UIAutomationSupport \
-  Tests/VocelloMacUITests \
-  Tests/VocelloiOSUITests; do
-  [[ -d "$required" ]] || fail "required XCUITest source directory is missing: $required"
-done
-
 for retired in \
   .mirroir-mcp \
   .agents/skills/vocello-macos-ui-qa \
@@ -128,7 +123,17 @@ for retired in \
   Tests/DeviceProbeFixtures/text-call-active.txt \
   Tests/DeviceProbeFixtures/text-mirror-active.txt \
   Tests/DeviceProbeFixtures/text-mirror-connecting.txt \
-  Tests/DeviceProbeFixtures/text-phone-in-use.txt; do
+  Tests/DeviceProbeFixtures/text-phone-in-use.txt \
+  Tests/UIAutomationSupport \
+  Tests/VocelloMacUITests \
+  Tests/VocelloiOSUITests \
+  scripts/ui_test.sh \
+  scripts/check_macos_xpc_bench.py \
+  scripts/check_ios_ui_benchmark.py \
+  scripts/check_ios_smoke_acceptance.py \
+  scripts/test_check_macos_xpc_bench.py \
+  scripts/test_check_ios_ui_benchmark.py \
+  scripts/tests/test_check_ios_smoke_acceptance.py; do
   [[ ! -e "$retired" ]] || fail "retired UI harness artifact still exists: $retired"
 done
 
@@ -155,6 +160,7 @@ retired_alias_pattern='(?x)(?:
   | ^[[:space:]]*(?:ui-test|review)\)
   | ^[[:space:]]*logic-test\)
   | --suite(?:=|[[:space:]]+)(?:quick|full|benchmark)\b
+  | (?:^|[[:space:]`])(?:(?:\./)?scripts/)?ui_test\.sh\b
 )'
 out="$(rg -n --pcre2 "$retired_alias_pattern" "${active[@]}" "${excludes[@]}" 2>/dev/null || true)"
 [[ -z "$out" ]] || fail "retired UI command or suite alias returned:\n$out"
@@ -301,14 +307,6 @@ if not validator.is_file():
     raise SystemExit("clone-conditioning validator is missing")
 PY
 
-out="$(rg -n '\b(?:sleep|usleep)\s*\(|Thread\.sleep|coordinate\s*\(' \
-  Tests/UIAutomationSupport Tests/VocelloMacUITests Tests/VocelloiOSUITests 2>/dev/null || true)"
-[[ -z "$out" ]] || fail "UI tests must use condition waits and exact elements, not delays/coordinates:\n$out"
-
-out="$(rg -n 'matching\s*\(\s*NSPredicate\s*\(\s*format:\s*"label|buttons\s*\[\s*"(?:Generate|Custom|Design|Clone|Dismiss)' \
-  Tests/UIAutomationSupport Tests/VocelloMacUITests Tests/VocelloiOSUITests 2>/dev/null || true)"
-[[ -z "$out" ]] || fail "UI tests must use stable accessibility identifiers, not visible-label fallbacks:\n$out"
-
 # Temporary Xcode work must live below build/scratch/derived-data. Keep the two
 # historical one-off roots recognizable only in the cleanup migration; a new
 # top-level *DerivedData* spelling in an active script would silently recreate
@@ -367,40 +365,19 @@ for foundation_policy_variable in \
   rg -Fq "\$$foundation_policy_variable" scripts/build_foundation_targets.sh \
     || fail "foundation compile checks must consume $foundation_policy_variable from the build policy"
 done
-rg -q -- '--prune-ui-results' scripts/ui_test.sh \
-  || fail "successful XCUITest runs must prune superseded result bundles"
-
-# The macOS runner may signal only PIDs whose executable resolves to its exact
-# DerivedData product. A name-wide kill could terminate a user's other Vocello.
-rg -q 'process_executable_path' scripts/ui_test.sh \
-  || fail "macOS UI runner lost exact executable identity validation"
-rg -q 'Build/Products/Release/Vocello\.app/Contents/MacOS/Vocello' scripts/ui_test.sh \
-  || fail "macOS UI runner lost its exact test-host executable path"
-out="$(rg -n 'pkill[^\n]*(?:Vocello|QwenVoiceEngineService)' scripts/ui_test.sh 2>/dev/null || true)"
-[[ -z "$out" ]] || fail "macOS UI runner must never name-kill Vocello processes:\n$out"
-
-# The only app-UI topology is two isolated schemes and two UI-test bundles.
+# No scripted app-UI automation topology may return: project.yml must define no
+# ui-testing bundles or UI schemes, and the standalone iOS policy bundle stays
+# app-host-free.
 python3 - <<'PY'
 from pathlib import Path
 import re
 
 text = Path("project.yml").read_text(encoding="utf-8")
+if "bundle.ui-testing" in text:
+    raise SystemExit("project.yml must not define ui-testing bundles (retired stack)")
 for name in ("VocelloMacUI", "VocelloiOSUI", "VocelloMacUITests", "VocelloiOSUITests"):
-    count = len(re.findall(rf"^  {re.escape(name)}:$", text, re.MULTILINE))
-    if count != 1:
-        raise SystemExit(f"project.yml must define {name} exactly once (found {count})")
-for target, host in (("VocelloMacUITests", "QwenVoice"), ("VocelloiOSUITests", "VocelloiOS")):
-    match = re.search(rf"^  {target}:\n(?P<body>(?:    .*\n|\n)*)", text, re.MULTILINE)
-    body = match.group("body") if match else ""
-    if "type: bundle.ui-testing" not in body or f"TEST_TARGET_NAME: {host}" not in body:
-        raise SystemExit(f"{target} must remain an isolated UI-test bundle hosted by {host}")
-for scheme in ("QwenVoice", "VocelloiOS"):
-    match = re.search(rf"^  {scheme}:\n(?P<body>(?:    .*\n|\n)*)", text, re.MULTILINE)
-    if match is None:
-        raise SystemExit(f"project.yml is missing ordinary scheme {scheme}")
-    body = match.group("body")
-    if "VocelloMacUITests" in body or "VocelloiOSUITests" in body:
-        raise SystemExit(f"ordinary scheme {scheme} must not include a UI-test bundle")
+    if re.search(rf"^  {re.escape(name)}:$", text, re.MULTILINE):
+        raise SystemExit(f"retired UI scheme/target returned to project.yml: {name}")
 
 logic_target = re.search(
     r"^  VocelloiOSLogicTests:\n(?P<body>(?:    .*\n|\n)*)",
@@ -419,7 +396,7 @@ if "VocelloiOSLogicTests" not in logic_template or "TestableReference" not in lo
     raise SystemExit("VocelloiOSLogic generated scheme must own the standalone policy-test bundle")
 PY
 
-# Ordinary CI must neither compile UI-test bundles nor execute UI acceptance.
+# Ordinary CI must never execute app-UI automation or reference the retired stack.
 ci_error="$(python3 - <<'PY'
 from pathlib import Path
 import re
@@ -528,10 +505,9 @@ for root in roots:
 allowed = {
     "ios_device.sh": {"doctor", "build", "install", "launch", "console", "pull", "bench", "lang-bench", "clone-conditioning", "speech-assets", "crashes", "debug", "logs", "profile", "memory", "memory-field-report", "preflight", "device-state", "gate", "help"},
     "macos_test.sh": {"preflight", "core-test", "lang-bench", "test", "telemetry-overhead", "crashes", "debug", "logs", "profile", "memory", "gate", "release-readiness", "models", "help"},
-    "ui_test.sh": {"macos", "ios"},
 }
 errors = []
-command = re.compile(r"(?:\./)?scripts/(ios_device\.sh|macos_test\.sh|ui_test\.sh)\s+([a-z][a-z0-9-]*)")
+command = re.compile(r"(?:\./)?scripts/(ios_device\.sh|macos_test\.sh)\s+([a-z][a-z0-9-]*)")
 baseline = re.compile(r"--compare-baseline(?:=|\s+)([^\s`\\]+)")
 for path in files:
     text = path.read_text(encoding="utf-8")
@@ -633,7 +609,6 @@ python3 -m unittest \
   scripts.tests.test_bench_command_contract \
   scripts.tests.test_publish_benchmark_history \
   scripts.tests.test_check_ios_clone_conditioning \
-  scripts.tests.test_check_ios_smoke_acceptance \
   scripts.tests.test_ios_device_benchmark_contract \
   scripts.tests.test_ios_memory_field_report \
   scripts.tests.test_profile_capture_contract \
@@ -641,8 +616,6 @@ python3 -m unittest \
   scripts.tests.test_summarize_generation_telemetry \
   scripts.tests.test_analyze_prosody \
   scripts.tests.test_prosody_calibration \
-  scripts.test_check_macos_xpc_bench \
-  scripts.test_check_ios_ui_benchmark \
   scripts.test_language_bench_evidence \
   scripts.test_check_ios_speech_assets \
   scripts.test_check_language_hints \
@@ -651,4 +624,4 @@ python3 -m unittest \
   scripts.test_validate_backend_risk_spine
 fi
 
-echo "==> XCUITest workflow consistency check passed" >&2
+echo "==> Test workflow consistency check passed" >&2

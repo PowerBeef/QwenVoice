@@ -142,16 +142,21 @@ identifiers differ. Restoring that component does not authorize Simulator execut
 
 ## Current implementation
 
-- Native app UI acceptance uses one shared XCUITest stack: `macos smoke|benchmark` on the native
-  Mac host and `ios smoke|benchmark` on a paired physical iPhone.
-- UI execution is explicit frontend QA. It is not required to commit, push, open or merge a pull
+- Interactive app UI acceptance is agent-driven computer use per
+  [`docs/reference/interactive-ui-qa.md`](reference/interactive-ui-qa.md): macOS driven directly,
+  iOS through iPhone Mirroring on the paired physical iPhone. The scripted XCUITest stack
+  (targets, runner, validators) was retired 2026-07-22 by maintainer decision; the wiring gates
+  fail closed on its artifacts. Engine benchmark evidence continues headless via the CLI bench and
+  `scripts/ios_device.sh bench`; the committed `benchmarks/runs/ui-generation/` records remain
+  immutable history.
+- UI QA is explicit frontend acceptance. It is not required to commit, push, open or merge a pull
   request, run ordinary CI, package a release, or create an iOS archive.
 - The ordinary iOS compile lane now typechecks both the app and a standalone app-host-free policy
   XCTest bundle for the generic physical-device SDK. It covers catalog/ledger, memory policy,
   cancellation, storage-path gating, and diagnostic redaction without a phone. Xcode 26 rejects
   tool-hosted app-free XCTest execution on physical-device destinations, so this target remains
-  compile-only and device runtime proof stays in the headless diagnostics and XCUITest lanes.
-- The physical-iPhone smoke contract now covers two distinct cancellation paths. It first cancels
+  compile-only and device runtime proof stays in the headless diagnostics lanes.
+- The retired physical-iPhone smoke contract covered two distinct cancellation paths. It first cancelled
   one active stream through the genuine visible Cancel control, then relaunches with the registered
   one-shot critical-memory diagnostic, requires typed `memory_pressure` cancellation to complete
   before `fullUnload`, and proves the same engine surface can complete a subsequent generation.
@@ -237,8 +242,8 @@ identifiers differ. Restoring that component does not authorize Simulator execut
   bundle-aware app-lifetime background session plus an atomic schema-v2 request ledger, exact task
   adoption, cancellation barriers, durable delegate staging, and bounded privacy-safe diagnostics.
   macOS and CLI retain foreground delivery with terminal session teardown. Cancel discards staging;
-  Retry reuses verified files. The isolated `scripts/ui_test.sh ios model-download` lifecycle proof
-  is explicit QA and never joins smoke, benchmark, CI, packaging, or release gates. The 2026-07-14
+  Retry reuses verified files. The isolated model-download lifecycle proof (previously a dedicated
+  retired UI lane) is explicit QA and never joins CI, packaging, or release gates. The 2026-07-14
   isolated Custom Speed proofs passed on both canonical platforms: macOS verified and removed its
   temporary 2.31 GB install, while the physical-iPhone test preserved monotonic progress across
   backgrounding, termination, and relaunch, installed with exact wire bytes and no retry, then
@@ -287,8 +292,8 @@ identifiers differ. Restoring that component does not authorize Simulator execut
   privacy-reduced delayed MetricKit summaries only; absence is `notYetDelivered`, not failure.
 - Raw Instruments documents are diagnostic, not durable benchmark history. Successful profiles
   publish their validated digest/settings/extracted summary and then discard the raw trace unless
-  `--keep-trace` was explicit. Routine cleanup also bounds failed profiles, superseded XCUITest
-  results, and scratch DerivedData while preserving the current app, canonical caches, dSYMs, and
+  `--keep-trace` was explicit. Routine cleanup also bounds failed profiles, superseded retired
+  UI-test results, and scratch DerivedData while preserving the current app, canonical caches, dSYMs, and
   external models. Benchmark results without a valid registry record remain available for
   idempotent publication repair; compile-safety scratch builds use only
   `build/scratch/derived-data/` and self-remove on exit.
@@ -383,18 +388,16 @@ annotation rather than a prerequisite.
 
 ## Explicit frontend acceptance
 
-```sh
-scripts/ui_test.sh macos smoke
-scripts/ui_test.sh macos benchmark
+Interactive UI QA per [`docs/reference/interactive-ui-qa.md`](reference/interactive-ui-qa.md):
+the macOS checklist against `./scripts/build.sh run`, the iOS checklist through iPhone Mirroring
+(`scripts/ios_device.sh preflight` first for device state). QA visibly requires Custom, Design,
+and Clone Speed to be ready, Generate to be enabled, and the prepared Clone voice to exist before
+the first take. Use `models ensure` only as an explicit macOS fixture repair/bootstrap step.
 
-scripts/ios_device.sh preflight
-scripts/ui_test.sh ios smoke
-scripts/ui_test.sh ios benchmark
-```
-
-Generation UI tests visibly require Custom, Design, and Clone Speed to be ready, Generate to be
-enabled, and the prepared Clone voice to exist before the first take. Use `models ensure` only as an
-explicit macOS fixture repair/bootstrap step.
+2026-07-22 — QA-stack decision: the scripted XCUITest lanes were retired in favor of agent-driven
+computer-use QA after repeated system-dialog stalls and accessibility-snapshot fragility; the same
+change restored the virtual-microphone recording knob (`QWENVOICE_FAKE_MIC_WAV`, registered and
+master-gated) and added the `QVOICE_GATES=quick` fast-iteration gate mode.
 
 ## Open release work
 

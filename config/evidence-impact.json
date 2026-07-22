@@ -50,17 +50,17 @@
     {
       "id": "ios-model-download-lifecycle",
       "kind": "device-ui",
-      "command": "scripts/ui_test.sh ios model-download"
+      "command": "interactive model-download lifecycle QA on the paired iPhone via iPhone Mirroring (docs/reference/interactive-ui-qa.md; isolated acceptance data root)"
     },
     {
-      "id": "macos-ui-benchmark",
+      "id": "macos-engine-benchmark",
       "kind": "model-ui",
-      "command": "scripts/ui_test.sh macos benchmark"
+      "command": "QWENVOICE_DEBUG=1 ./build/vocello bench --modes custom,design,clone --variants speed --lengths short,medium,long --warm 3"
     },
     {
-      "id": "ios-ui-benchmark",
+      "id": "ios-engine-benchmark",
       "kind": "device-ui",
-      "command": "scripts/ui_test.sh ios benchmark"
+      "command": "scripts/ios_device.sh bench"
     }
   ],
   "pathClasses": [
@@ -129,8 +129,8 @@
         "supply-chain-contract"
       ],
       "qualityEvidence": [
-        "macos-ui-benchmark",
-        "ios-ui-benchmark"
+        "macos-engine-benchmark",
+        "ios-engine-benchmark"
       ]
     },
     {

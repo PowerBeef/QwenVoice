@@ -43,10 +43,8 @@ REQUIRED_SURFACES=(
     "scripts/lib/build_artifact_retention.py"
     "scripts/lib/storage_preflight.py"
     "scripts/lib/ios_platform_preflight.py"
-    "scripts/ui_test.sh"
     "scripts/check_test_workflows.sh"
     "scripts/validate_backend_risk_spine.py"
-    "scripts/check_ios_ui_benchmark.py"
     "scripts/benchmark_memory.py"
     "scripts/benchmark_history.py"
     "scripts/publish_benchmark_history.py"
@@ -56,8 +54,6 @@ REQUIRED_SURFACES=(
     "scripts/test_language_bench_evidence.py"
     "scripts/test_check_ios_speech_assets.py"
     "scripts/test_check_language_hints.py"
-    "scripts/test_check_macos_xpc_bench.py"
-    "scripts/test_check_ios_ui_benchmark.py"
     "scripts/test_check_language_output.py"
     "scripts/tests/test_build_output_policy.py"
     "scripts/tests/test_codex_session_storage.py"
@@ -121,9 +117,6 @@ REQUIRED_SURFACES=(
     "SECURITY.md"
     ".github/CODEOWNERS"
     ".github/dependabot.yml"
-    "Tests/UIAutomationSupport"
-    "Tests/VocelloMacUITests"
-    "Tests/VocelloiOSUITests"
     "Tests/VocelloiOSLogicTests"
     ".xcodebuildmcp/config.yaml"
     "CLAUDE.md"
@@ -148,8 +141,8 @@ python3 "$SCRIPT_DIR/model_catalog_contract.py" rebuild --check
 python3 "$SCRIPT_DIR/model_catalog_contract.py" validate
 python3 "$SCRIPT_DIR/evidence_impact.py" validate
 
-# iOS device tooling and explicit XCUITest are first-class. `scripts/ios_device.sh` owns
-# physical-device operations; `scripts/ui_test.sh` is the sole app-UI entry point.
+# iOS device tooling is first-class: `scripts/ios_device.sh` owns physical-device
+# operations. Interactive app-UI QA is agent-driven (docs/reference/interactive-ui-qa.md).
 # The owned Qwen3 runtime now has one curated direct test target. Broad upstream
 # multi-model tests remain prohibited; only this exact directory is allowed.
 RUNTIME_TEST_ROOT="$PROJECT_DIR/Packages/VocelloQwen3Core/Tests"
@@ -161,10 +154,10 @@ if [ -d "$RUNTIME_TEST_ROOT" ]; then
         exit 1
     fi
 fi
-# NOTE: benchmarking, output-quality, AND physical-device XCUITest surfaces are first-class
-# here (runtime telemetry, scripts/summarize_generation_telemetry.py, benchmarks/,
-# in-engine audioQC, scripts/ios_device.sh, and the isolated UI-test targets). Committed
-# benchmark/QC summaries are allowed (bounded by the benchmarks/ cap below).
+# NOTE: benchmarking and output-quality surfaces are first-class here (runtime
+# telemetry, scripts/summarize_generation_telemetry.py, benchmarks/, in-engine
+# audioQC, scripts/ios_device.sh). Committed benchmark/QC summaries are allowed
+# (bounded by the benchmarks/ cap below).
 
 # General hygiene bans only (kept): broad upstream tests, stale macOS-15 product /
 # old build-path names, and the Python-script variants (the "no Python backend"
