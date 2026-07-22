@@ -17,12 +17,12 @@
     "npm": {"version": "11.12.1", "versionCommand": ["npm", "--version"]}
   },
   "actions": {
-    "actions/checkout": {"version": "v4.3.1", "sha": "34e114876b0b11c390a56381ad16ebd13914f8d5"},
-    "actions/cache": {"version": "v4.2.4", "sha": "0400d5f644dc74513175e3cd8d07132dd4860809"},
-    "actions/upload-artifact": {"version": "v4.6.2", "sha": "ea165f8d65b6e75b540449e92b4886f43607fa02"},
-    "actions/setup-node": {"version": "v4.4.0", "sha": "49933ea5288caeca8642d1e84afbd3f7d6820020"},
-    "actions/dependency-review-action": {"version": "v4.8.2", "sha": "3c4e3dcb1aa7874d2c16be7d79418e9b7efd6261"},
-    "actions/attest-build-provenance": {"version": "v3.0.0", "sha": "977bb373ede98d70efdf65b84cb5f73e068dcc2a"},
-    "github/codeql-action": {"version": "v3.30.5", "sha": "3599b3baa15b485a2e49ef411a7a4bb2452e7f93"}
+    "actions/checkout": {"version": "v7.0.0", "sha": "9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"},
+    "actions/cache": {"version": "v6.1.0", "sha": "55cc8345863c7cc4c66a329aec7e433d2d1c52a9"},
+    "actions/upload-artifact": {"version": "v7.0.1", "sha": "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"},
+    "actions/setup-node": {"version": "v7.0.0", "sha": "820762786026740c76f36085b0efc47a31fe5020"},
+    "actions/dependency-review-action": {"version": "v5.0.0", "sha": "a1d282b36b6f3519aa1f3fc636f609c47dddb294"},
+    "actions/attest-build-provenance": {"version": "v4.1.1", "sha": "0f67c3f4856b2e3261c31976d6725780e5e4c373"},
+    "github/codeql-action": {"version": "v4.37.1", "sha": "7188fc363630916deb702c7fdcf4e481b751f97a"}
   }
 }
