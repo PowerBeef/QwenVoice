@@ -24,6 +24,7 @@ public final class VocelloUIApplicationSession {
         app.launchEnvironment = environment
         app.launchArguments = arguments
         app.launch()
+        VocelloUIFailureEvidence.observedApp = app
     }
 
     public func terminate() {
@@ -31,11 +32,106 @@ public final class VocelloUIApplicationSession {
     }
 }
 
+/// On-failure diagnostics shared by every wait/action helper: a full-desktop
+/// screenshot (unlike `app.screenshot()`, `XCUIScreen` captures foreign windows
+/// and system permission dialogs that may be obscuring the app) plus a bounded
+/// dump of the app's accessibility tree. Turns "element not hittable" timeouts
+/// into one-glance diagnoses inside the xcresult.
+@MainActor
+public enum VocelloUIFailureEvidence {
+    /// The app under observation; set by `VocelloUIApplicationSession.launch`.
+    public static var observedApp: XCUIApplication?
+
+    private static let maxTreeDumpBytes = 48_000
+
+    public static func capture(reason: String) {
+        XCTContext.runActivity(named: "Failure evidence: \(reason)") { activity in
+            let desktop = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            desktop.name = "desktop-at-failure"
+            desktop.lifetime = .keepAlways
+            activity.add(desktop)
+
+            if let app = observedApp {
+                var tree = app.debugDescription
+                if tree.utf8.count > maxTreeDumpBytes {
+                    tree = String(tree.prefix(maxTreeDumpBytes)) + "\n…[truncated]"
+                }
+                let dump = XCTAttachment(string: tree)
+                dump.name = "element-tree-at-failure"
+                dump.lifetime = .keepAlways
+                activity.add(dump)
+            }
+        }
+    }
+}
+
+/// Registers a sentinel that fires only when an UNRELATED modal blocks the
+/// test's interaction (Apple, "Handling UI Interruptions"): it never dismisses
+/// anything — TCC dialogs stay human-answered — but it captures desktop
+/// evidence and names the blocker, so the pending action fails with a
+/// diagnosis instead of a bare timeout.
+@MainActor
+public enum VocelloUIInterruptionSentinel {
+    public static func install(on testCase: XCTestCase) {
+        testCase.addUIInterruptionMonitor(withDescription: "unrelated modal UI sentinel") { element in
+            var summary = element.debugDescription
+            if summary.count > 300 {
+                summary = String(summary.prefix(300)) + "…"
+            }
+            VocelloUIFailureEvidence.capture(reason: "blocked by unrelated modal UI: \(summary)")
+            return false
+        }
+    }
+}
+
 /// Predicate-backed waits used by both Apple-platform UI-test targets.
 @MainActor
 public enum VocelloUIWait {
-    public static func element(_ app: XCUIApplication, id: String) -> XCUIElement {
-        app.descendants(matching: .any)[id].firstMatch
+    /// Resolves an element by stable accessibility identifier. Prefer passing
+    /// the genuine element `type` (and, for sheet/popover flows, a narrower
+    /// `scope`) — a typed, scoped query prunes the accessibility-tree walk
+    /// that makes unscoped `.any` lookups slow, and keeps snapshots small
+    /// enough to succeed while the UI is animating (e.g. the recording level
+    /// meter invalidates the tree ~12×/s). `.any` remains correct for
+    /// identifiers SwiftUI attaches to non-obvious element classes.
+    public static func element(
+        _ app: XCUIApplication,
+        id: String,
+        type: XCUIElement.ElementType = .any,
+        in scope: XCUIElement? = nil
+    ) -> XCUIElement {
+        let root: XCUIElement = scope ?? app
+        return root.descendants(matching: type)[id].firstMatch
+    }
+
+    /// Asserts the app's window is frontmost and actually receiving hit-tests
+    /// by probing a control that is always present on the platform's root
+    /// screen. A failure almost always means a foreign window or a system
+    /// permission dialog is covering the app; the attached desktop screenshot
+    /// shows exactly what.
+    @discardableResult
+    public static func assertForegroundUnobstructed(
+        _ app: XCUIApplication,
+        probe: XCUIElement,
+        timeout: TimeInterval = 10,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> Bool {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in probe.exists && probe.isHittable },
+            object: NSObject()
+        )
+        let unobstructed = XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+        if !unobstructed {
+            VocelloUIFailureEvidence.capture(reason: "app window obscured or not frontmost")
+            XCTFail(
+                "App window is obscured or not receiving hit-tests — a system permission dialog "
+                    + "or foreign window is likely covering it (see desktop-at-failure attachment)",
+                file: file,
+                line: line
+            )
+        }
+        return unobstructed
     }
 
     @discardableResult
@@ -47,6 +143,7 @@ public enum VocelloUIWait {
     ) -> Bool {
         let result = element.waitForExistence(timeout: timeout)
         if !result {
+            VocelloUIFailureEvidence.capture(reason: "element never existed: \(element)")
             XCTFail("Expected element to exist within \(timeout)s: \(element)", file: file, line: line)
         }
         return result
@@ -137,6 +234,7 @@ public enum VocelloUIWait {
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: anchor)
         let result = XCTWaiter.wait(for: [expectation], timeout: timeout)
         guard result == .completed else {
+            VocelloUIFailureEvidence.capture(reason: description)
             XCTFail("Timed out after \(timeout)s waiting for \(description)", file: file, line: line)
             return false
         }

@@ -56,6 +56,13 @@ class VocelloiOSUITestCase: XCTestCase {
         )
         completeVisibleOnboardingIfNeeded()
         XCTAssertTrue(VocelloUIWait.exists(element(VocelloiOSTab.studio.identifier), timeout: 30))
+        // Fail fast, with a full-screen screenshot, when a system alert or
+        // overlay is covering the app instead of surfacing later as cryptic
+        // "not hittable" timeouts.
+        VocelloUIWait.assertForegroundUnobstructed(
+            app,
+            probe: element(VocelloiOSTab.studio.identifier)
+        )
         select(tab: .studio)
         XCTAssertTrue(VocelloUIWait.exists(element("generateSection_custom"), timeout: 30))
         XCTAssertTrue(VocelloUIWait.exists(element("textInput_textEditor"), timeout: 30))

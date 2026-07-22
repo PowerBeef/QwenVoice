@@ -396,6 +396,20 @@ Generation UI tests visibly require Custom, Design, and Clone Speed to be ready,
 enabled, and the prepared Clone voice to exist before the first take. Use `models ensure` only as an
 explicit macOS fixture repair/bootstrap step.
 
+2026-07-22 — UI QA architecture decision (round trip, same day): computer-use vision driving was
+trialed as the autonomous UI driver and retired within hours — mirror keyboard focus decays,
+popovers swallow batched clicks, per-action round-trips cost seconds, and per-take environment
+injection/telemetry correlation is impossible. XCUITest returned as the sole autonomous driver in
+a ground-up v2 stack: typed/scoped element queries (root cause of multi-second finds and
+accessibility-snapshot timeouts), automatic on-failure desktop + element-tree evidence, a launch
+obstruction preflight, an interruption-monitor sentinel that names blocking system dialogs without
+answering them, a `/tmp` virtual-mic fixture (app-data TCC fix), five ordered state-hygienic smoke
+journeys including restored mid-generation cancellation coverage, an advisory `ui-preflight` TCC
+check, and two-phase lane execution (skippable `build-for-testing` + `test-without-building`).
+Computer use remains assistive for exploratory QA and failure diagnosis
+([`reference/interactive-ui-qa.md`](reference/interactive-ui-qa.md)) — during the trial it
+identified the app-data and speech-recognition TCC dialog classes no log surfaced.
+
 ## Open release work
 
 - macOS 2.1.0 is released.

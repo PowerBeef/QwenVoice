@@ -197,7 +197,9 @@
         "benchmark-validation",
         "history-publication"
       ],
-      "optionalSteps": ["result-retention"]
+      "optionalSteps": [
+        "result-retention"
+      ]
     },
     "ui-ios-model-download": {
       "producer": "scripts/ui_test.sh",
@@ -208,7 +210,9 @@
         "model-download-diagnostics",
         "crash-delta"
       ],
-      "optionalSteps": ["result-retention"]
+      "optionalSteps": [
+        "result-retention"
+      ]
     },
     "ui-ios-smoke": {
       "producer": "scripts/ui_test.sh",
@@ -219,7 +223,9 @@
         "crash-delta",
         "smoke-diagnostics"
       ],
-      "optionalSteps": ["result-retention"]
+      "optionalSteps": [
+        "result-retention"
+      ]
     },
     "ui-macos-benchmark": {
       "producer": "scripts/ui_test.sh",
@@ -230,7 +236,11 @@
         "benchmark-validation",
         "history-publication"
       ],
-      "optionalSteps": ["result-retention"]
+      "optionalSteps": [
+        "result-retention",
+        "ui-preflight",
+        "ui-build"
+      ]
     },
     "ui-macos-smoke": {
       "producer": "scripts/ui_test.sh",
@@ -239,7 +249,11 @@
         "xcuitest",
         "crash-delta"
       ],
-      "optionalSteps": ["result-retention"]
+      "optionalSteps": [
+        "result-retention",
+        "ui-preflight",
+        "ui-build"
+      ]
     }
   }
 }

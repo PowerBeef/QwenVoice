@@ -171,6 +171,7 @@ record_early_failure() {
   local status=$?
   trap - EXIT
   set +e
+  write_test_summary || true
   write_run_metadata failed "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$status"
   exit "$status"
 }
@@ -187,6 +188,52 @@ export_attachments() {
       --output-path "$out/attachments" >"$out/attachments.log" 2>&1; then
     warn "could not export xcresult attachments (see $out/attachments.log)"
   fi
+}
+
+# Advisory only: an undecided mic/speech TCC grant means macOS can raise a
+# system-modal permission dialog mid-run, which blocks every UI-test click.
+# Warn so the operator settles the grant once (docs/reference/macos-permissions.md);
+# never blocks the lane. Degrades gracefully when the terminal lacks Full Disk
+# Access to read the TCC database.
+mac_ui_preflight() {
+  local tcc_db="$HOME/Library/Application Support/com.apple.TCC/TCC.db"
+  local svc rows
+  for svc in kTCCServiceMicrophone kTCCServiceSpeechRecognition; do
+    if ! rows="$(sqlite3 -readonly "$tcc_db" \
+        "SELECT auth_value FROM access WHERE service='$svc' AND client='com.qwenvoice.app';" \
+        2>/dev/null)"; then
+      note "ui-preflight: TCC database unreadable (no Full Disk Access) — cannot verify $svc"
+      continue
+    fi
+    if [[ -z "$rows" ]]; then
+      warn "ui-preflight: no $svc decision recorded for com.qwenvoice.app — a system permission dialog may appear mid-run and block UI tests; settle it once (docs/reference/macos-permissions.md)"
+    fi
+  done
+  return 0
+}
+
+# Per-test verdict summary parsed from the xcodebuild log into a compact
+# sidecar next to run.json (run.json's schema stays untouched).
+write_test_summary() {
+  [[ -f "$out/xcodebuild.log" ]] || return 0
+  python3 - "$out/xcodebuild.log" "$out/test-results.json" <<'SUMMARY'
+import json, pathlib, re, sys
+
+log = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
+pattern = re.compile(
+    r"Test Case '-\[[\w.]+ (\w+)\]' (passed|failed) \((\d+\.\d+) seconds\)"
+)
+results = [
+    {"test": m.group(1), "verdict": m.group(2), "seconds": float(m.group(3))}
+    for m in pattern.finditer(log)
+]
+payload = {"schemaVersion": 1, "tests": results}
+pathlib.Path(sys.argv[2]).write_text(
+    json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+)
+for r in results:
+    print(f"  {r['verdict']:>6}  {r['seconds']:8.1f}s  {r['test']}")
+SUMMARY
 }
 
 mac_crash_marker="$out/.mac-crash-marker"
@@ -519,7 +566,10 @@ preserve_ios_ui_dsym() {
 if [[ "$platform" == "macos" ]]; then
   terminate_macos_app
   if [[ "$lane" == "smoke" ]]; then
-    only_test="VocelloMacUITests/VocelloMacSmokeUITests/testSmokeJourney"
+    # The smoke class runs its five ordered journeys (navigation/readiness,
+    # completed generation + History, mid-generation cancellation, virtual-mic
+    # recording, library surfaces) in method-name order.
+    only_test="VocelloMacUITests/VocelloMacSmokeUITests"
   else
     only_test="VocelloMacUITests/VocelloMacBenchmarkUITests/testOrderedConfigurableMatrix"
     rm -f "$MAC_TAKE_MANIFEST" "$MAC_TAKE_MANIFEST.next"
@@ -531,15 +581,39 @@ if [[ "$platform" == "macos" ]]; then
   fi
 
   note "macOS XCUITest $lane → $out"
-  required_step_run "$step_ledger" xcuitest run_xcodebuild xcb_run test \
+  required_step_run "$step_ledger" ui-preflight mac_ui_preflight
+
+  # Two-phase execution: an explicitly skippable build-for-testing (repeat
+  # lanes on an unchanged tree skip the multi-minute rebuild entirely),
+  # followed by test-without-building against the already-built products.
+  # Ordinary CI never invokes this script; the workflow-YML guard on
+  # test-without-building is unaffected.
+  mac_fingerprint="$( { git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null; \
+    git -C "$ROOT_DIR" status --porcelain 2>/dev/null; } | shasum -a 256 | cut -d' ' -f1)"
+  mac_build_marker="$MAC_DERIVED/.vocello-ui-build-fingerprint"
+  mac_products_ready="$(find "$MAC_DERIVED/Build/Products" -maxdepth 1 \
+    -name 'VocelloMacUI_*.xctestrun' -print -quit 2>/dev/null || true)"
+  if [[ -f "$mac_build_marker" && -n "$mac_products_ready" \
+      && "$(cat "$mac_build_marker" 2>/dev/null)" == "$mac_fingerprint" ]]; then
+    note "build-for-testing skipped — source fingerprint unchanged"
+    required_step_record "$step_ledger" ui-build 0
+  else
+    rm -f "$mac_build_marker"
+    required_step_run "$step_ledger" ui-build xcb_run build-for-testing \
+      -project "$PROJECT" -scheme VocelloMacUI -configuration Release \
+      -destination 'platform=macOS,arch=arm64' -derivedDataPath "$MAC_DERIVED" \
+      -clonedSourcePackagesDirPath "$QVOICE_XCODE_SOURCE_PACKAGES" \
+      -disableAutomaticPackageResolution \
+      -onlyUsePackageVersionsFromResolvedFile \
+      CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="-" ONLY_ACTIVE_ARCH=YES ARCHS=arm64 \
+      SWIFT_OPTIMIZATION_LEVEL=-O \
+      || die "macOS UI build-for-testing failed (see $out/xcodebuild.log)"
+    printf '%s\n' "$mac_fingerprint" >"$mac_build_marker"
+  fi
+  required_step_run "$step_ledger" xcuitest run_xcodebuild xcb_run test-without-building \
     -project "$PROJECT" -scheme VocelloMacUI -configuration Release \
     -destination 'platform=macOS,arch=arm64' -derivedDataPath "$MAC_DERIVED" \
-    -clonedSourcePackagesDirPath "$QVOICE_XCODE_SOURCE_PACKAGES" \
-    -disableAutomaticPackageResolution \
-    -onlyUsePackageVersionsFromResolvedFile \
     -resultBundlePath "$result" -only-testing:"$only_test" \
-    CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="-" ONLY_ACTIVE_ARCH=YES ARCHS=arm64 \
-    SWIFT_OPTIMIZATION_LEVEL=-O \
     || die "macOS XCUITest failed (see $out/xcodebuild.log)"
   required_step_run "$step_ledger" crash-delta check_mac_crash_delta \
     || die "new Vocello crash report detected"
@@ -622,6 +696,8 @@ else
 fi
 
 finished_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+note "per-test results:"
+write_test_summary || true
 write_run_metadata passed "$finished_at" 0
 run_finalized=1
 

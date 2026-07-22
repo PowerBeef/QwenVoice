@@ -168,7 +168,7 @@ The shell harness owns deterministic proof and evidence:
 | Lane | Purpose |
 |------|---------|
 | `scripts/macos_test.sh test` | Core, XPC transport, and runtime tests; no UI driving |
-| `scripts/ui_test.sh macos smoke` | Semantic UI journeys, accessibility assertions, and named screenshots |
+| `scripts/ui_test.sh macos smoke` | Five ordered focused journeys (navigation/readiness, completed generation + History, mid-generation cancellation, virtual-mic recording, library surfaces) with named screenshots and automatic on-failure desktop + element-tree evidence |
 | `scripts/ui_test.sh macos benchmark` | UI-driven generation matrix plus merged telemetry proof |
 
 ### macOS-specific patterns (vs iOS)

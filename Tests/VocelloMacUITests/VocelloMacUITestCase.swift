@@ -26,6 +26,7 @@ class VocelloMacUITestCase: XCTestCase {
     func beginSession() {
         continueAfterFailure = false
         session = VocelloUIApplicationSession()
+        VocelloUIInterruptionSentinel.install(on: self)
         launchApp(additionalEnvironment: additionalLaunchEnvironment)
     }
 
@@ -53,6 +54,13 @@ class VocelloMacUITestCase: XCTestCase {
             VocelloUIWait.exists(app.windows.firstMatch, timeout: 30),
             "Vocello must expose one host-app window after launch"
         )
+        // Fail fast, with a desktop screenshot, when a system permission
+        // dialog or foreign window is covering the app — otherwise every
+        // later interaction times out with a cryptic "not hittable" error.
+        VocelloUIWait.assertForegroundUnobstructed(
+            app,
+            probe: button(VocelloMacScreen.customVoice.sidebarID)
+        )
         navigate(to: .customVoice)
     }
 
@@ -61,12 +69,22 @@ class VocelloMacUITestCase: XCTestCase {
         launchApp(additionalEnvironment: additionalEnvironment)
     }
 
-    func element(_ id: String) -> XCUIElement {
-        VocelloUIWait.element(app, id: id)
+    func element(
+        _ id: String,
+        type: XCUIElement.ElementType = .any,
+        in scope: XCUIElement? = nil
+    ) -> XCUIElement {
+        VocelloUIWait.element(app, id: id, type: type, in: scope)
+    }
+
+    /// Typed button lookup — prunes the accessibility-tree walk versus an
+    /// unscoped `.any` query. Use for every control that is a genuine button.
+    func button(_ id: String, in scope: XCUIElement? = nil) -> XCUIElement {
+        element(id, type: .button, in: scope)
     }
 
     func navigate(to screen: VocelloMacScreen) {
-        let sidebar = element(screen.sidebarID)
+        let sidebar = button(screen.sidebarID)
         XCTAssertTrue(VocelloUIPrimaryAction.perform(on: sidebar, timeout: 20))
         XCTAssertTrue(VocelloUIWait.exists(element(screen.screenID), timeout: 20))
         XCTAssertTrue(
@@ -235,7 +253,73 @@ class VocelloMacUITestCase: XCTestCase {
         XCTAssertTrue(
             VocelloUIWait.value(element(readinessID), contains: "ready=true", timeout: 60)
         )
-        XCTAssertTrue(VocelloUIWait.enabled(element("textInput_generateButton"), timeout: 60))
+        XCTAssertTrue(VocelloUIWait.enabled(button("textInput_generateButton"), timeout: 60))
+    }
+
+    /// Starts a generation and waits until the visible Cancel control owns the
+    /// run — the precondition for mid-generation cancellation coverage.
+    func startGenerationAndAwaitCancelControl(mode: VocelloUIBenchMatrix.Mode) {
+        assertReadyToGenerate(mode: mode)
+        XCTAssertTrue(
+            VocelloUIPrimaryAction.perform(on: button("textInput_generateButton"), timeout: 30)
+        )
+        XCTAssertTrue(
+            VocelloUIWait.exists(button("textInput_cancelButton"), timeout: 30),
+            "the visible Cancel control must appear once generation starts"
+        )
+    }
+
+    /// Clicks the visible mid-generation Cancel and asserts the engine resets
+    /// cleanly: Generate re-enabled, Cancel gone, and no visible backend error
+    /// or crash badge — user cancellation is not a failure.
+    func cancelActiveGenerationAndAssertCleanReset() {
+        let generate = button("textInput_generateButton")
+        let cancel = button("textInput_cancelButton")
+        let backendError = element("sidebar_backendStatus_error")
+        let backendCrash = element("sidebar_backendStatus_crashed")
+        XCTAssertTrue(VocelloUIPrimaryAction.perform(on: cancel, timeout: 10))
+        XCTAssertTrue(
+            VocelloUIWait.condition(
+                "cancelled generation to reset to a reusable Generate control",
+                timeout: 60
+            ) {
+                generate.exists && generate.isEnabled && !cancel.exists
+            }
+        )
+        XCTAssertFalse(backendError.exists, "User cancellation must never surface a backend error")
+        XCTAssertFalse(backendCrash.exists, "User cancellation must never surface a backend crash")
+    }
+
+    /// Filters History by `text` and asserts the visible generation-row count
+    /// converges to `expected` (0 means the shared empty/no-results state).
+    /// The identifier lives on a genuine NSSearchField; an unscoped `.any`
+    /// lookup resolves its representable wrapper first and typed text lands
+    /// nowhere, so this queries the search field itself and asserts the text
+    /// landed. The row predicate excludes per-row action controls, whose
+    /// identifiers also start with `historyRow_`.
+    func assertHistoryRows(matching text: String, expected: Int) {
+        navigate(to: .history)
+        let search = element("history_searchField", type: .searchField)
+        XCTAssertTrue(VocelloUITextEntry.replace(in: search, with: text, timeout: 20))
+        XCTAssertTrue(
+            VocelloUIWait.value(search, contains: text, timeout: 10),
+            "typed history filter text must land in the search field"
+        )
+        let rowPredicate = NSPredicate(
+            format: "identifier BEGINSWITH 'historyRow_' AND NOT ("
+                + "identifier CONTAINS '_saveVoice_' OR identifier CONTAINS '_saveAs_' "
+                + "OR identifier CONTAINS '_delete_' OR identifier CONTAINS '_play_')"
+        )
+        let rows = app.descendants(matching: .any).matching(rowPredicate)
+        let empty = element("history_emptyState")
+        XCTAssertTrue(
+            VocelloUIWait.condition(
+                "history to show exactly \(expected) row(s) for '\(text)'",
+                timeout: 30
+            ) {
+                expected == 0 ? empty.exists : (!empty.exists && rows.count == expected)
+            }
+        )
     }
 
     /// Player visibility is first-chunk proof; the re-enabled Generate control
@@ -245,8 +329,8 @@ class VocelloMacUITestCase: XCTestCase {
         timeout: TimeInterval
     ) {
         assertReadyToGenerate(mode: mode)
-        let generate = element("textInput_generateButton")
-        let cancel = element("textInput_cancelButton")
+        let generate = button("textInput_generateButton")
+        let cancel = button("textInput_cancelButton")
         let player = element("sidebarPlayer_bar")
         let backendError = element("sidebar_backendStatus_error")
         let backendCrash = element("sidebar_backendStatus_crashed")

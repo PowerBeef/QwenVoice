@@ -48,7 +48,14 @@ Before changing macOS app or XPC code, read:
   profile, and return to repository scripts for final verification. Unavailability is not permission
   to configure a second XcodeBuildMCP server.
 - Optional SwiftUI/AppKit or performance skills may assist after their instructions are read;
-  shell scripts remain the source of truth for gates.
+  shell scripts remain the source of truth for gates. Triage UI-lane failures with the Axiom
+  `test-runner`/`test-debugger` agents (xcresult parsing), crashes with `crash-analyzer`, and
+  flake patterns with `testing-auditor`; for fast inner-loop iteration, drive builds/test runs
+  through the shared XcodeBuildMCP route (`macos` profile, `test_macos` on the `VocelloMacUI`
+  scheme, LLDB tools for hangs) — its UI-automation tools stay banned for Vocello, and
+  `scripts/ui_test.sh` remains the sole acceptance lane. Computer use stays assistive:
+  exploratory QA and failure diagnosis per
+  [`docs/reference/interactive-ui-qa.md`](../../docs/reference/interactive-ui-qa.md).
 - Generated output must use `config/build-output-policy.json`. Do not add a macOS DerivedData,
   package, evidence, symbol, or distribution root outside the manifest; route policy changes
   through `.claude/rules/release-qa.md`.
@@ -106,7 +113,11 @@ scripts/macos_test.sh gate            # deterministic macOS platform gate
   `studioChip_*` must survive refactors.
 - **No hidden test UI.** XCUITest observes genuine visible controls. Put test-only code in the UI
   test target; do not add invisible state markers, seeded app state, or generic `#if DEBUG` app
-  behavior.
+  behavior. Registered debug knobs (e.g. the virtual microphone) substitute inputs, never UI.
+- **Mac cancellation UI coverage exists.** The smoke suite's cancellation journey clicks the
+  visible mid-generation Cancel and asserts a clean reset: Generate re-enabled, no backend
+  error/crash badge, and zero History rows for the cancelled take. Do not regress the engine
+  semantics it protects (user cancel is `.cancelled`, never an error, never persisted).
 - **App sandbox disabled.** `Sources/QwenVoice.entitlements` keeps sandbox off for MLX; do not
   re-enable it.
 - **Do not sum unrelated memory peaks.** New memory-qualified macOS benchmark evidence pairs app

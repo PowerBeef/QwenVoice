@@ -54,6 +54,9 @@ Before changing scripts or CI, read:
   otherwise use `gh`. User-scoped installation state is not a repository prerequisite.
 - Optional skills may assist with test triage, performance, signing, packaging, or
   telemetry after their instructions are read. Start from script output and generated artifacts.
+  Triage failing UI lanes with the Axiom `test-runner`/`test-debugger` agents (xcresult parsing)
+  and crashes with `crash-analyzer` before manual log digging; computer use stays assistive
+  (exploratory QA/diagnosis per `docs/reference/interactive-ui-qa.md`), never a driver or gate.
 - XCUITest is the sole autonomous app UI driver. It runs against the native macOS app or a paired
   physical iPhone and provides smoke and benchmark lanes; iOS adds pulled on-device
   telemetry proof.

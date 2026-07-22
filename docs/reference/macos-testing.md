@@ -28,7 +28,7 @@ scripts/ui_test.sh macos benchmark --modes custom --lengths short --warm 1 --lab
 
 | Lane | Scope |
 | --- | --- |
-| Smoke | Exact app launch, sidebar navigation, visible model and clone-reference readiness, one real Custom generation, completed player, and History |
+| Smoke | Five ordered focused journeys, each in a fresh app session with no persisted state left behind: (1) navigation + visible model/clone readiness, (2) one real Custom generation with the completed take asserted exactly once in History, (3) mid-generation cancellation — clean reset, no error badge, no History row, (4) the virtual-microphone recording flow through capture and review (registered `QWENVOICE_FAKE_MIC_WAV` knob, `/tmp` fixture; cancels before the permission-sensitive accept), (5) library surfaces |
 | Benchmark | Ordered, configurable Custom/Design/Clone matrix with cold/warm classification and per-take deterministic proof; the default is exactly 29 takes |
 
 The runner targets the configured native Vocello test host. Before launch it resolves every matching
@@ -38,6 +38,16 @@ It uses stable accessibility identifiers and condition waits, preserves saved vo
 enables the persistent Clone consent preference for acceptance, restores temporary Auto-play
 changes, and records failures as XCTest activities and attachments. It never retries through a
 display name or alternate app path.
+
+Every wait/action failure automatically attaches a full-desktop screenshot (which captures foreign
+system dialogs the app screenshot cannot see) plus a bounded accessibility-tree dump; each launch
+fails fast with the same evidence when the app window is obscured, and an interruption-monitor
+sentinel names any unrelated modal that blocks an interaction (it never answers TCC dialogs —
+those stay human-answered). The macOS lanes run an advisory `ui-preflight` step that warns when
+the app's microphone or speech-recognition TCC grant is undecided, execute in two phases
+(a skippable `build-for-testing` keyed to a source fingerprint, then `test-without-building`, so
+repeat runs on an unchanged tree skip the rebuild entirely), and write a per-test verdict sidecar
+(`test-results.json`) next to `run.json`.
 
 Benchmark accepts `--modes`, `--lengths`, `--warm`, and `--label`. Filters are explicit diagnostic
 runs; invoking the command without filters is the canonical 29-take matrix on the tracked Mac mini
