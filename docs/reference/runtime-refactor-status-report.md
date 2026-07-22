@@ -61,8 +61,9 @@ iOS: UI → Core in-process → same owned runtime.
 | 4 Product adapter + mode cutover | Overall promotion passed (`overallPromotion: passed`) |
 | 5 Sampling v2 | Promotion-packaged evidence live |
 | 6 Telemetry v9 | Complete sidecar authority with v8 envelope (`telemetry: 9`) |
-| 7–13 | Foundations / not started / partial as in the runtime contract |
-| 14 Mechanical retirement | Explicitly deferred (`phase14DeferredSurfaces` in the contract) |
+| 7 Delivery-pipeline pacing | Rescoped 2026-07-22 (`amendment20260722`): fix app/XPC submission starvation (engine RTF flat in CLI A/B; 0.69–0.81 in the UI topology) |
+| 8–13 | Foundations / not started / partial as in the runtime contract |
+| 14 Mechanical retirement | Pulled forward 2026-07-22: scheduled after the phase 7–9 block, before 10–13 (`phase14DeferredSurfaces` unchanged) |
 
 ## In-progress dual surfaces (do not misread as dual backends)
 

@@ -3,7 +3,7 @@
 > Current maintainer checkpoint. Confirm this summary against the checkout before acting; source,
 > `project.yml`, and repository scripts remain authoritative.
 
-## Runtime convergence status — reviewed 2026-07-20
+## Runtime convergence status — reviewed 2026-07-22
 
 This checkpoint tracks the staged runtime convergence program. Focused Phase 4 acceptance landed
 at `00c9eea637259cfce858d1fc7d43a1a2c52ff86d` (delivered by [PR #78](https://github.com/PowerBeef/QwenVoice/pull/78)
@@ -21,14 +21,25 @@ machine-readable status record and wins over older prose that still says promoti
 | 4 — Product adapter and mode cutover | Closed 2026-07-20. Source implementation, deterministic verification, focused platform acceptance, clean Phase 0 controls, canonical 29-take matrices, Phase 5 packaging, and Phase 6 v9 sidecar authority are all closed. Contract `overallPromotion`: `passed`. QwenVoiceCore's `GenerationOutputAdapter` remains the shipping product session; Phase 14 still owns mechanical retirement of deferred surfaces. |
 | 5 — Request-local sampling | Closed 2026-07-20. Shipping path packages fail-closed `SamplingTakeEvidence.packagedTelemetryNotes()` (`validatedForPromotion()` + `samplingPromotionPackaged=true`). Fixed-seed equal/diverge pairs remain live identity proof. Contract `requestLocalSamplingV2`: `shipping-promotion-packaged-evidence-live`. Long-form/candidate sub-seed execution remains Phase 11/12. |
 | 6 — Telemetry v9 | Closed 2026-07-20 for history sidecar authority. JSONL envelope remains schema v8 with nested transition; publication-ready transitions with exact MLX chunk instants publish complete `*.streaming-telemetry-v9.json` sidecars and stamp digests. Contract `telemetry: 9`, `telemetryV9`: `complete-sidecar-authority-with-v8-envelope`. |
-| 7 — Chunk and preview experiments | Not started beyond prerequisites. Shipping v9 evidence, controlled A/B runs, audio-graph preparation experiments, and identity-bound calibration are pending. |
+| 7 — Delivery-pipeline pacing (rescoped 2026-07-22) | Rescoped by the endorsed amendment (`amendment20260722` in the contract). The 2026-07-22 characterization gate proved engine RTF flat across the Phase 4 cutover in interleaved CLI A/B (1.02–1.17) while the app/XPC topology measures 0.69–0.81 — the engine is submission-starved (≈83% of its command-buffer timeline idle; zero channel producer suspensions; normal thread priorities). Phase 7 now targets the pacing fix: coalesce per-frame actor hops, move v9 per-chunk publication off the generation path, and evaluate larger macOS chunk schedules, without regressing first-preview latency or trim/unload safety. |
 | 8 — Shared component storage | Production-integrated with deterministic coverage. Live validation across all six macOS artifacts and all three iPhone Speed artifacts is pending. |
 | 9 — Runtime component reuse | Not started. Decoder/immutable-weight reuse remains an optional isolated A/B after disk-component proof. |
 | 10 — Spoken-text planning | Model-free foundation only; it is not shadowed against or used by shipping generation. |
 | 11 — Long-form v4 | Planner and bounded assembler foundations only. Sequential streaming, resume/replacement, segment QA, History integration, and product cutover are pending; manifest-v3 non-streaming remains shipping. |
 | 12 — Bounded analysis and unified quality | Partial. Bounded prosody algorithm v2 is shipping; persisted-WAV consolidation and the typed registry/scheduler are not integrated. |
 | 13 — Benchmark/history v3 | Not started; schema v2 remains authoritative until shipping plan/session/quality identities stabilize. |
-| 14 — Organization and retirement | Unblocked after overall promotion (2026-07-20); not started. Named deferred surfaces: `NativeStreamingSynthesisSession.swift` filename, `VocelloQwen3LegacyCompatibility` SPI, combined characterization session, and Clone priming stream APIs. Contract `mechanicalRetirement`: `deferred-explicit-retirement-spi-filename-and-combined-session-remain`. |
+| 14 — Organization and retirement | Pulled forward by the 2026-07-22 amendment: scheduled immediately after the phase 7–9 block, before phases 10–13, so quality/long-form work builds on one topology. Named deferred surfaces unchanged: `NativeStreamingSynthesisSession.swift` filename, `VocelloQwen3LegacyCompatibility` SPI, combined characterization session, and Clone priming stream APIs. Contract `mechanicalRetirement`: `scheduled-after-phase9-block-2026-07-22-amendment-spi-filename-and-combined-session-remain`. |
+
+**2026-07-22 amendment (maintainer-endorsed).** The backend refactor review counter-verified the
+research corpus (imported under [`docs/research/`](research/)) and ran the R1 characterization
+gate on the canonical Mac mini. Verdict: engine code is innocent of the post-cutover canonical
+macOS slowdown — the app/XPC delivery topology starves the engine of GPU submissions (diagnostic
+records `macos-engine-20260722-210927-3553c1b1`,
+`macos-xcui-benchmark-20260722-{211254-273bd16d,213731-c47b0d27}`; raw Metal trace summarized
+then discarded per policy). Three endorsed changes now live in `amendment20260722` of the
+contract: phase 7 rescoped to the delivery-pipeline pacing fix, promotion matrices must include
+a UI/app-XPC-context cell (`promotedMatrixRequiresUIContextCell`), and phase 14 retirement is
+scheduled directly after the phase 7–9 block.
 
 The post-cutover deterministic proof passed `scripts/macos_test.sh test`, including Core, XPC
 transport, and 103 owned-runtime tests. The arm64 macOS build and generic iPhoneOS SDK app plus

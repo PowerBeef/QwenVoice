@@ -81,7 +81,11 @@
     "shippingRuntime": "VocelloQwen3Engine",
     "shippingProductSession": "GenerationOutputAdapter",
     "modeAuthority": "classified-session-generation-output-adapter",
-    "modes": ["custom", "design", "clone"],
+    "modes": [
+      "custom",
+      "design",
+      "clone"
+    ],
     "shippingImplementationSources": [
       "Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift"
     ],
@@ -105,7 +109,7 @@
     "modeCutover": "implementation-complete-focused-platform-acceptance-passed-overall-promotion-passed",
     "requestLocalSamplingV2": "shipping-promotion-packaged-evidence-live",
     "telemetryV9": "complete-sidecar-authority-with-v8-envelope",
-    "chunkAndPreviewExperiments": "not-started-shipping-v9-and-clean-ab-evidence-required",
+    "chunkAndPreviewExperiments": "rescoped-2026-07-22-delivery-pipeline-pacing-fix-engine-rtf-flat-in-cli-ab",
     "sharedComponentStorage": "integrated-production-path-authenticated-auto-reconciliation-live-artifact-validation-pending",
     "runtimeComponentReuse": "not-started-isolated-ab-after-live-disk-component-proof",
     "spokenTextPlanning": "implemented-model-free-foundation-not-shadowed-or-shipping",
@@ -113,7 +117,7 @@
     "boundedAnalyzers": "prosody-v2-shipping-persisted-wav-consolidation-pending",
     "unifiedQuality": "typed-registry-foundation-specialized-gates-ship",
     "historyV3": "pending-stable-plan-session-quality-identities",
-    "mechanicalRetirement": "deferred-explicit-retirement-spi-filename-and-combined-session-remain"
+    "mechanicalRetirement": "scheduled-after-phase9-block-2026-07-22-amendment-spi-filename-and-combined-session-remain"
   },
   "phase14DeferredSurfaces": [
     "NativeStreamingSynthesisSession.swift-filename",
@@ -122,9 +126,18 @@
     "NativeEngineRuntime-primeCloneConditioning-stream-APIs"
   ],
   "constrainedTierChunkFrames": {
-    "custom": { "first": 7, "later": 7 },
-    "design": { "first": 7, "later": 14 },
-    "clone": { "first": 7, "later": 14 }
+    "custom": {
+      "first": 7,
+      "later": 7
+    },
+    "design": {
+      "first": 7,
+      "later": 14
+    },
+    "clone": {
+      "first": 7,
+      "later": 14
+    }
   },
   "characterization": {
     "minimumCleanControlRuns": 3,
@@ -135,7 +148,9 @@
     "candidateTailTimingRegressionPercent": 5,
     "candidatePeakMemoryRegressionBytes": 157286400,
     "candidateFirstRenderRegressionMilliseconds": 100,
-    "maximumAcceptedTimingNoisePercent": 8
+    "maximumAcceptedTimingNoisePercent": 8,
+    "promotedMatrixRequiresUIContextCell": true,
+    "uiContextCellRationale": "The 2026-07-22 characterization gate showed a topology-bound regression (UI/XPC engine RTF 0.69-0.81 vs CLI 1.02-1.17 on identical engine code) that CLI-context Phase 0 controls cannot detect; future promotions must include at least one app/XPC-driven cell."
   },
   "temporaryCompatibilitySurfaces": [
     "NativeEngineRuntime",
@@ -154,5 +169,21 @@
     "no-permanent-dual-session-authority",
     "three-pass-language-consensus-is-not-weakened",
     "physical-iphone-evidence-is-promotion-only"
-  ]
+  ],
+  "amendment20260722": {
+    "authority": "backend refactor review + R1 characterization gate; maintainer endorsed 2026-07-22",
+    "diagnosis": "Canonical macOS UI RTF fell 1.04-1.15 (2026-07-16) to 0.88-0.93 (2026-07-20) to 0.69-0.81 (2026-07-22) while interleaved A/B/A CLI benches across the Phase 4 cutover (9a8da874 vs 610125b7 vs HEAD) stayed flat at 1.02-1.17. The engine in the app/XPC topology is submission-starved: ~25% CPU vs ~91% in CLI, zero lossless-channel producer suspensions, normal thread priorities, command buffers executing fast with ~83% of the buffer timeline submission-side idle (Metal System Trace, summarized then discarded). Working mechanism: per-frame cross-actor suspension points pay scheduler latency under foreground load, compounded by per-chunk v9 telemetry publication.",
+    "evidence": [
+      "macos-engine-20260722-210927-3553c1b1",
+      "macos-xcui-benchmark-20260722-211254-273bd16d",
+      "macos-xcui-benchmark-20260722-213731-c47b0d27",
+      "macos-xcui-benchmark-20260716-181853-b4c2e299",
+      "macos-xcui-benchmark-20260720-172920-591696d1"
+    ],
+    "changes": [
+      "Phase 7 rescoped from raw chunk/preview RTF experiments to the delivery-pipeline pacing fix: coalesce per-frame actor hops, move v9 per-chunk publication off the generation path, and evaluate larger macOS chunk schedules; secret-sauce first-preview latency and trim/unload safety must not regress.",
+      "Promotion characterization matrices must include at least one UI/app-XPC-context cell (promotedMatrixRequiresUIContextCell).",
+      "Phase 14 mechanical retirement is pulled forward: scheduled immediately after the phase 7-9 block, before phases 10-13, so quality/long-form work builds on one topology."
+    ]
+  }
 }

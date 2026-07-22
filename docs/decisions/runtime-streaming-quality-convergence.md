@@ -174,3 +174,24 @@ must not yet be treated as product authority. At this checkpoint:
 Overall Phase 4 promotion is closed. The broader convergence program remains open for Phases
 7–13 and for Phase 14 mechanical retirement of the named Legacy SPI, adapter filename, combined
 characterization session, and Clone priming stream APIs.
+
+## Amendment 2026-07-22 — characterization-gate resequencing (maintainer endorsed)
+
+The R1 characterization gate (backend refactor review) proved the engine innocent of the
+post-cutover canonical macOS RTF decline: interleaved CLI A/B benches across the cutover
+(`9a8da874` vs `610125b7` vs HEAD) are flat at 1.02–1.17 while the app/XPC topology measures
+0.69–0.81 on identical engine code — the engine is submission-starved in the delivery pipeline
+(zero lossless-channel producer suspensions, normal thread priorities, ~83% of its command-buffer
+timeline submission-side idle in a Metal System Trace). Because the Phase 0 promotion controls
+were CLI-context short-cell runs, the topology-bound regression could not be seen by the gate
+that passed. Three changes, recorded machine-readably in `amendment20260722` of
+`config/runtime-refactor-contract.json`:
+
+1. **Phase 7 is rescoped** from raw chunk/preview RTF experiments to the delivery-pipeline
+   pacing fix (coalesce per-frame actor hops, move v9 per-chunk publication off the generation
+   path, evaluate larger macOS chunk schedules), preserving first-preview latency and
+   trim/unload safety.
+2. **Promotion characterization matrices must include at least one UI/app-XPC-context cell**
+   (`characterization.promotedMatrixRequiresUIContextCell`).
+3. **Phase 14 mechanical retirement is pulled forward** to immediately after the phase 7–9
+   block, before phases 10–13, so quality/long-form phases build against one topology.
