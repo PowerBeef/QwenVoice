@@ -343,12 +343,12 @@
     },
     {
       "path": "Sources/VocelloQwen3Core/GenerationSession.swift",
-      "sha256": "328c5e67b71e0608353167b5b2b9585bc295f76bb361068a0461eb01c6c5481d",
+      "sha256": "06ad6a00091f50d871e1ca53c614281506cc6d3339f6538d82ba763d449be217",
       "upstreamStatus": "added"
     },
     {
       "path": "Sources/VocelloQwen3Core/LoadedModel.swift",
-      "sha256": "a72e03cbf90557b196e5da265c81dafb0d3bd43e609196b761cae6bb333b7712",
+      "sha256": "97a15c709f2fb286c029ca3bd6d039b46317fca076ead70482c9a2be815193e3",
       "upstreamStatus": "added"
     },
     {
@@ -398,7 +398,7 @@
     },
     {
       "path": "Tests/Qwen3RuntimeTests/VocelloQwen3FacadeTests.swift",
-      "sha256": "e130d7a8c223adc70d247eff599c792ae511294049436972f260b7746a44e300",
+      "sha256": "861bb5badb7c4e0c6d7ba02fb5dbbf2588145b23cdfe9fc290125bd80cee6c57",
       "upstreamStatus": "added"
     }
   ],

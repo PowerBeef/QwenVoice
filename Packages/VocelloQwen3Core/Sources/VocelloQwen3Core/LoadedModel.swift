@@ -669,32 +669,6 @@ public final class VocelloQwen3LoadedModel: @unchecked Sendable {
         }
     }
 
-    public func customVoiceStream(
-        text: String,
-        language: String,
-        speaker: String,
-        instruction: String?,
-        sampling: VocelloQwen3SamplingConfiguration,
-        memory: VocelloQwen3MemoryConfiguration = .compatibilityDefault,
-        streamingInterval: Double,
-        enableChunkTimings: Bool
-    ) throws -> AsyncThrowingStream<VocelloQwen3GenerationSignal, Error> {
-        map(box.optimized.generateCustomVoiceStream(
-            text: text,
-            language: language,
-            speaker: speaker,
-            instruct: instruction,
-            generationParameters: try parameters(sampling),
-            samplingPolicy: try requestSamplingPolicy(sampling),
-            memoryPolicy: try requestMemoryPolicy(memory),
-            streamingInterval: streamingInterval,
-            customVoiceProfile: nil,
-            streamStepEvalPolicy: nil,
-            generationSpeedProfile: nil,
-            memoryClearCadence: nil,
-            enableChunkTimings: enableChunkTimings
-        ))
-    }
 
     public func generateCustomVoice(
         text: String,
@@ -733,29 +707,6 @@ public final class VocelloQwen3LoadedModel: @unchecked Sendable {
         )
     }
 
-    public func voiceDesignStream(
-        text: String,
-        language: String,
-        description: String,
-        sampling: VocelloQwen3SamplingConfiguration,
-        memory: VocelloQwen3MemoryConfiguration = .compatibilityDefault,
-        streamingInterval: Double,
-        enableChunkTimings: Bool
-    ) throws -> AsyncThrowingStream<VocelloQwen3GenerationSignal, Error> {
-        map(box.optimized.generateVoiceDesignStream(
-            text: text,
-            language: language,
-            voiceDescription: description,
-            generationParameters: try parameters(sampling),
-            samplingPolicy: try requestSamplingPolicy(sampling),
-            memoryPolicy: try requestMemoryPolicy(memory),
-            streamingInterval: streamingInterval,
-            streamStepEvalPolicy: nil,
-            generationSpeedProfile: nil,
-            memoryClearCadence: nil,
-            enableChunkTimings: enableChunkTimings
-        ))
-    }
 
     public func generateVoiceDesign(
         text: String,
@@ -804,29 +755,6 @@ public final class VocelloQwen3LoadedModel: @unchecked Sendable {
         )
     }
 
-    public func voiceCloneStream(
-        text: String,
-        language: String,
-        prompt: VocelloQwen3ClonePrompt,
-        sampling: VocelloQwen3SamplingConfiguration,
-        memory: VocelloQwen3MemoryConfiguration = .compatibilityDefault,
-        streamingInterval: Double,
-        enableChunkTimings: Bool
-    ) throws -> AsyncThrowingStream<VocelloQwen3GenerationSignal, Error> {
-        map(box.optimized.generateVoiceCloneStream(
-            text: text,
-            language: language,
-            voiceClonePrompt: prompt.compatibilityValue,
-            generationParameters: try parameters(sampling),
-            samplingPolicy: try requestSamplingPolicy(sampling),
-            memoryPolicy: try requestMemoryPolicy(memory),
-            streamingInterval: streamingInterval,
-            streamStepEvalPolicy: nil,
-            generationSpeedProfile: nil,
-            memoryClearCadence: nil,
-            enableChunkTimings: enableChunkTimings
-        ))
-    }
 
     public func generateVoiceClone(
         text: String,
@@ -845,28 +773,4 @@ public final class VocelloQwen3LoadedModel: @unchecked Sendable {
         ))
     }
 
-    private func map(
-        _ source: AsyncThrowingStream<AudioGeneration, Error>
-    ) -> AsyncThrowingStream<VocelloQwen3GenerationSignal, Error> {
-        AsyncThrowingStream { continuation in
-            let task = Task {
-                do {
-                    for try await event in source {
-                        try Task.checkCancellation()
-                        switch event {
-                        case .token(let token): continuation.yield(.token(token))
-                        case .info(let info): continuation.yield(.info(VocelloQwen3GenerationInfo(info)))
-                        case .audio(let audio): continuation.yield(.audio(audio.asArray(Float.self)))
-                        case .chunkTimings(let timings):
-                            continuation.yield(.chunkTimings(VocelloQwen3ChunkTimings(timings)))
-                        }
-                    }
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
-                }
-            }
-            continuation.onTermination = { _ in task.cancel() }
-        }
-    }
 }

@@ -79,11 +79,9 @@ PHASE2_REQUIRED_STABLE_CONTRACTS = {
     "VocelloQwen3CloneHandle",
     "VocelloQwen3MemoryReliefAction",
 }
-PHASE2_INTERNAL_CHARACTERIZATION_SURFACES = {
-    "VocelloQwen3GenerationSession",
-    "VocelloQwen3GenerationEvent",
-    "VocelloQwen3ModelGenerationSession",
-}
+# Phase 14a (2026-07-23) retired the combined-event characterization session and its
+# protocol/event types; the classified session is the sole generation session.
+PHASE2_INTERNAL_CHARACTERIZATION_SURFACES: set[str] = set()
 PHASE4_MODE_AUTHORITY = "classified-session-generation-output-adapter"
 PHASE4_IMPLEMENTATION_STATUS = "complete"
 PHASE4_VERIFICATION_STATES = {"pending", "passed"}
@@ -569,9 +567,9 @@ def runtime_refactor_contract_errors(
     ):
         errors.append("runtime-refactor-contract Phase 2 SPI enforcement reference drifted")
     if phase2.get("combinedCompatibilitySession") != (
-        "internal-package-characterization-only"
+        "retired-2026-07-23-phase14a-classified-session-is-sole-generation-session"
     ):
-        errors.append("runtime-refactor-contract combined compatibility session must remain internal")
+        errors.append("runtime-refactor-contract combined compatibility session must remain retired")
     if phase2.get("actorCorrectnessClosure") != PHASE2_ACTOR_CORRECTNESS_CLOSURE:
         errors.append("runtime-refactor-contract Phase 2 actor correctness closure drifted")
     if phase2.get("cloneHandleLifecycle") != PHASE2_CLONE_HANDLE_LIFECYCLE:

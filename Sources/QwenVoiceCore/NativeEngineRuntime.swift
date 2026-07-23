@@ -1557,48 +1557,27 @@ actor NativeEngineRuntime {
         token: UUID
     ) async throws -> [String: Int] {
         let startedAt = ContinuousClock.now
-        var firstChunkMS: Int?
-        let stream: AsyncThrowingStream<VocelloQwen3GenerationSignal, Error>
         guard let voiceClonePrompt = conditioning.voiceClonePrompt else {
             throw NativeRuntimeError(
                 stage: .clonePreparation,
                 message: "Clone priming needs optimized Qwen3 clone conditioning."
             )
         }
-        stream = model.generateVoiceCloneStream(
+        // Phase 14 retirement of the direct-mode stream trio: priming runs
+        // the completion variant. The warmup text is one syllable ("Hi."),
+        // so completing the take costs the same as the retired
+        // first-chunk-then-break stream loop it replaces.
+        try ensureActiveClonePrimeToken(token)
+        let completion = try await model.generateVoiceClone(
             text: lightweightWarmupText,
             language: language,
-            voiceClonePrompt: voiceClonePrompt,
-            streamingInterval: GenerationSemantics.appStreamingInterval
+            voiceClonePrompt: voiceClonePrompt
         )
-
-        for try await event in stream {
-            try ensureActiveClonePrimeToken(token)
-            switch event {
-            case .audio(let chunkSamples):
-                guard !chunkSamples.isEmpty else { continue }
-                if firstChunkMS == nil {
-                    firstChunkMS = startedAt.elapsedMilliseconds
-                }
-            case .prepared, .token, .info, .chunkTimings:
-                // .chunkTimings is the engine probe Phase 1 sub-stage
-                // breakdown (Qwen3TTS yields it before each .audio
-                // event). Clone priming only cares about first-chunk
-                // arrival, so the timings are ignored here — bench
-                // tracing via GenerationOutputAdapter is the
-                // canonical consumer.
-                continue
-            }
-
-            if firstChunkMS != nil {
-                break
-            }
-        }
-
-        guard firstChunkMS != nil else {
+        try ensureActiveClonePrimeToken(token)
+        guard !completion.audio.isEmpty else {
             throw NativeRuntimeError(
                 stage: .prewarm,
-                message: "Clone priming produced no streaming chunk."
+                message: "Clone priming produced no audio."
             )
         }
 

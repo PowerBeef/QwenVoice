@@ -37,7 +37,7 @@
       "productionGlobs": [
         "Sources/QwenVoiceCore/GenerationEventDeliveryProbe.swift",
         "Sources/QwenVoiceCore/LatestEventCoalescer.swift",
-        "Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift"
+        "Sources/QwenVoiceCore/GenerationOutputAdapter.swift"
       ],
       "testGlobs": [
         "Tests/VocelloCoreTests/GenerationEventDeliveryProbeTests.swift",

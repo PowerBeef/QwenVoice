@@ -172,8 +172,7 @@ must not yet be treated as product authority. At this checkpoint:
   aggregate-only transport list, missing player render callback) may remain listed.
 
 Overall Phase 4 promotion is closed. The broader convergence program remains open for Phases
-7–13 and for Phase 14 mechanical retirement of the named Legacy SPI, adapter filename, combined
-characterization session, and Clone priming stream APIs.
+8–13 and Phase 14b; Phase 14a mechanical retirement closed 2026-07-23 (see the amendment below).
 
 ## Amendment 2026-07-22 — characterization-gate resequencing (maintainer endorsed)
 
@@ -219,3 +218,29 @@ Mac capability at the product's `-O` optimization measured **1.81** in an intera
    the revert. Re-introducing any of them requires a fixed-seed QC soak.
 4. The UI-context promotion-cell requirement and the phase 14 pull-forward from the 07-22
    amendment stand unchanged.
+
+
+## Amendment 2026-07-23b — Phase 14a mechanical retirement (complete)
+
+Phase 14a executed the mechanical half of Phase 14 immediately after the Phase-7 topology-gap
+closure, per the 07-22 resequencing:
+
+- **Combined characterization session retired.** `VocelloQwen3ModelGenerationSession`, the
+  `VocelloQwen3GenerationSession` protocol, `VocelloQwen3GenerationEvent`, the internal event
+  channel, and their seven facade characterization tests are deleted. The classified session is
+  the sole generation session; `VocelloQwen3TerminalState` survives as its shared terminal latch.
+  `COMPATIBILITY.json` `internalCharacterizationSurfaces` is now empty and
+  `runtime_security_contract.py` enforces the retired state.
+- **Stream trio retired.** `UnsafeSpeechGenerationModel.generate*Stream`, the package
+  `customVoiceStream`/`voiceDesignStream`/`voiceCloneStream` factories, and the stream-based
+  Clone priming loop are deleted. `NativeEngineRuntime.primeCloneConditioning` now uses the
+  completion-variant `generateVoiceClone` with an explicit empty-audio guard.
+- **Filename retired.** `NativeStreamingSynthesisSession.swift` →
+  `Sources/QwenVoiceCore/GenerationOutputAdapter.swift`; contracts, health/risk registries,
+  benchmark harness fingerprint inputs, and live docs updated in the same change. Point-in-time
+  research/audit archives and published benchmark records keep the historical name.
+- **Remaining Phase 14 surface: `VocelloQwen3LegacyCompatibility` only** (prepared-model
+  loading, prewarm/conditioning, loaded-model adoption, validated clone-prompt adoption). Its
+  retirement (14b) requires actor-owned loading — a design decision with product consequences,
+  recorded separately before implementation. Contract token:
+  `phase14a-complete-2026-07-23-combined-session-stream-trio-and-filename-retired-spi-surface-remains-for-14b`.

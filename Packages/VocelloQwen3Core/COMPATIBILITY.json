@@ -67,11 +67,7 @@
       "consumerAllowlistEnforcement": "scripts/vendor_runtime_contract.py::LEGACY_COMPATIBILITY_SPI_CONSUMERS",
       "policy": "This named SPI is limited to transitional prepared-model loading, prewarm/conditioning, loaded-model adoption, and validated schema-3 clone-prompt adoption. Custom, Design, and Clone generation run through the public actor and classified session; the SPI is not product generation authority."
     },
-    "internalCharacterizationSurfaces": [
-      "VocelloQwen3GenerationSession",
-      "VocelloQwen3GenerationEvent",
-      "VocelloQwen3ModelGenerationSession"
-    ],
+    "internalCharacterizationSurfaces": [],
     "preservedImportModules": [
       "MLXAudioCore",
       "MLXAudioCodecs",

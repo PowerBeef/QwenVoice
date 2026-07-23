@@ -96,73 +96,6 @@ final class VocelloQwen3FacadeTests: XCTestCase {
         }
     }
 
-    func testGenerationSessionPublishesOrderedTypedEventsAndSameTerminalResult() async {
-        let generationID = UUID(uuidString: "00000000-0000-0000-0000-000000000007")!
-        let model = VocelloQwen3ModelIdentity(
-            modelID: "custom-speed",
-            repositoryID: "Qwen/Qwen3-TTS",
-            revision: "fixture-revision",
-            artifactVersion: "fixture-v1"
-        )
-        let session = FacadeTestGenerationSession(id: generationID)
-        let prepared = VocelloQwen3PreparedEvent(
-            generationID: generationID,
-            model: model,
-            mode: .customVoice,
-            elapsedMilliseconds: 20
-        )
-        let progress = VocelloQwen3ProgressEvent(
-            generationID: generationID,
-            generatedTokenCount: 4,
-            emittedAudioFrameCount: 0,
-            elapsedMilliseconds: 25
-        )
-        let chunk = VocelloQwen3AudioChunkEvent(
-            generationID: generationID,
-            sequence: 0,
-            samples: [0.1, -0.1, 0.2, -0.2],
-            sampleRate: 24_000
-        )
-        let terminal = VocelloQwen3TerminalEvent(
-            generationID: generationID,
-            outcome: .completed(.endOfSequence),
-            generatedTokenCount: 8,
-            emittedAudioFrameCount: 4,
-            elapsedMilliseconds: 40
-        )
-
-        await session.emit(.prepared(prepared))
-        await session.emit(.progress(progress))
-        await session.emit(.audioChunk(chunk))
-        await session.terminate(with: terminal)
-
-        var observed: [VocelloQwen3GenerationEvent] = []
-        for await event in session.events {
-            observed.append(event)
-        }
-        let waitedTerminal = await session.waitForTermination()
-
-        XCTAssertEqual(session.id, generationID)
-        XCTAssertEqual(
-            observed,
-            [.prepared(prepared), .progress(progress), .audioChunk(chunk), .terminal(terminal)]
-        )
-        XCTAssertEqual(chunk.frameCount, 4)
-        XCTAssertEqual(waitedTerminal, terminal)
-    }
-
-    func testGenerationSessionCancellationUsesTypedTerminalOutcome() async {
-        let generationID = UUID(uuidString: "00000000-0000-0000-0000-000000000008")!
-        let session = FacadeTestGenerationSession(id: generationID)
-        let waiter = Task { await session.waitForTermination() }
-
-        await session.cancel(reason: .shutdown)
-        let terminal = await waiter.value
-
-        XCTAssertEqual(terminal.generationID, generationID)
-        XCTAssertEqual(terminal.outcome, .cancelled(.shutdown))
-    }
-
     func testCapabilityInventoryIsUniqueAndDeterministic() {
         let capabilities = VocelloQwen3CapabilitySet([
             .voiceClone, .streaming, .voiceClone, .audioOnlyClone,
@@ -277,7 +210,7 @@ final class VocelloQwen3FacadeTests: XCTestCase {
             maxNewTokens: 321,
             requestedSeed: 7
         )
-        let stream = try loaded.customVoiceStream(
+        _ = try await loaded.generateCustomVoice(
             text: "Capture every supported sampling field.",
             language: "en-US",
             speaker: "fixture-speaker",
@@ -287,11 +220,8 @@ final class VocelloQwen3FacadeTests: XCTestCase {
                 clearCacheOnStreamChunk: false,
                 tokenMemoryClearCadence: 37,
                 talkerKVGeneratedWindow: 192
-            ),
-            streamingInterval: 0.5,
-            enableChunkTimings: false
+            )
         )
-        for try await _ in stream {}
 
         let captured = try XCTUnwrap(compatibilityModel.capturedGenerationParameters)
         XCTAssertEqual(captured.maxTokens, sampling.maxNewTokens)
@@ -320,7 +250,7 @@ final class VocelloQwen3FacadeTests: XCTestCase {
                 talkerKVGeneratedWindow: 192
             )]
         )
-        XCTAssertEqual(compatibilityModel.capturedStreamingIntervals, [0.5])
+        XCTAssertEqual(compatibilityModel.capturedStreamingIntervals, [])
     }
 
     func testRequestLocalMemoryPoliciesDoNotBleedAcrossSequentialStreams() async throws {
@@ -346,17 +276,14 @@ final class VocelloQwen3FacadeTests: XCTestCase {
         )
 
         for memory in [first, second] {
-            let stream = try loaded.customVoiceStream(
+            _ = try await loaded.generateCustomVoice(
                 text: "A request-local memory fixture.",
                 language: "en-US",
                 speaker: "fixture-speaker",
                 instruction: nil,
                 sampling: sampling,
-                memory: memory,
-                streamingInterval: 0.5,
-                enableChunkTimings: false
+                memory: memory
             )
-            for try await _ in stream {}
         }
 
         XCTAssertEqual(
@@ -376,186 +303,12 @@ final class VocelloQwen3FacadeTests: XCTestCase {
         )
     }
 
-    func testConcreteSessionMapsRuntimeTokenCapToMaximumTokens() async throws {
-        let loaded = try makeLoadedFixture(
-            compatibilityModel: FacadeCompatibilityModel(generationEndReason: "token_cap")
-        )
-        let session = try loaded.startGenerationSession(
-            request: makeCustomRequest(generationID: UUID()),
-            eventCapacity: 4
-        )
-        for await _ in session.events {}
-        let terminal = await session.waitForTermination()
-        XCTAssertEqual(terminal.outcome, .completed(.maximumTokens))
-    }
-
     func testTerminalStatePreservesFirstCancellationReason() async {
         let state = VocelloQwen3TerminalState()
         await state.requestCancellation(.memoryPressure)
         await state.requestCancellation(.shutdown)
         let reason = await state.requestedCancellationReason()
         XCTAssertEqual(reason, .memoryPressure)
-    }
-
-    func testConcreteCompatibilityAdapterProducesTypedSessionEvents() async throws {
-        let identity = VocelloQwen3ModelIdentity(
-            modelID: "fixture-custom",
-            repositoryID: "fixture/repository",
-            revision: "fixture-revision",
-            artifactVersion: "fixture-v1"
-        )
-        let loaded = try VocelloQwen3LoadedModel(
-            compatibilityModel: FacadeCompatibilityModel(),
-            identity: identity,
-            capabilities: VocelloQwen3CapabilitySet([.streaming, .customVoice])
-        )
-        let generationID = UUID(uuidString: "00000000-0000-0000-0000-000000000009")!
-        let session = try loaded.startGenerationSession(
-            request: VocelloQwen3SynthesisRequest(
-                generationID: generationID,
-                text: "Facade adapter fixture.",
-                language: "en-US",
-                input: .customVoice(speakerID: "fixture-speaker", deliveryInstruction: nil),
-                sampling: VocelloQwen3SamplingConfiguration(
-                    maxNewTokens: 32,
-                    temperature: 0.8,
-                    topP: 0.9,
-                    topK: VocelloQwen3SamplingConfiguration.compatibilityDefaultTopK,
-                    repetitionPenalty: 1
-                ),
-                memory: VocelloQwen3MemoryConfiguration(
-                    clearCacheOnStreamChunk: false,
-                    tokenMemoryClearCadence: 16
-                )
-            ),
-            eventCapacity: 4
-        )
-
-        var events: [VocelloQwen3GenerationEvent] = []
-        for await event in session.events { events.append(event) }
-        let terminal = await session.waitForTermination()
-
-        XCTAssertEqual(session.id, generationID)
-        XCTAssertEqual(terminal.outcome, .completed(.endOfSequence))
-        XCTAssertTrue(events.contains { if case .prepared = $0 { true } else { false } })
-        XCTAssertTrue(events.contains {
-            if case .progress(let progress) = $0 { return progress.generatedTokenCount == 1 }
-            return false
-        })
-        XCTAssertEqual(events.last, .terminal(terminal))
-    }
-
-    func testEventChannelReportsOverflowAndKeepsReservedTerminalSlot() async {
-        let generationID = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!
-        let channel = VocelloQwen3EventChannel(capacity: 1)
-        let prepared = VocelloQwen3PreparedEvent(
-            generationID: generationID,
-            model: VocelloQwen3ModelIdentity(
-                modelID: "fixture-custom",
-                repositoryID: "fixture/repository",
-                revision: "fixture-revision",
-                artifactVersion: "fixture-v1"
-            ),
-            mode: .customVoice,
-            elapsedMilliseconds: 1
-        )
-        let progress = VocelloQwen3ProgressEvent(
-            generationID: generationID,
-            generatedTokenCount: 1,
-            emittedAudioFrameCount: 0,
-            elapsedMilliseconds: 2
-        )
-        let terminal = VocelloQwen3TerminalEvent(
-            generationID: generationID,
-            outcome: .failed(.runtime),
-            generatedTokenCount: 1,
-            emittedAudioFrameCount: 0,
-            elapsedMilliseconds: 3
-        )
-
-        let accepted = await channel.offer(.prepared(prepared))
-        let overflow = await channel.offer(.progress(progress))
-        let terminalPublished = await channel.publishTerminal(terminal)
-        await channel.finish()
-
-        XCTAssertEqual(accepted, .accepted)
-        XCTAssertEqual(overflow, .overflow)
-        XCTAssertTrue(terminalPublished)
-        let first = await channel.next()
-        let second = await channel.next()
-        let end = await channel.next()
-        XCTAssertEqual(first, .prepared(prepared))
-        XCTAssertEqual(second, .terminal(terminal))
-        XCTAssertNil(end)
-    }
-
-    func testConcreteSessionOverflowTerminatesWithoutConsumerDrain() async throws {
-        let loaded = try VocelloQwen3LoadedModel(
-            compatibilityModel: FacadeCompatibilityModel(eventCount: 128),
-            identity: VocelloQwen3ModelIdentity(
-                modelID: "fixture-custom",
-                repositoryID: "fixture/repository",
-                revision: "fixture-revision",
-                artifactVersion: "fixture-v1"
-            ),
-            capabilities: VocelloQwen3CapabilitySet([.streaming, .customVoice])
-        )
-        let session = try loaded.startGenerationSession(
-            request: VocelloQwen3SynthesisRequest(
-                generationID: UUID(),
-                text: "Undrained bounded-buffer fixture.",
-                language: "en-US",
-                input: .customVoice(speakerID: "fixture-speaker", deliveryInstruction: nil),
-                sampling: VocelloQwen3SamplingConfiguration(
-                    maxNewTokens: 128,
-                    temperature: 0.8,
-                    topP: 0.9,
-                    topK: VocelloQwen3SamplingConfiguration.compatibilityDefaultTopK,
-                    repetitionPenalty: 1
-                ),
-                memory: VocelloQwen3MemoryConfiguration(
-                    clearCacheOnStreamChunk: false,
-                    tokenMemoryClearCadence: 16
-                )
-            ),
-            eventCapacity: 1
-        )
-
-        let completed = expectation(description: "terminal completion without an event consumer")
-        let terminalTask = Task {
-            let terminal = await session.waitForTermination()
-            completed.fulfill()
-            return terminal
-        }
-        await fulfillment(of: [completed], timeout: 1)
-        let terminal = await terminalTask.value
-        XCTAssertEqual(terminal.outcome, .failed(.runtime))
-
-        var observed: [VocelloQwen3GenerationEvent] = []
-        for await event in session.events { observed.append(event) }
-        XCTAssertEqual(observed.count, 2)
-        XCTAssertTrue(observed.first.map { if case .prepared = $0 { true } else { false } } ?? false)
-        XCTAssertEqual(observed.last, .terminal(terminal))
-    }
-
-    func testConcreteSessionCancellationPublishesTerminalWithoutConsumerDrain() async throws {
-        let pending = AsyncThrowingStream<AudioGeneration, Error>.makeStream()
-        defer { pending.continuation.finish() }
-        let loaded = try makeLoadedFixture(
-            compatibilityModel: FacadeCompatibilityModel(streamOverride: pending.stream)
-        )
-        let session = try loaded.startGenerationSession(
-            request: makeCustomRequest(generationID: UUID()),
-            eventCapacity: 1
-        )
-
-        await session.cancel(reason: .shutdown)
-        let terminal = await session.waitForTermination()
-        XCTAssertEqual(terminal.outcome, .cancelled(.shutdown))
-
-        var observed: [VocelloQwen3GenerationEvent] = []
-        for await event in session.events { observed.append(event) }
-        XCTAssertEqual(observed, [.terminal(terminal)])
     }
 
     func testEngineReservationCannotOpenBeforeMandatoryAudioClaim() async throws {
@@ -2755,58 +2508,5 @@ private final class FacadeCompatibilityModel: SpeechGenerationModel, Qwen3Optimi
             _capturedStreamingIntervals.append(streamingInterval)
         }
         captureLock.unlock()
-    }
-}
-
-private actor FacadeTestGenerationSession: VocelloQwen3GenerationSession {
-    nonisolated let id: UUID
-    nonisolated let events: AsyncStream<VocelloQwen3GenerationEvent>
-
-    private let continuation: AsyncStream<VocelloQwen3GenerationEvent>.Continuation
-    private var terminal: VocelloQwen3TerminalEvent?
-    private var waiters: [CheckedContinuation<VocelloQwen3TerminalEvent, Never>] = []
-
-    init(id: UUID) {
-        self.id = id
-        let stream = AsyncStream.makeStream(of: VocelloQwen3GenerationEvent.self)
-        events = stream.stream
-        continuation = stream.continuation
-    }
-
-    func emit(_ event: VocelloQwen3GenerationEvent) {
-        guard terminal == nil else { return }
-        continuation.yield(event)
-    }
-
-    func terminate(with event: VocelloQwen3TerminalEvent) {
-        guard terminal == nil else { return }
-        terminal = event
-        continuation.yield(.terminal(event))
-        continuation.finish()
-
-        let pending = waiters
-        waiters.removeAll(keepingCapacity: false)
-        for waiter in pending {
-            waiter.resume(returning: event)
-        }
-    }
-
-    func cancel(reason: VocelloQwen3CancellationReason) {
-        terminate(
-            with: VocelloQwen3TerminalEvent(
-                generationID: id,
-                outcome: .cancelled(reason),
-                generatedTokenCount: 0,
-                emittedAudioFrameCount: 0,
-                elapsedMilliseconds: 0
-            )
-        )
-    }
-
-    func waitForTermination() async -> VocelloQwen3TerminalEvent {
-        if let terminal { return terminal }
-        return await withCheckedContinuation { continuation in
-            waiters.append(continuation)
-        }
     }
 }

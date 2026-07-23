@@ -39,7 +39,7 @@ mechanical retirement is unblocked but not started; Phases 7–13 remain open.
 MLXTTSEngine (@MainActor product host)
   → NativeEngineRuntime (load / prewarm / conditioning SPI bridge)
   → UnsafeSpeechGenerationModel (holds VocelloQwen3Engine + opaque loaded model)
-  → GenerationOutputAdapter  [lives in NativeStreamingSynthesisSession.swift]
+  → GenerationOutputAdapter  [GenerationOutputAdapter.swift]
        reserve → claimAudioConsumer → open → drain lossless channel
        → acknowledgeProductFinalization
   → VocelloQwen3Engine (actor: generation mutation lease)
@@ -63,13 +63,11 @@ iOS: UI → Core in-process → same owned runtime.
 | 6 Telemetry v9 | Complete sidecar authority with v8 envelope (`telemetry: 9`) |
 | 7 UI-context gap | Implemented 2026-07-23: screen-recording observer effect fixed, then Liquid Glass compositor cost gated during generation (`generationPerformanceGate`); UI context delivers engine capability (matrix 1.43–1.94; XPC ≈3%) |
 | 8–13 | Foundations / not started / partial as in the runtime contract |
-| 14 Mechanical retirement | Pulled forward 2026-07-22: scheduled after the phase 7–9 block, before 10–13 (`phase14DeferredSurfaces` unchanged) |
+| 14 Mechanical retirement | 14a complete 2026-07-23: combined characterization session, product/priming stream APIs, and the adapter filename retired; `VocelloQwen3LegacyCompatibility` SPI remains for 14b (actor-owned loading) |
 
 ## In-progress dual surfaces (do not misread as dual backends)
 
-- Shipping adapter filename still `NativeStreamingSynthesisSession.swift` (Phase 14)
 - Package `VocelloQwen3ProductOutputAdapter` vs Core `GenerationOutputAdapter` (only Core ships)
-- Combined `VocelloQwen3ModelGenerationSession` — characterization only
 - Legacy SPI for load/prewarm/Clone adoption
 - Shadow plan mapper — comparison only
 - Nested v9-in-v8 plus complete `*.streaming-telemetry-v9.json` sidecars when ready
@@ -98,8 +96,8 @@ iOS: UI → Core in-process → same owned runtime.
 | Surface | Path |
 | --- | --- |
 | Sampling evidence + sub-seed derivation | `Sources/QwenVoiceCore/SamplingEvidence.swift` |
-| WAV digest + seed agreement telemetry notes | `NativeStreamingSynthesisSession.swift` |
-| Live codec/audio-channel/terminal nested-v9 producers | `NativeStreamingSynthesisSession.swift`, `Qwen3TTS.swift` chunk schedule, `VocelloQwen3AudioChunkEvent` |
+| WAV digest + seed agreement telemetry notes | `GenerationOutputAdapter.swift` |
+| Live codec/audio-channel/terminal nested-v9 producers | `GenerationOutputAdapter.swift`, `Qwen3TTS.swift` chunk schedule, `VocelloQwen3AudioChunkEvent` |
 | v9 sidecar publication / readiness gate | `GenerationStreamingTelemetryV9Publication.swift` |
 | Session/adapter identity digests in bridge | `GenerationStreamingTelemetryV9Bridge.swift` |
 | Model-free characterization fixtures | `config/characterization-fixtures.json` |
@@ -111,7 +109,7 @@ iOS: UI → Core in-process → same owned runtime.
 | Need | Start here |
 | --- | --- |
 | Status | `docs/development-progress.md`, `config/runtime-refactor-contract.json` |
-| Product generation | `Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift` (`GenerationOutputAdapter`) |
+| Product generation | `Sources/QwenVoiceCore/GenerationOutputAdapter.swift` (`GenerationOutputAdapter`) |
 | Actor / session | `Packages/VocelloQwen3Core/Sources/VocelloQwen3Core/Engine.swift`, `ClassifiedGenerationSession.swift` |
 | Sampling evidence | `Sources/QwenVoiceCore/SamplingEvidence.swift` |
 | Telemetry transition | `GenerationStreamingTelemetryV9*.swift` |

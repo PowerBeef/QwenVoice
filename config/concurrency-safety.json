@@ -108,10 +108,10 @@
     },
     {
       "id": "owned-qwen3-facade-runtime",
-      "sources": ["Packages/VocelloQwen3Core/Sources/VocelloQwen3Core/LoadedModel.swift", "Packages/VocelloQwen3Core/Sources/VocelloQwen3Core/GenerationSession.swift"],
-      "types": ["ModelBox", "VocelloQwen3ClonePrompt", "VocelloQwen3LoadedModel", "VocelloQwen3ModelGenerationSession"],
-      "owner": "VocelloQwen3 loaded-model generation gate and bounded generation session",
-      "invariant": "Opaque MLX model and clone tensors remain behind the package facade; one generation task owns mutation and the bounded actor channel serializes event delivery and terminal completion.",
+      "sources": ["Packages/VocelloQwen3Core/Sources/VocelloQwen3Core/LoadedModel.swift"],
+      "types": ["ModelBox", "VocelloQwen3ClonePrompt", "VocelloQwen3LoadedModel"],
+      "owner": "VocelloQwen3 loaded-model generation gate",
+      "invariant": "Opaque MLX model and clone tensors remain behind the package facade; one generation task owns mutation through the loaded-model generation gate.",
       "tests": ["Packages/VocelloQwen3Core/Tests/Qwen3RuntimeTests/VocelloQwen3FacadeTests.swift", "Packages/VocelloQwen3Core/Tests/Qwen3RuntimeTests/Qwen3StreamingContractTests.swift"]
     },
     {
@@ -132,7 +132,7 @@
     },
     {
       "id": "generation-output-adapter",
-      "source": "Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift",
+      "source": "Sources/QwenVoiceCore/GenerationOutputAdapter.swift",
       "types": ["GenerationOutputAdapter", "PCM16ScratchBuffer"],
       "owner": "single active product output adapter and scratch-buffer lock",
       "invariant": "The adapter drains one classified-session consumer and holds product finalization through atomic output and Fast QC; reusable PCM storage never escapes concurrent mutable access.",

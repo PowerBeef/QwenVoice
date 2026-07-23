@@ -28,7 +28,7 @@ machine-readable status record and wins over older prose that still says promoti
 | 11 — Long-form v4 | Planner and bounded assembler foundations only. Sequential streaming, resume/replacement, segment QA, History integration, and product cutover are pending; manifest-v3 non-streaming remains shipping. |
 | 12 — Bounded analysis and unified quality | Partial. Bounded prosody algorithm v2 is shipping; persisted-WAV consolidation and the typed registry/scheduler are not integrated. |
 | 13 — Benchmark/history v3 | Not started; schema v2 remains authoritative until shipping plan/session/quality identities stabilize. |
-| 14 — Organization and retirement | Pulled forward by the 2026-07-22 amendment: scheduled immediately after the phase 7–9 block, before phases 10–13, so quality/long-form work builds on one topology. Named deferred surfaces unchanged: `NativeStreamingSynthesisSession.swift` filename, `VocelloQwen3LegacyCompatibility` SPI, combined characterization session, and Clone priming stream APIs. Contract `mechanicalRetirement`: `scheduled-after-phase9-block-2026-07-22-amendment-spi-filename-and-combined-session-remain`. |
+| 14 — Organization and retirement | 14a closed 2026-07-23: the combined characterization session (`VocelloQwen3ModelGenerationSession`, its protocol/event types, and event channel), the product/priming stream APIs (`generate*Stream`, stream-based Clone priming), and the adapter filename (`GenerationOutputAdapter.swift` now holds `GenerationOutputAdapter`) are retired; Clone priming uses the completion-variant generate path. The `VocelloQwen3LegacyCompatibility` SPI remains the sole deferred surface for 14b (actor-owned prepared-model loading), which needs a design decision, not mechanical work. Contract `mechanicalRetirement`: `phase14a-complete-2026-07-23-combined-session-stream-trio-and-filename-retired-spi-surface-remains-for-14b`. |
 
 **2026-07-22 amendment (maintainer-endorsed).** The backend refactor review counter-verified the
 research corpus (imported under [`docs/research/`](research/)) and ran the R1 characterization
@@ -126,8 +126,8 @@ Historical checklist (all done):
 
 Overall promotion no longer forces a single linear gate. Choose by goal:
 
-1. **Phase 14** — mechanical retirement (Legacy SPI, adapter filename, combined session, Clone
-   stream APIs) when the priority is removing dual-surface confusion.
+1. **Phase 14b** — actor-owned prepared-model loading so the Legacy SPI can evaporate inward
+   (14a's mechanical retirements closed 2026-07-23; 14b needs a design brief first).
 2. **Phase 7** — chunk/preview A/B and calibration when the priority is perceived latency
    (requires shipping v9 evidence, now available; protect secret-sauce cells).
 3. **Phase 8** — live all-artifact validation when the priority is model-delivery confidence.
@@ -195,8 +195,7 @@ identifiers differ. Restoring that component does not authorize Simulator execut
   required for full promotion.
 - `VocelloQwen3Engine`, the classified session, and QwenVoiceCore's
   `GenerationOutputAdapter` are now the source-level shipping generation path for Custom, Design,
-  and Clone. The retained `NativeStreamingSynthesisSession.swift` filename is temporary mechanical
-  debt, not a second session authority. Lazy MLX audio is evaluated and copied to `[Float]` before
+  and Clone. Lazy MLX audio is evaluated and copied to `[Float]` before
   the producer awaits the size-aware channel, so a delayed mandatory drain backpressures the actual
   token/decode loop without moving an `MLXArray` across a task or actor boundary. The adapter drains
   every frame, preserves the existing limiter/WAV/Fast-QC/telemetry behavior, publishes one product
@@ -330,12 +329,9 @@ identifiers differ. Restoring that component does not authorize Simulator execut
   package, products, targets, modules, and public APIs remain available behind the facade for
   implementation compatibility; synthesis behavior and persistent identities did not change.
   Immutable lineage, compatibility, ownership, and runtime-capability contracts replace
-  patch-stack governance. The named SPI, physical filename split, large-file decomposition, and
-  compatibility-surface retirement are deferred Phase 14 work after platform promotion.
-- The package-internal combined session's bounded event channel never suspends a producer on an
-  absent consumer.
-  Overflow fails explicitly with a reserved terminal slot, cancellation replaces obsolete queued
-  events with its terminal, and `waitForTermination()` is independent of event-stream drainage.
+  patch-stack governance. Phase 14a (2026-07-23) retired the combined characterization session, the
+  stream generation/priming APIs, and the old adapter filename; the named SPI awaits the 14b
+  actor-owned loading design.
 - Runtime trust boundaries are machine-readable. `config/runtime-debug-knobs.json` makes every
   production-affecting environment override inert without the `QWENVOICE_DEBUG` master gate;
   `config/concurrency-safety.json` inventories and justifies every owned unchecked/unsafe

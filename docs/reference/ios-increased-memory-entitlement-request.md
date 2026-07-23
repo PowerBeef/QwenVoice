@@ -184,7 +184,7 @@ Memory-reduction behavior already implemented:
 
 - `Sources/iOS/IOSGenerationModeViews.swift` builds Custom, Design, and Clone generation requests with `shouldStream: true`.
 - `Sources/QwenVoiceCore/SemanticTypes.swift` retains the explicit preview policy; `QWENVOICE_STREAMING_PREVIEW_DATA=off` is the controlled-diagnostic opt-out.
-- QwenVoiceCore's `GenerationOutputAdapter` (temporarily stored in `NativeStreamingSynthesisSession.swift`) drains final PCM through the frame-bounded classified session and writes it before preview publication. Preview/status events use a separate bounded suspending router, not an eviction policy.
+- QwenVoiceCore's `GenerationOutputAdapter` (`GenerationOutputAdapter.swift`) drains final PCM through the frame-bounded classified session and writes it before preview publication. Preview/status events use a separate bounded suspending router, not an eviction policy.
 - `Sources/QwenVoiceCore/NativeEngineRuntime.swift` clears Qwen3 caches on iPhone unload/hard-trim/full-unload paths.
 - `Packages/VocelloQwen3Core/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift` exposes `Qwen3TTSMemoryCaches.clearAll()`.
 

@@ -57,7 +57,7 @@
       "Sources/QwenVoiceCore/UnsafeSpeechGenerationModel.swift"
     ],
     "consumerAllowlistEnforcement": "scripts/vendor_runtime_contract.py::LEGACY_COMPATIBILITY_SPI_CONSUMERS",
-    "combinedCompatibilitySession": "internal-package-characterization-only",
+    "combinedCompatibilitySession": "retired-2026-07-23-phase14a-classified-session-is-sole-generation-session",
     "actorCorrectnessClosure": {
       "abortLifecycle": "reserved-generating-aborting-single-owner-with-duplicate-abort-join",
       "criticalMemoryRelief": "typed-cache-trim-or-full-unload-generation-lease-transfer",
@@ -87,7 +87,7 @@
       "clone"
     ],
     "shippingImplementationSources": [
-      "Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift"
+      "Sources/QwenVoiceCore/GenerationOutputAdapter.swift"
     ],
     "directModeStreamCallsAllowed": false,
     "audioBearingBufferedEventsAllowed": false,
@@ -117,13 +117,10 @@
     "boundedAnalyzers": "prosody-v2-shipping-persisted-wav-consolidation-pending",
     "unifiedQuality": "typed-registry-foundation-specialized-gates-ship",
     "historyV3": "pending-stable-plan-session-quality-identities",
-    "mechanicalRetirement": "scheduled-after-phase9-block-2026-07-22-amendment-spi-filename-and-combined-session-remain"
+    "mechanicalRetirement": "phase14a-complete-2026-07-23-combined-session-stream-trio-and-filename-retired-spi-surface-remains-for-14b"
   },
   "phase14DeferredSurfaces": [
-    "NativeStreamingSynthesisSession.swift-filename",
-    "VocelloQwen3LegacyCompatibility-SPI",
-    "VocelloQwen3ModelGenerationSession-combined-event-session",
-    "NativeEngineRuntime-primeCloneConditioning-stream-APIs"
+    "VocelloQwen3LegacyCompatibility-SPI"
   ],
   "constrainedTierChunkFrames": {
     "custom": {

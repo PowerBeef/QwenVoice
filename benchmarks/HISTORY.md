@@ -65,6 +65,12 @@ from schema-v2 memory trends.
 |---|---|---|---|---|---|---:|---|---|---|---|
 | 2026-07-22 | [`macos-engine-20260722-210927-3553c1b1`](runs/engine-generation/macos-engine-20260722-210927-3553c1b1.json) | focused | exploratory | passedWithWarnings | qualified-with-warnings | 19 | `4c0713ee33a6` dirty | `excluded` | baseline | rtf-ab-c1 |
 
+## engine-generation / macos / mac-mini-m2-8gb / config `a3eb4eb392bc`
+
+| completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |
+|---|---|---|---|---|---|---:|---|---|---|---|
+| 2026-07-23 | [`macos-engine-20260723-130812-478fed38`](runs/engine-generation/macos-engine-20260723-130812-478fed38.json) | focused | exploratory | passedWithWarnings | qualified-with-warnings | 9 | `9ceaf0b9238b` dirty | `excluded` | baseline | phase14a-qc-soak |
+
 ## engine-generation / macos / mac-mini-m2-8gb / config `e61461740953`
 
 | completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |

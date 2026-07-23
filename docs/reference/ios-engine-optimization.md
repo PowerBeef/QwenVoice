@@ -176,8 +176,7 @@ How the streaming path stays flat (all `iPhonePro`-tuned, §2.2):
 - **Preview only after durable drain.** `GenerationOutputAdapter` writes each frame to the
   incremental WAV before frontend preview publication. Preview PCM uses the bounded suspending
   event router and is never evicted. The debug-gated `QWENVOICE_STREAMING_PREVIEW_DATA=off` remains
-  available for memory-isolated benchmarks or debugging. (The type remains in
-  `NativeStreamingSynthesisSession.swift` until Phase 14.)
+  available for memory-isolated benchmarks or debugging.
 - **Per-chunk + per-50-token MLX cache clears.** `NativeMemoryPolicyResolver` resolves
   `VocelloQwen3MemoryConfiguration` at the host boundary; the facade converts it into one immutable
   request-local `Qwen3RequestMemoryPolicy` with `clearCacheOnStreamChunk=true` and

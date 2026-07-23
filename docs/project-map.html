@@ -1733,7 +1733,7 @@ scripts/macos_test.sh test
       "desc":"TTSEngine contracts, MLXTTSEngine, schema-v2 model/component delivery, request-local sampling and memory, clone cache, actor/classified-session generation, product output finalization, and staged telemetry/quality foundations.",
       "depends":["QwenVoiceBackendCore","VocelloQwen3Core","MLX","MLXRandom","HuggingFace"],
       "sourceRoots":["Sources/QwenVoiceCore"],
-      "files":["Sources/QwenVoiceCore/TTSEngine.swift","Sources/QwenVoiceCore/MLXTTSEngine.swift","Sources/QwenVoiceCore/NativeRuntimeFactory.swift","Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift","Sources/QwenVoiceCore/RuntimeRefactorContracts.swift","Sources/QwenVoiceCore/SharedModelComponentStore.swift"]
+      "files":["Sources/QwenVoiceCore/TTSEngine.swift","Sources/QwenVoiceCore/MLXTTSEngine.swift","Sources/QwenVoiceCore/NativeRuntimeFactory.swift","Sources/QwenVoiceCore/GenerationOutputAdapter.swift","Sources/QwenVoiceCore/RuntimeRefactorContracts.swift","Sources/QwenVoiceCore/SharedModelComponentStore.swift"]
     },
     {
       "id":"QwenVoiceBackendCore","label":"BackendCore","sub":"generation policy","kind":"fw","type":"framework.static","platform":"iOS + macOS","bundle":"com.qwenvoice.backend-core",
@@ -1872,7 +1872,7 @@ scripts/macos_test.sh test
         {"name":"SemanticTypes.swift","desc":"Requests, results, events, models, speakers, memory and streaming types"},
         {"name":"NativeEngineRuntime.swift","desc":"Load/prewarm/conditioning coordinator"},
         {"name":"NativeCloneSupport.swift","desc":"Reference normalization and prepared prompt caches"},
-        {"name":"NativeStreamingSynthesisSession.swift","desc":"Temporary Phase-14 filename containing GenerationOutputAdapter: lossless PCM drain, QC, telemetry, atomic WAV publication, and finalization"},
+        {"name":"GenerationOutputAdapter.swift","desc":"GenerationOutputAdapter: lossless PCM drain, QC, telemetry, atomic WAV publication, and finalization"},
         {"name":"HuggingFaceDownloader.swift","desc":"Native repository download and staging"}
       ]
     },

@@ -166,28 +166,6 @@ final class UnsafeSpeechGenerationModel: @unchecked Sendable {
         )
     }
 
-    func generateCustomVoiceStream(
-        text: String,
-        language: String,
-        speaker: String,
-        instruct: String?,
-        streamingInterval: Double
-    ) -> AsyncThrowingStream<VocelloQwen3GenerationSignal, Error> {
-        do {
-            return try model.customVoiceStream(
-                text: text,
-                language: language,
-                speaker: speaker,
-                instruction: instruct,
-                sampling: samplingConfiguration,
-                memory: memoryConfiguration,
-                streamingInterval: streamingInterval,
-                enableChunkTimings: TelemetryGate.resolvedEnabled
-            )
-        } catch {
-            return failedStream(error)
-        }
-    }
 
     func generateCustomVoice(
         text: String,
@@ -219,26 +197,6 @@ final class UnsafeSpeechGenerationModel: @unchecked Sendable {
         )
     }
 
-    func generateVoiceDesignStream(
-        text: String,
-        language: String,
-        voiceDescription: String,
-        streamingInterval: Double
-    ) -> AsyncThrowingStream<VocelloQwen3GenerationSignal, Error> {
-        do {
-            return try model.voiceDesignStream(
-                text: text,
-                language: language,
-                description: voiceDescription,
-                sampling: samplingConfiguration,
-                memory: memoryConfiguration,
-                streamingInterval: streamingInterval,
-                enableChunkTimings: TelemetryGate.resolvedEnabled
-            )
-        } catch {
-            return failedStream(error)
-        }
-    }
 
     func generateVoiceDesign(
         text: String,
@@ -280,26 +238,6 @@ final class UnsafeSpeechGenerationModel: @unchecked Sendable {
         )
     }
 
-    func generateVoiceCloneStream(
-        text: String,
-        language: String,
-        voiceClonePrompt: VocelloQwen3ClonePrompt,
-        streamingInterval: Double
-    ) -> AsyncThrowingStream<VocelloQwen3GenerationSignal, Error> {
-        do {
-            return try model.voiceCloneStream(
-                text: text,
-                language: language,
-                prompt: voiceClonePrompt,
-                sampling: samplingConfiguration,
-                memory: memoryConfiguration,
-                streamingInterval: streamingInterval,
-                enableChunkTimings: TelemetryGate.resolvedEnabled
-            )
-        } catch {
-            return failedStream(error)
-        }
-    }
 
     func generateVoiceClone(
         text: String,
@@ -315,9 +253,4 @@ final class UnsafeSpeechGenerationModel: @unchecked Sendable {
         )
     }
 
-    private func failedStream(
-        _ error: Error
-    ) -> AsyncThrowingStream<VocelloQwen3GenerationSignal, Error> {
-        AsyncThrowingStream { $0.finish(throwing: error) }
-    }
 }

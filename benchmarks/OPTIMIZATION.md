@@ -28,7 +28,7 @@ runs: generated [`HISTORY.md`](HISTORY.md).
 |---|---|---|---|
 | A | Per-stage decode breakdown (measure) | ✅ done | `ac86b8a` (`summarize_generation_telemetry.py`) |
 | B | The ~586 ms "dropout" investigation | ✅ done — root-caused | this doc + `641a541` baseline note |
-| C | Punctuation-aware audioQC recalibration | ✅ done + verified | `ac86b8a` (`NativeStreamingSynthesisSession.swift`) |
+| C | Punctuation-aware audioQC recalibration | ✅ done + verified | `ac86b8a` (now `GenerationOutputAdapter.swift`) |
 | D | CodePredictor RoPE fusion | ✅ **done — closed by §H P3** (`f3cd2aa`): +26%, realtime crossed | §H |
 | E | MLXSwift / mlx-swift-lm version bump (0.31.x) | ⏸ deferred — stay pinned, gated | this doc + [.claude/rules/backend-mlx.md](../.claude/rules/backend-mlx.md) "SPM pins move in lockstep" |
 | F | iPhone 1.7B-4bit program — feasibility + WS0b profiling + compile/KV spikes | 🔬 see §F: compile rejected; **iOS RAM premise corrected — streaming peaks ~3 GB flat, KV windowing unneeded** | this doc + session plan |
@@ -80,7 +80,7 @@ shifted to **C** (fix the tripwire). The residual case is now covered by the aut
 `PCM16StreamLimiter` now records interior silence-run lengths; `makeAudioQCReport` counts **long pauses
 (≥350 ms)** against the text's **pause budget** (interior punctuation boundaries, from `request.text`) and
 flags only an **excess** beyond it (≥2 → fail, 1 → warn) or a single **egregious** ≥1200 ms gap (≥900 ms →
-warn). Else `pass`. (`Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift`.)
+warn). Else `pass`. (`Sources/QwenVoiceCore/GenerationOutputAdapter.swift`.)
 
 **Verified** (re-bench custom,design × speed,quality × all lengths + deterministic replication on real WAVs
 + synthetic cases): **15/16 cells now `pass`** (every false-positive `fail`/`warn` cleared); the lone

@@ -377,7 +377,7 @@ Use it to find CPU/GPU bubbles, excessive sync points, and memory growth.
 ### 7.3 `os_signpost`
 
 Vocello already uses `OSSignposter` (`AppPerformanceSignposts.swift`, and the
-`GenerationOutputAdapter` type temporarily retained in `NativeStreamingSynthesisSession.swift`) to
+`GenerationOutputAdapter` type in `GenerationOutputAdapter.swift`) to
 mark CPU-side phases. These signposts appear in Instruments' **Points of Interest** track and help
 correlate app-level events with GPU activity.
 

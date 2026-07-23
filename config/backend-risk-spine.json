@@ -158,7 +158,7 @@
     {
       "id": "OUTPUT",
       "title": "Atomic readable frame-accurate final WAV publication",
-      "source": "Sources/QwenVoiceCore/NativeStreamingSynthesisSession.swift",
+      "source": "Sources/QwenVoiceCore/GenerationOutputAdapter.swift",
       "tests": [
         "VocelloCoreTests/AtomicWAVPublicationTests/testOneShotWriterPublishesReadableFrameAccurateWAV",
         "VocelloCoreTests/AtomicWAVPublicationTests/testStreamingWriterKeepsPartialOutputHiddenUntilTerminalBarrier"

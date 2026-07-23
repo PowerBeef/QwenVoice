@@ -322,14 +322,11 @@
     "Sources/VocelloQwen3Core/LoadedModel.swift::public var latestPreparationDiagnostics: VocelloQwen3CompatibilityDiagnostics",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public func resetPreparationDiagnostics()",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public func prewarmCustomVoice( text: String, language: String, speaker: String, instruction: String?, sampling: VocelloQwen3SamplingConfiguration, memory: VocelloQwen3MemoryConfiguration = .compatibilityDefault, depth: String?, isolation: isolated (any Actor)? = #isolation ) async throws",
-    "Sources/VocelloQwen3Core/LoadedModel.swift::public func customVoiceStream( text: String, language: String, speaker: String, instruction: String?, sampling: VocelloQwen3SamplingConfiguration, memory: VocelloQwen3MemoryConfiguration = .compatibilityDefault, streamingInterval: Double, enableChunkTimings: Bool ) throws -> AsyncThrowingStream<VocelloQwen3GenerationSignal, Error>",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public func generateCustomVoice( text: String, language: String, speaker: String, instruction: String?, sampling: VocelloQwen3SamplingConfiguration, memory: VocelloQwen3MemoryConfiguration = .compatibilityDefault ) async throws -> VocelloQwen3GenerationCompletion",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public func prewarmVoiceDesign( text: String, language: String, description: String, sampling: VocelloQwen3SamplingConfiguration, memory: VocelloQwen3MemoryConfiguration = .compatibilityDefault, isolation: isolated (any Actor)? = #isolation ) async throws",
-    "Sources/VocelloQwen3Core/LoadedModel.swift::public func voiceDesignStream( text: String, language: String, description: String, sampling: VocelloQwen3SamplingConfiguration, memory: VocelloQwen3MemoryConfiguration = .compatibilityDefault, streamingInterval: Double, enableChunkTimings: Bool ) throws -> AsyncThrowingStream<VocelloQwen3GenerationSignal, Error>",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public func generateVoiceDesign( text: String, language: String, description: String, sampling: VocelloQwen3SamplingConfiguration, memory: VocelloQwen3MemoryConfiguration = .compatibilityDefault ) async throws -> VocelloQwen3GenerationCompletion",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public func makeClonePrompt( referenceSamples: [Float], referenceText: String?, xVectorOnlyMode: Bool ) throws -> VocelloQwen3ClonePrompt",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public func prewarmVoiceClone( text: String, language: String, prompt: VocelloQwen3ClonePrompt, sampling: VocelloQwen3SamplingConfiguration, memory: VocelloQwen3MemoryConfiguration = .compatibilityDefault, isolation: isolated (any Actor)? = #isolation ) async throws",
-    "Sources/VocelloQwen3Core/LoadedModel.swift::public func voiceCloneStream( text: String, language: String, prompt: VocelloQwen3ClonePrompt, sampling: VocelloQwen3SamplingConfiguration, memory: VocelloQwen3MemoryConfiguration = .compatibilityDefault, streamingInterval: Double, enableChunkTimings: Bool ) throws -> AsyncThrowingStream<VocelloQwen3GenerationSignal, Error>",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public func generateVoiceClone( text: String, language: String, prompt: VocelloQwen3ClonePrompt, sampling: VocelloQwen3SamplingConfiguration, memory: VocelloQwen3MemoryConfiguration = .compatibilityDefault ) async throws -> VocelloQwen3GenerationCompletion",
     "Sources/VocelloQwen3Core/ProductOutputAdapter.swift::public enum VocelloQwen3ProductOutputAdapterError: Error, Equatable, Sendable",
     "Sources/VocelloQwen3Core/ProductOutputAdapter.swift::public struct VocelloQwen3PreviewAudioChunk: Hashable, Sendable",
@@ -378,11 +375,11 @@
     },
     {
       "path": "Sources/VocelloQwen3Core/GenerationSession.swift",
-      "sha256": "328c5e67b71e0608353167b5b2b9585bc295f76bb361068a0461eb01c6c5481d"
+      "sha256": "06ad6a00091f50d871e1ca53c614281506cc6d3339f6538d82ba763d449be217"
     },
     {
       "path": "Sources/VocelloQwen3Core/LoadedModel.swift",
-      "sha256": "a72e03cbf90557b196e5da265c81dafb0d3bd43e609196b761cae6bb333b7712"
+      "sha256": "97a15c709f2fb286c029ca3bd6d039b46317fca076ead70482c9a2be815193e3"
     },
     {
       "path": "Sources/VocelloQwen3Core/ProductOutputAdapter.swift",

@@ -251,7 +251,7 @@ actors that own the heavy, isolated work:
 | `NativeEngineRuntime` | `NativeEngineRuntime.swift` | Owns the transitional model-load/prewarm + clone/design conditioning bridge; serializes prewarm through the reentrancy gate. |
 | `MLXModelLoadCoordinator` | `MLXModelLoadCoordinator.swift` | Loads/validates/unloads Qwen3-TTS checkpoints; manages the prepared-cache trust markers. |
 | `VocelloQwen3Engine` | `Packages/VocelloQwen3Core/Sources/VocelloQwen3Core/Engine.swift` | Shipping Custom/Design/Clone generation mutation authority; holds one operation lease through explicit product finalization. |
-| `GenerationOutputAdapter` | `NativeStreamingSynthesisSession.swift` | QwenVoiceCore product authority for lossless frame drain, limiter, atomic WAV, Fast QC, telemetry, product terminal, and finalization acknowledgment. The filename moves only in Phase 14. |
+| `GenerationOutputAdapter` | `GenerationOutputAdapter.swift` | QwenVoiceCore product authority for lossless frame drain, limiter, atomic WAV, Fast QC, telemetry, product terminal, and finalization acknowledgment. |
 | `GenerationPlanShadowMapper` | `GenerationPlanShadowMapper.swift` | Builds privacy-separated product/core/evidence plans and compares them with independently resolved shipping values; shadow work never starts a second generation. |
 | `NativeCloneSupport` | `NativeCloneSupport.swift` | Three-level clone cache (normalized audio → decoded `MLXArray` → prompt artifact). |
 | `NativeMemoryPolicyResolver` | `NativeMemoryPolicyResolver.swift` | Per-device-tier MLX memory policy (see [§4.5](#45-memory-policy)). |
@@ -306,8 +306,8 @@ NativeRuntimeFactory.make
 
 ### 4.4 Synthesis pipeline
 
-`MLXTTSEngine.generate(_:)` runs this flow (see the `GenerationOutputAdapter` type retained in
-`NativeStreamingSynthesisSession.swift` until Phase 14):
+`MLXTTSEngine.generate(_:)` runs this flow (see `GenerationOutputAdapter` in
+`Sources/QwenVoiceCore/GenerationOutputAdapter.swift`):
 
 ```mermaid
 flowchart TD
@@ -997,7 +997,7 @@ Most-frequent imports across `Sources/**/*.swift`:
 | `NativeRuntimeFactory` | Builds the whole core (registry, asset store, audio prep, engine) from a contract + paths root. |
 | `NativeEngineRuntime` | Actor owning the transitional model-load/prewarm + conditioning bridge. |
 | `VocelloQwen3Engine` | Shipping Custom/Design/Clone generation mutation authority; owns the classified session and operation lease. |
-| `GenerationOutputAdapter` | QwenVoiceCore product output/finalization authority, temporarily stored in `NativeStreamingSynthesisSession.swift` until Phase 14. |
+| `GenerationOutputAdapter` | QwenVoiceCore product output/finalization authority (`GenerationOutputAdapter.swift`). |
 | `NativeMemoryPolicyResolver` | Per-device-tier MLX cache/clone/idle/cadence policy. |
 | `ActiveGenerationCoordinator` | Owns one in-process generation and waits for a typed cancellation terminal barrier before releasing it. |
 | `GenerationEventDeliveryProbe` | Owns the bounded suspending frontend-event router and measures accepted, terminated, or unobserved sends. |

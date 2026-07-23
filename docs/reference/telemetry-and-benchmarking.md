@@ -638,8 +638,8 @@ committed bounded quality summaries and baselines remain permitted.
   `memory_trim` — no enum/schema change, the mark flows through `stageMarks` automatically).
   In v5 prefer typed metadata (`recorder.mark(stage:, metadata:)`) over string formatting for
   numeric metadata.
-- **New derived KPI:** extend `computeDerivedMetrics` in `GenerationOutputAdapter` (temporarily
-  located in `NativeStreamingSynthesisSession.swift` until Phase 14).
+- **New derived KPI:** extend `computeDerivedMetrics` in `GenerationOutputAdapter`
+  (`Sources/QwenVoiceCore/GenerationOutputAdapter.swift`).
 - **New signpost interval:** wrap the span with `NativeTelemetrySignpostInterval.begin/end`
   and merge the resulting key into `timingsMS`.
 - **New field on the record:** add an optional field to `GenerationTelemetryRecord` (so old

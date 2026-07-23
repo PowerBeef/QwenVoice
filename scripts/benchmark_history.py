@@ -835,7 +835,7 @@ def default_inputs(record: dict[str, Any]) -> dict[str, Any]:
         REPO_ROOT / "Sources" / "VocelloCLI" / "BenchCommand.swift",
         REPO_ROOT / "Sources" / "QwenVoiceCore" / "GenerationTelemetryRecord.swift",
         REPO_ROOT / "Sources" / "QwenVoiceCore" / "NativeTelemetrySampler.swift",
-        REPO_ROOT / "Sources" / "QwenVoiceCore" / "NativeStreamingSynthesisSession.swift",
+        REPO_ROOT / "Sources" / "QwenVoiceCore" / "GenerationOutputAdapter.swift",
         REPO_ROOT / "Sources" / "QwenVoiceCore" / "NativeEngineRuntime.swift",
         REPO_ROOT / "Sources" / "SharedSupport" / "Telemetry" / "AppGenerationTimeline.swift",
         REPO_ROOT / "Sources" / "SharedSupport" / "Telemetry" / "MainThreadStallWatchdog.swift",
