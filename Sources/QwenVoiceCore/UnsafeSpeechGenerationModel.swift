@@ -1,6 +1,6 @@
 import Foundation
 @preconcurrency import QwenVoiceBackendCore
-@_spi(VocelloQwen3LegacyCompatibility) @preconcurrency import VocelloQwen3Core
+@preconcurrency import VocelloQwen3Core
 
 /// Host-boundary resolver for immutable request-local sampling policy.
 /// Environment values are read only through `RuntimeDebugGate`; the resulting
@@ -77,32 +77,51 @@ enum Qwen3TalkerSamplingOverride {
     }
 }
 
-/// Product-side single-owner guard around the opaque first-party loaded model.
-/// The unchecked annotation is registered in `config/concurrency-safety.json`;
-/// no raw MLXAudio protocol or model instance crosses this boundary.
-final class UnsafeSpeechGenerationModel: @unchecked Sendable {
-    private let model: VocelloQwen3LoadedModel
+/// Product-side single-owner pairing of the runtime actor with its post-load
+/// facts. The loaded model itself never crosses the package boundary: every
+/// mutation routes through `VocelloQwen3Engine`, and only immutable metadata
+/// and request bindings live here.
+final class UnsafeSpeechGenerationModel: Sendable {
     /// One actor is paired with one loaded model. Request-bound wrappers share
     /// this exact authority so a generation cutover can never load or mutate a
     /// second copy of the model behind the product coordinator's back.
     let engine: VocelloQwen3Engine
+    let facts: VocelloQwen3LoadedModelFacts
     private let requestSampling: VocelloQwen3SamplingConfiguration?
     private let requestMemory: VocelloQwen3MemoryConfiguration?
 
     init(
-        model: VocelloQwen3LoadedModel,
-        engine: VocelloQwen3Engine? = nil,
+        engine: VocelloQwen3Engine,
+        facts: VocelloQwen3LoadedModelFacts,
         requestSampling: VocelloQwen3SamplingConfiguration? = nil,
         requestMemory: VocelloQwen3MemoryConfiguration? = nil
     ) {
-        self.model = model
-        self.engine = engine ?? VocelloQwen3Engine(adoptingCompatibilityModel: model)
+        self.engine = engine
+        self.facts = facts
         self.requestSampling = requestSampling
         self.requestMemory = requestMemory
     }
 
-    static func qwen3Optimized(model: VocelloQwen3LoadedModel) -> UnsafeSpeechGenerationModel {
-        UnsafeSpeechGenerationModel(model: model)
+    /// Loads the prepared bundle into a fresh actor and captures its facts.
+    /// The verbose sink is the local-diagnostics load-stage channel; see
+    /// `VocelloQwen3VerboseLoadDiagnosticSink` for its confinement contract.
+    static func load(
+        bundle: VocelloQwen3PreparedModelBundle,
+        loadBehavior: VocelloQwen3LoadBehavior,
+        verboseDiagnosticSink: VocelloQwen3VerboseLoadDiagnosticSink? = nil
+    ) async throws -> UnsafeSpeechGenerationModel {
+        let engine = VocelloQwen3Engine()
+        _ = try await engine.load(
+            bundle,
+            behavior: loadBehavior,
+            verboseDiagnosticSink: verboseDiagnosticSink
+        )
+        guard let facts = await engine.loadedModelFacts() else {
+            throw MLXTTSEngineError.modelUnavailable(
+                "The runtime actor reported no loaded model after a successful load."
+            )
+        }
+        return UnsafeSpeechGenerationModel(engine: engine, facts: facts)
     }
 
     func bound(
@@ -110,8 +129,8 @@ final class UnsafeSpeechGenerationModel: @unchecked Sendable {
         memory: VocelloQwen3MemoryConfiguration
     ) -> UnsafeSpeechGenerationModel {
         UnsafeSpeechGenerationModel(
-            model: model,
             engine: engine,
+            facts: facts,
             requestSampling: sampling,
             requestMemory: memory
         )
@@ -128,25 +147,45 @@ final class UnsafeSpeechGenerationModel: @unchecked Sendable {
         requestMemory ?? .compatibilityDefault
     }
 
-    var sampleRate: Int { model.sampleRate }
-    var loadDiagnosticsTimingsMS: [String: Int] { model.loadDiagnostics.timingsMilliseconds }
-    var loadDiagnosticBooleanFlags: [String: Bool] { model.loadDiagnostics.booleanFlags }
-    var latestPreparationTimingsMS: [String: Int] {
-        model.latestPreparationDiagnostics.timingsMilliseconds
-    }
-    var latestPreparationBooleanFlags: [String: Bool] {
-        model.latestPreparationDiagnostics.booleanFlags
-    }
-    var latestPreparationStringFlags: [String: String] {
-        model.latestPreparationDiagnostics.stringFlags
+    var sampleRate: Int { facts.sampleRate }
+    var loadDiagnosticsTimingsMS: [String: Int] { facts.loadDiagnostics.timingsMilliseconds }
+    var loadDiagnosticBooleanFlags: [String: Bool] { facts.loadDiagnostics.booleanFlags }
+
+    func latestPreparationTimingsMS() async -> [String: Int] {
+        await engine.preparationDiagnostics()?.timingsMilliseconds ?? [:]
     }
 
-    func resetPreparationDiagnostics() { model.resetPreparationDiagnostics() }
+    func latestPreparationBooleanFlags() async -> [String: Bool] {
+        await engine.preparationDiagnostics()?.booleanFlags ?? [:]
+    }
 
-    var supportsDedicatedCustomVoice: Bool { model.capabilities.contains(.customVoice) }
-    var supportsOptimizedCustomVoice: Bool { model.capabilities.contains(.customVoice) }
-    var supportsOptimizedVoiceDesign: Bool { model.capabilities.contains(.voiceDesign) }
-    var supportsOptimizedVoiceClone: Bool { model.capabilities.contains(.voiceClone) }
+    func latestPreparationStringFlags() async -> [String: String] {
+        await engine.preparationDiagnostics()?.stringFlags ?? [:]
+    }
+
+    func resetPreparationDiagnostics() async {
+        await engine.resetPreparationDiagnostics()
+    }
+
+    var supportsDedicatedCustomVoice: Bool { facts.capabilities.contains(.customVoice) }
+    var supportsOptimizedCustomVoice: Bool { facts.capabilities.contains(.customVoice) }
+    var supportsOptimizedVoiceDesign: Bool { facts.capabilities.contains(.voiceDesign) }
+    var supportsOptimizedVoiceClone: Bool { facts.capabilities.contains(.voiceClone) }
+
+    private func request(
+        text: String,
+        language: String,
+        input: VocelloQwen3SynthesisInput
+    ) -> VocelloQwen3SynthesisRequest {
+        VocelloQwen3SynthesisRequest(
+            generationID: UUID(),
+            text: text,
+            language: language,
+            input: input,
+            sampling: samplingConfiguration,
+            memory: memoryConfiguration
+        )
+    }
 
     func prewarmCustomVoice(
         text: String,
@@ -155,31 +194,13 @@ final class UnsafeSpeechGenerationModel: @unchecked Sendable {
         instruct: String?,
         customPrewarmDepth: String? = nil
     ) async throws {
-        try await model.prewarmCustomVoice(
-            text: text,
-            language: language,
-            speaker: speaker,
-            instruction: instruct,
-            sampling: samplingConfiguration,
-            memory: memoryConfiguration,
-            depth: customPrewarmDepth
-        )
-    }
-
-
-    func generateCustomVoice(
-        text: String,
-        language: String,
-        speaker: String,
-        instruct: String?
-    ) async throws -> VocelloQwen3GenerationCompletion {
-        try await model.generateCustomVoice(
-            text: text,
-            language: language,
-            speaker: speaker,
-            instruction: instruct,
-            sampling: samplingConfiguration,
-            memory: memoryConfiguration
+        try await engine.prewarm(
+            request: request(
+                text: text,
+                language: language,
+                input: .customVoice(speakerID: speaker, deliveryInstruction: instruct)
+            ),
+            customDepth: customPrewarmDepth
         )
     }
 
@@ -188,69 +209,59 @@ final class UnsafeSpeechGenerationModel: @unchecked Sendable {
         language: String,
         voiceDescription: String
     ) async throws {
-        try await model.prewarmVoiceDesign(
-            text: text,
-            language: language,
-            description: voiceDescription,
-            sampling: samplingConfiguration,
-            memory: memoryConfiguration
+        try await engine.prewarm(
+            request: request(
+                text: text,
+                language: language,
+                input: .voiceDesign(description: voiceDescription)
+            )
         )
     }
 
-
-    func generateVoiceDesign(
-        text: String,
-        language: String,
-        voiceDescription: String
-    ) async throws -> VocelloQwen3GenerationCompletion {
-        try await model.generateVoiceDesign(
-            text: text,
-            language: language,
-            description: voiceDescription,
-            sampling: samplingConfiguration,
-            memory: memoryConfiguration
-        )
-    }
-
-    func createVoiceClonePrompt(
+    func makeCloneHandle(
         refAudio: [Float],
         refText: String?,
-        xVectorOnlyMode: Bool
-    ) throws -> VocelloQwen3ClonePrompt? {
-        try model.makeClonePrompt(
+        xVectorOnlyMode: Bool,
+        conditioningDigest: String
+    ) async throws -> VocelloQwen3CloneHandle {
+        try await engine.makeCloneHandle(
             referenceSamples: refAudio,
             referenceText: refText,
-            xVectorOnlyMode: xVectorOnlyMode
+            xVectorOnlyMode: xVectorOnlyMode,
+            conditioningDigest: conditioningDigest
         )
     }
 
     func prewarmVoiceClone(
         text: String,
         language: String,
-        voiceClonePrompt: VocelloQwen3ClonePrompt
+        cloneHandle: VocelloQwen3CloneHandle
     ) async throws {
-        try await model.prewarmVoiceClone(
-            text: text,
-            language: language,
-            prompt: voiceClonePrompt,
-            sampling: samplingConfiguration,
-            memory: memoryConfiguration
+        try await engine.prewarm(
+            request: request(
+                text: text,
+                language: language,
+                input: .voiceClone(referenceID: cloneHandle.conditioningDigest)
+            ),
+            cloneHandle: cloneHandle
         )
     }
 
-
-    func generateVoiceClone(
+    /// Bounded actor-owned priming generation; audio never crosses the
+    /// boundary. Returns the produced frame count for the host's non-empty
+    /// guard.
+    func primeVoiceClone(
         text: String,
         language: String,
-        voiceClonePrompt: VocelloQwen3ClonePrompt
-    ) async throws -> VocelloQwen3GenerationCompletion {
-        try await model.generateVoiceClone(
-            text: text,
-            language: language,
-            prompt: voiceClonePrompt,
-            sampling: samplingConfiguration,
-            memory: memoryConfiguration
-        )
+        cloneHandle: VocelloQwen3CloneHandle
+    ) async throws -> Int {
+        try await engine.prime(
+            request: request(
+                text: text,
+                language: language,
+                input: .voiceClone(referenceID: cloneHandle.conditioningDigest)
+            ),
+            cloneHandle: cloneHandle
+        ).audioFrameCount
     }
-
 }

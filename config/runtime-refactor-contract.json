@@ -47,15 +47,10 @@
     "clone": "classified-session-generation-output-adapter"
   },
   "phase2PublicMutationBoundary": {
-    "status": "complete-foundation-shipping-through-phase4",
+    "status": "complete-actor-owned-loading-spi-retired-2026-07-23",
     "normalPublicMutationAuthority": "VocelloQwen3Engine",
     "legacyShippingSPI": "VocelloQwen3LegacyCompatibility",
-    "legacyShippingSPIConsumers": [
-      "Sources/QwenVoiceCore/MLXModelLoadCoordinator.swift",
-      "Sources/QwenVoiceCore/NativeCloneSupport.swift",
-      "Sources/QwenVoiceCore/NativeEngineRuntime.swift",
-      "Sources/QwenVoiceCore/UnsafeSpeechGenerationModel.swift"
-    ],
+    "legacyShippingSPIConsumers": [],
     "consumerAllowlistEnforcement": "scripts/vendor_runtime_contract.py::LEGACY_COMPATIBILITY_SPI_CONSUMERS",
     "combinedCompatibilitySession": "retired-2026-07-23-phase14a-classified-session-is-sole-generation-session",
     "actorCorrectnessClosure": {
@@ -117,11 +112,9 @@
     "boundedAnalyzers": "prosody-v2-shipping-persisted-wav-consolidation-pending",
     "unifiedQuality": "typed-registry-foundation-specialized-gates-ship",
     "historyV3": "pending-stable-plan-session-quality-identities",
-    "mechanicalRetirement": "phase14a-complete-2026-07-23-combined-session-stream-trio-and-filename-retired-spi-surface-remains-for-14b"
+    "mechanicalRetirement": "phase14-complete-2026-07-23-spi-retired-actor-owned-loading-metadata-priming-and-clone-artifacts"
   },
-  "phase14DeferredSurfaces": [
-    "VocelloQwen3LegacyCompatibility-SPI"
-  ],
+  "phase14DeferredSurfaces": [],
   "constrainedTierChunkFrames": {
     "custom": {
       "first": 7,
@@ -153,8 +146,6 @@
     "NativeEngineRuntime",
     "GenerationOutputAdapter",
     "UnsafeSpeechGenerationModel",
-    "VocelloQwen3LoadedModel",
-    "VocelloQwen3ModelGenerationSession",
     "Qwen3TTSGenerationGate",
     "Qwen3TalkerSamplingOverride"
   ],

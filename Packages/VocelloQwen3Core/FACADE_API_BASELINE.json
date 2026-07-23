@@ -163,6 +163,22 @@
     "Sources/VocelloQwen3Core/Engine.swift::public let activeOperation: VocelloQwen3RuntimeOperationLease?",
     "Sources/VocelloQwen3Core/Engine.swift::public let pressure: VocelloQwen3MemoryPressureSnapshot",
     "Sources/VocelloQwen3Core/Engine.swift::public init( loadedModel: VocelloQwen3ModelIdentity?, modelEpoch: UInt64, phase: VocelloQwen3OperationPhase, activeOperation: VocelloQwen3RuntimeOperationLease?, pressure: VocelloQwen3MemoryPressureSnapshot )",
+    "Sources/VocelloQwen3Core/Engine.swift::public typealias VocelloQwen3VerboseLoadDiagnosticSink =",
+    "Sources/VocelloQwen3Core/Engine.swift::public struct VocelloQwen3RuntimeDiagnosticsSnapshot: Sendable",
+    "Sources/VocelloQwen3Core/Engine.swift::public let timingsMilliseconds: [String: Int]",
+    "Sources/VocelloQwen3Core/Engine.swift::public let booleanFlags: [String: Bool]",
+    "Sources/VocelloQwen3Core/Engine.swift::public let stringFlags: [String: String]",
+    "Sources/VocelloQwen3Core/Engine.swift::public init( timingsMilliseconds: [String: Int] = [:], booleanFlags: [String: Bool] = [:], stringFlags: [String: String] = [:] )",
+    "Sources/VocelloQwen3Core/Engine.swift::public struct VocelloQwen3LoadedModelFacts: Sendable",
+    "Sources/VocelloQwen3Core/Engine.swift::public let identity: VocelloQwen3ModelIdentity",
+    "Sources/VocelloQwen3Core/Engine.swift::public let sampleRate: Int",
+    "Sources/VocelloQwen3Core/Engine.swift::public let capabilities: VocelloQwen3CapabilitySet",
+    "Sources/VocelloQwen3Core/Engine.swift::public let loadDiagnostics: VocelloQwen3RuntimeDiagnosticsSnapshot",
+    "Sources/VocelloQwen3Core/Engine.swift::public init( identity: VocelloQwen3ModelIdentity, sampleRate: Int, capabilities: VocelloQwen3CapabilitySet, loadDiagnostics: VocelloQwen3RuntimeDiagnosticsSnapshot )",
+    "Sources/VocelloQwen3Core/Engine.swift::public struct VocelloQwen3PrimeResult: Sendable",
+    "Sources/VocelloQwen3Core/Engine.swift::public let audioFrameCount: Int",
+    "Sources/VocelloQwen3Core/Engine.swift::public let sampleRate: Int",
+    "Sources/VocelloQwen3Core/Engine.swift::public init(audioFrameCount: Int, sampleRate: Int)",
     "Sources/VocelloQwen3Core/Engine.swift::public enum VocelloQwen3EngineError: Error, Equatable, Sendable",
     "Sources/VocelloQwen3Core/Engine.swift::public enum VocelloQwen3CloneHandleCapability: String, Codable, Hashable, Sendable",
     "Sources/VocelloQwen3Core/Engine.swift::public struct VocelloQwen3CloneHandle: Hashable, Sendable",
@@ -178,14 +194,19 @@
     "Sources/VocelloQwen3Core/Engine.swift::public actor VocelloQwen3Engine",
     "Sources/VocelloQwen3Core/Engine.swift::public init()",
     "Sources/VocelloQwen3Core/Engine.swift::public init(cloneHandleCapacity: Int)",
-    "Sources/VocelloQwen3Core/Engine.swift::@_spi(VocelloQwen3LegacyCompatibility) public init(adoptingCompatibilityModel loadedModel: VocelloQwen3LoadedModel)",
     "Sources/VocelloQwen3Core/Engine.swift::public func snapshot() -> VocelloQwen3EngineSnapshot",
+    "Sources/VocelloQwen3Core/Engine.swift::public func loadedModelFacts() -> VocelloQwen3LoadedModelFacts?",
+    "Sources/VocelloQwen3Core/Engine.swift::public func preparationDiagnostics() -> VocelloQwen3RuntimeDiagnosticsSnapshot?",
+    "Sources/VocelloQwen3Core/Engine.swift::public func resetPreparationDiagnostics()",
     "Sources/VocelloQwen3Core/Engine.swift::public func observeMemoryPressure(_ level: VocelloQwen3MemoryPressureLevel)",
-    "Sources/VocelloQwen3Core/Engine.swift::public func load( _ bundle: VocelloQwen3PreparedModelBundle, behavior: VocelloQwen3LoadBehavior? = nil, cachePolicy: VocelloQwen3CachePolicy = .systemDefault, diagnosticSink: VocelloQwen3DiagnosticSink? = nil ) async throws -> VocelloQwen3ModelIdentity",
+    "Sources/VocelloQwen3Core/Engine.swift::public func load( _ bundle: VocelloQwen3PreparedModelBundle, behavior: VocelloQwen3LoadBehavior? = nil, cachePolicy: VocelloQwen3CachePolicy = .systemDefault, diagnosticSink: VocelloQwen3DiagnosticSink? = nil, verboseDiagnosticSink: VocelloQwen3VerboseLoadDiagnosticSink? = nil ) async throws -> VocelloQwen3ModelIdentity",
     "Sources/VocelloQwen3Core/Engine.swift::public func makeCloneHandle( referenceSamples: [Float], referenceText: String?, xVectorOnlyMode: Bool, conditioningDigest: String ) throws -> VocelloQwen3CloneHandle",
-    "Sources/VocelloQwen3Core/Engine.swift::@_spi(VocelloQwen3LegacyCompatibility) public func adoptValidatedClonePrompt( _ prompt: VocelloQwen3ClonePrompt, capability: VocelloQwen3CloneHandleCapability, conditioningDigest: String ) throws -> VocelloQwen3CloneHandle",
     "Sources/VocelloQwen3Core/Engine.swift::public func releaseCloneHandle(_ handle: VocelloQwen3CloneHandle) -> Bool",
+    "Sources/VocelloQwen3Core/Engine.swift::public func isCloneHandleValid(_ handle: VocelloQwen3CloneHandle) -> Bool",
+    "Sources/VocelloQwen3Core/Engine.swift::public func persistCloneArtifact( _ handle: VocelloQwen3CloneHandle, to directory: URL, metadata: VocelloQwen3CloneArtifactMetadata ) throws",
+    "Sources/VocelloQwen3Core/Engine.swift::public func adoptCloneArtifact( from directory: URL, expectedMetadata: VocelloQwen3CloneArtifactMetadata, conditioningDigest: String ) throws -> VocelloQwen3CloneHandle",
     "Sources/VocelloQwen3Core/Engine.swift::public func prewarm( request: VocelloQwen3SynthesisRequest, cloneHandle: VocelloQwen3CloneHandle? = nil, customDepth: String? = nil ) async throws",
+    "Sources/VocelloQwen3Core/Engine.swift::public func prime( request: VocelloQwen3SynthesisRequest, cloneHandle: VocelloQwen3CloneHandle? = nil ) async throws -> VocelloQwen3PrimeResult",
     "Sources/VocelloQwen3Core/Engine.swift::public func reserveGeneration( request: VocelloQwen3SynthesisRequest, cloneHandle: VocelloQwen3CloneHandle? = nil, audioCapacityFrames: Int, diagnosticCapacity: Int = 128 ) async throws -> VocelloQwen3GenerationReservation",
     "Sources/VocelloQwen3Core/Engine.swift::public func open(_ reservationID: UUID) async throws",
     "Sources/VocelloQwen3Core/Engine.swift::public func abortReservation( _ reservationID: UUID, reason: VocelloQwen3CancellationReason = .shutdown ) async throws",
@@ -280,8 +301,6 @@
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let mimiDecoderBreakdownMS: VocelloQwen3MimiDecoderTimings?",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let codecStartFrame: UInt64?",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let codecEndFrameExclusive: UInt64?",
-    "Sources/VocelloQwen3Core/LoadedModel.swift::@_spi(VocelloQwen3LegacyCompatibility) public enum VocelloQwen3GenerationSignal: Sendable",
-    "Sources/VocelloQwen3Core/LoadedModel.swift::@_spi(VocelloQwen3LegacyCompatibility) public struct VocelloQwen3GenerationCompletion: Sendable",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let audio: [Float]",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let info: VocelloQwen3GenerationInfo?",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let finishReason: VocelloQwen3GenerationFinishReason",
@@ -300,7 +319,6 @@
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let createdAt: String?",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public init( modelID: String? = nil, modelRepository: String? = nil, modelRevision: String? = nil, modelArtifactVersion: String? = nil, modelIntegrityManifestDigest: String? = nil, language: String? = nil, sourceAudioFingerprint: String? = nil, transcriptHash: String? = nil, hasTranscript: Bool? = nil, xVectorOnlyMode: Bool? = nil, runtimeProfileSignature: String? = nil, createdAt: String? = nil )",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public func fillingCreatedAtIfNeeded() -> Self",
-    "Sources/VocelloQwen3Core/LoadedModel.swift::@_spi(VocelloQwen3LegacyCompatibility) public struct VocelloQwen3ClonePrompt: @unchecked Sendable",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public static var speakerFeatureVersion: String",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public var referenceText: String?",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public var xVectorOnlyMode: Bool",
@@ -309,12 +327,12 @@
     "Sources/VocelloQwen3Core/LoadedModel.swift::public func withArtifactMetadata( _ metadata: VocelloQwen3CloneArtifactMetadata? ) -> Self",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public func writeAtomically(to directory: URL) throws",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public static func load( from directory: URL, expectedMetadata: VocelloQwen3CloneArtifactMetadata? = nil ) throws -> Self",
-    "Sources/VocelloQwen3Core/LoadedModel.swift::@_spi(VocelloQwen3LegacyCompatibility) public struct VocelloQwen3CompatibilityDiagnostics: Sendable",
+    "Sources/VocelloQwen3Core/LoadedModel.swift::public enum VocelloQwen3CloneArtifactSchema",
+    "Sources/VocelloQwen3Core/LoadedModel.swift::public static var speakerFeatureVersion: String",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let timingsMilliseconds: [String: Int]",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let booleanFlags: [String: Bool]",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let stringFlags: [String: String]",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public init( timingsMilliseconds: [String: Int] = [:], booleanFlags: [String: Bool] = [:], stringFlags: [String: String] = [:] )",
-    "Sources/VocelloQwen3Core/LoadedModel.swift::@_spi(VocelloQwen3LegacyCompatibility) public final class VocelloQwen3LoadedModel: @unchecked Sendable",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let identity: VocelloQwen3ModelIdentity",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public let capabilities: VocelloQwen3CapabilitySet",
     "Sources/VocelloQwen3Core/LoadedModel.swift::public var sampleRate: Int",
@@ -351,9 +369,7 @@
     "Sources/VocelloQwen3Core/Runtime.swift::public enum VocelloQwen3Runtime",
     "Sources/VocelloQwen3Core/Runtime.swift::public static func prepareModelBundle(_ bundle: VocelloQwen3PreparedModelBundle) throws",
     "Sources/VocelloQwen3Core/Runtime.swift::public static func prepareModelDirectory( at directory: URL, repositoryID: String, modelType: String? ) throws",
-    "Sources/VocelloQwen3Core/Runtime.swift::@_spi(VocelloQwen3LegacyCompatibility) public static func loadPreparedModel( _ bundle: VocelloQwen3PreparedModelBundle, loadBehavior: VocelloQwen3LoadBehavior? = nil, cachePolicy: VocelloQwen3CachePolicy = .systemDefault, diagnosticSink: VocelloQwen3DiagnosticSink? = nil, isolation: isolated (any Actor)? = #isolation ) async throws -> VocelloQwen3LoadedModel",
-    "Sources/VocelloQwen3Core/Runtime.swift::@_spi(VocelloQwen3LegacyCompatibility) public static func loadPreparedModel( _ bundle: VocelloQwen3PreparedModelBundle, loadBehavior: VocelloQwen3LoadBehavior? = nil, cachePolicy: VocelloQwen3CachePolicy = .systemDefault, compatibilityDiagnosticSink: (@Sendable (String, [String: String]) async -> Void)?, isolation: isolated (any Actor)? = #isolation ) async throws -> VocelloQwen3LoadedModel",
-    "Sources/VocelloQwen3Core/Runtime.swift::@_spi(VocelloQwen3LegacyCompatibility) public static func clearRuntimeCaches( isolation: isolated (any Actor)? = #isolation ) async"
+    "Sources/VocelloQwen3Core/Runtime.swift::public static func clearRuntimeCaches( isolation: isolated (any Actor)? = #isolation ) async"
   ],
   "schemaVersion": 1,
   "sourceFiles": [
@@ -371,7 +387,7 @@
     },
     {
       "path": "Sources/VocelloQwen3Core/Engine.swift",
-      "sha256": "10dbfa5c8308824b93649215ed1a8d64c7240db24aae5a62d6e94b4f0e174b11"
+      "sha256": "170260b974076af69422d666936b8429abb47a872167e2445f57282b4640c9cf"
     },
     {
       "path": "Sources/VocelloQwen3Core/GenerationSession.swift",
@@ -379,7 +395,7 @@
     },
     {
       "path": "Sources/VocelloQwen3Core/LoadedModel.swift",
-      "sha256": "97a15c709f2fb286c029ca3bd6d039b46317fca076ead70482c9a2be815193e3"
+      "sha256": "ea8add02de14a7303c2f5bd5906b967c1fb11cd03746d1cbb7e58db882b091d1"
     },
     {
       "path": "Sources/VocelloQwen3Core/ProductOutputAdapter.swift",
@@ -387,7 +403,7 @@
     },
     {
       "path": "Sources/VocelloQwen3Core/Runtime.swift",
-      "sha256": "9c6106aff382a7b150dea29af88765eb141e08bbc0e24c7f1ec7292f1a39c3e9"
+      "sha256": "cc32cccf9afa0c2d7c27f7870004e7749db1ac4c5d49b6fc79677b0516c0d15e"
     }
   ],
   "sourceRoot": "Sources/VocelloQwen3Core"

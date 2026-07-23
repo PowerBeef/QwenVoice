@@ -160,8 +160,7 @@ public struct VocelloQwen3ChunkTimings: Codable, Hashable, Sendable {
 
 /// Product-facing stream signal. Audio is materialized exactly where the old
 /// product adapter materialized it, but the MLX tensor itself remains private.
-@_spi(VocelloQwen3LegacyCompatibility)
-public enum VocelloQwen3GenerationSignal: Sendable {
+enum VocelloQwen3GenerationSignal: Sendable {
     case prepared
     case token(Int)
     case info(VocelloQwen3GenerationInfo)
@@ -169,8 +168,7 @@ public enum VocelloQwen3GenerationSignal: Sendable {
     case chunkTimings(VocelloQwen3ChunkTimings)
 }
 
-@_spi(VocelloQwen3LegacyCompatibility)
-public struct VocelloQwen3GenerationCompletion: Sendable {
+struct VocelloQwen3GenerationCompletion: Sendable {
     public let audio: [Float]
     public let info: VocelloQwen3GenerationInfo?
     public let finishReason: VocelloQwen3GenerationFinishReason
@@ -284,8 +282,7 @@ public struct VocelloQwen3CloneArtifactMetadata: Codable, Hashable, Sendable {
 
 /// Opaque clone conditioning. Tensor layout and the legacy artifact reader are
 /// kept inside the owned package so product targets never depend on them.
-@_spi(VocelloQwen3LegacyCompatibility)
-public struct VocelloQwen3ClonePrompt: @unchecked Sendable {
+struct VocelloQwen3ClonePrompt: @unchecked Sendable {
     public static var speakerFeatureVersion: String {
         Qwen3TTSVoiceClonePrompt.speakerFeatureVersion
     }
@@ -324,8 +321,15 @@ public struct VocelloQwen3ClonePrompt: @unchecked Sendable {
     }
 }
 
-@_spi(VocelloQwen3LegacyCompatibility)
-public struct VocelloQwen3CompatibilityDiagnostics: Sendable {
+/// Stable clone-artifact schema facts hosts may reference without model or
+/// prompt access.
+public enum VocelloQwen3CloneArtifactSchema {
+    public static var speakerFeatureVersion: String {
+        VocelloQwen3ClonePrompt.speakerFeatureVersion
+    }
+}
+
+struct VocelloQwen3CompatibilityDiagnostics: Sendable {
     public let timingsMilliseconds: [String: Int]
     public let booleanFlags: [String: Bool]
     public let stringFlags: [String: String]
@@ -343,8 +347,7 @@ public struct VocelloQwen3CompatibilityDiagnostics: Sendable {
 
 /// Opaque, single-owner loaded model. All upstream-shaped protocols and MLX
 /// tensors remain private to this package target.
-@_spi(VocelloQwen3LegacyCompatibility)
-public final class VocelloQwen3LoadedModel: @unchecked Sendable {
+final class VocelloQwen3LoadedModel: @unchecked Sendable {
     private final class ModelBox: @unchecked Sendable {
         let base: any SpeechGenerationModel
         let optimized: any Qwen3OptimizedSpeechGenerationModel

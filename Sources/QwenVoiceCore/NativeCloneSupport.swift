@@ -2,7 +2,7 @@ import CryptoKit
 @preconcurrency import AVFoundation
 import Foundation
 @preconcurrency import MLX
-@_spi(VocelloQwen3LegacyCompatibility) @preconcurrency import VocelloQwen3Core
+@preconcurrency import VocelloQwen3Core
 
 enum ResolvedCloneTranscriptMode: String, Sendable {
     case inline
@@ -30,7 +30,7 @@ struct ResolvedCloneConditioning: @unchecked Sendable {
     let conditioningMode: CloneConditioningMode
     let referenceAudio: [Float]
     let preparedVoiceID: String?
-    let voiceClonePrompt: VocelloQwen3ClonePrompt?
+    let cloneHandle: VocelloQwen3CloneHandle?
     let preparedCloneUsed: Bool
     let cloneCacheHit: Bool?
     let clonePromptCacheHit: Bool?
@@ -50,8 +50,8 @@ struct ResolvedCloneConditioning: @unchecked Sendable {
     /// cache-key hardening change.
     var internalIdentityKey: String { internalIdentity.legacyKey }
 
-    func withVoiceClonePrompt(
-        _ voiceClonePrompt: VocelloQwen3ClonePrompt,
+    func withCloneHandle(
+        _ cloneHandle: VocelloQwen3CloneHandle,
         cacheHit: Bool,
         conditioningReused: Bool,
         timingsMS additionalTimingsMS: [String: Int] = [:]
@@ -65,7 +65,7 @@ struct ResolvedCloneConditioning: @unchecked Sendable {
             conditioningMode: conditioningMode,
             referenceAudio: referenceAudio,
             preparedVoiceID: preparedVoiceID,
-            voiceClonePrompt: voiceClonePrompt,
+            cloneHandle: cloneHandle,
             preparedCloneUsed: true,
             cloneCacheHit: cloneCacheHit,
             clonePromptCacheHit: cacheHit,
@@ -91,8 +91,8 @@ actor NativePreparedCloneConditioningCache {
         let referenceAudio: [Float]
     }
 
-    private struct CachedVoiceClonePrompt {
-        let prompt: VocelloQwen3ClonePrompt
+    private struct CachedCloneHandle {
+        let handle: VocelloQwen3CloneHandle
     }
 
     private struct NormalizedReferenceIdentity: Hashable {
@@ -120,7 +120,7 @@ actor NativePreparedCloneConditioningCache {
     private var normalizedReferenceLRUKeys: [NormalizedReferenceIdentity] = []
     private var decodedReferenceAudioCache: [DecodedReferenceIdentity: DecodedReferenceAudio] = [:]
     private var decodedReferenceAudioLRUKeys: [DecodedReferenceIdentity] = []
-    private var voiceClonePromptCache: [GenerationSemantics.ClonePromptIdentity: CachedVoiceClonePrompt] = [:]
+    private var voiceClonePromptCache: [GenerationSemantics.ClonePromptIdentity: CachedCloneHandle] = [:]
     private var voiceClonePromptLRUKeys: [GenerationSemantics.ClonePromptIdentity] = []
 
     init(capacity: Int = NativeMemoryPolicyResolver.cloneCacheCapacity()) {
@@ -213,7 +213,7 @@ actor NativePreparedCloneConditioningCache {
                 conditioningMode: cached.conditioningMode,
                 referenceAudio: cached.referenceAudio,
                 preparedVoiceID: reference.preparedVoiceID,
-                voiceClonePrompt: nil,
+                cloneHandle: nil,
                 preparedCloneUsed: true,
                 cloneCacheHit: true,
                 clonePromptCacheHit: nil,
@@ -255,7 +255,7 @@ actor NativePreparedCloneConditioningCache {
             conditioningMode: conditioningMode,
             referenceAudio: referenceAudio,
             preparedVoiceID: reference.preparedVoiceID,
-            voiceClonePrompt: nil,
+            cloneHandle: nil,
             preparedCloneUsed: false,
             cloneCacheHit: false,
             clonePromptCacheHit: nil,
@@ -278,9 +278,9 @@ actor NativePreparedCloneConditioningCache {
         voicesDirectory: URL?,
         language: String? = nil,
         modelRuntimeIdentity: ModelRuntimeIdentity
-    ) throws -> ResolvedCloneConditioning {
+    ) async throws -> ResolvedCloneConditioning {
         guard model.supportsOptimizedVoiceClone,
-              conditioning.voiceClonePrompt == nil else {
+              conditioning.cloneHandle == nil else {
             return conditioning
         }
 
@@ -300,7 +300,7 @@ actor NativePreparedCloneConditioningCache {
             language: language,
             modelArtifactIdentity: modelArtifactIdentity,
             qwenRuntimeProfileSignature: modelRuntimeIdentity.runtimeProfileSignature,
-            speakerFeatureVersion: VocelloQwen3ClonePrompt.speakerFeatureVersion
+            speakerFeatureVersion: VocelloQwen3CloneArtifactSchema.speakerFeatureVersion
         )
         let artifactMetadata = clonePromptArtifactMetadata(
             modelID: modelID,
@@ -322,13 +322,14 @@ actor NativePreparedCloneConditioningCache {
            FileManager.default.fileExists(atPath: artifactDirectory.path) {
             let artifactLoadStartedAt = ContinuousClock.now
             do {
-                let prompt = try VocelloQwen3ClonePrompt.load(
+                let handle = try await model.engine.adoptCloneArtifact(
                     from: artifactDirectory,
-                    expectedMetadata: artifactMetadata
+                    expectedMetadata: artifactMetadata,
+                    conditioningDigest: conditioning.internalIdentity.digest
                 )
-                cacheVoiceClonePrompt(prompt, for: promptIdentity)
-                return conditioning.withVoiceClonePrompt(
-                    prompt,
+                cacheCloneHandle(handle, for: promptIdentity)
+                return conditioning.withCloneHandle(
+                    handle,
                     cacheHit: true,
                     conditioningReused: true,
                     timingsMS: [
@@ -342,41 +343,41 @@ actor NativePreparedCloneConditioningCache {
         }
 
         if let cached = voiceClonePromptCache[promptIdentity] {
-            touchVoiceClonePrompt(promptIdentity)
-            return conditioning.withVoiceClonePrompt(
-                cached.prompt,
-                cacheHit: true,
-                conditioningReused: true,
-                timingsMS: [
-                    "clone_prompt_resolve": resolveStartedAt.elapsedMilliseconds,
-                ]
-            )
+            if await model.engine.isCloneHandleValid(cached.handle) {
+                touchVoiceClonePrompt(promptIdentity)
+                return conditioning.withCloneHandle(
+                    cached.handle,
+                    cacheHit: true,
+                    conditioningReused: true,
+                    timingsMS: [
+                        "clone_prompt_resolve": resolveStartedAt.elapsedMilliseconds,
+                    ]
+                )
+            }
+            // The actor invalidated this record (model reload, critical trim,
+            // or full unload); drop the stale entry and rebuild below.
+            voiceClonePromptCache.removeValue(forKey: promptIdentity)
+            voiceClonePromptLRUKeys.removeAll { $0 == promptIdentity }
         }
 
         let promptBuildStartedAt = ContinuousClock.now
-        guard let prompt = try model.createVoiceClonePrompt(
+        let handle = try await model.makeCloneHandle(
             refAudio: conditioning.referenceAudio,
             refText: creationContract.refText,
-            xVectorOnlyMode: creationContract.xVectorOnlyMode
-        ) else {
-            return conditioning
-        }
-        guard prompt.xVectorOnlyMode == creationContract.xVectorOnlyMode,
-              prompt.inContextLearningMode == !creationContract.xVectorOnlyMode else {
-            throw MLXTTSEngineError.generationFailed(
-                "The Qwen clone prompt mode does not match the requested conditioning contract."
+            xVectorOnlyMode: creationContract.xVectorOnlyMode,
+            conditioningDigest: conditioning.internalIdentity.digest
+        )
+        let promptBuildMS = promptBuildStartedAt.elapsedMilliseconds
+        cacheCloneHandle(handle, for: promptIdentity)
+        if let artifactDirectory {
+            try await model.engine.persistCloneArtifact(
+                handle,
+                to: artifactDirectory,
+                metadata: artifactMetadata.fillingCreatedAtIfNeeded()
             )
         }
-        let promptBuildMS = promptBuildStartedAt.elapsedMilliseconds
-        let promptWithMetadata = prompt.withArtifactMetadata(
-            artifactMetadata.fillingCreatedAtIfNeeded()
-        )
-        cacheVoiceClonePrompt(promptWithMetadata, for: promptIdentity)
-        if let artifactDirectory {
-            try writeVoiceClonePrompt(promptWithMetadata, to: artifactDirectory)
-        }
-        return conditioning.withVoiceClonePrompt(
-            promptWithMetadata,
+        return conditioning.withCloneHandle(
+            handle,
             cacheHit: false,
             conditioningReused: conditioning.cloneConditioningReused,
             timingsMS: [
@@ -532,11 +533,11 @@ actor NativePreparedCloneConditioningCache {
         decodedReferenceAudioLRUKeys.append(key)
     }
 
-    private func cacheVoiceClonePrompt(
-        _ prompt: VocelloQwen3ClonePrompt,
+    private func cacheCloneHandle(
+        _ handle: VocelloQwen3CloneHandle,
         for key: GenerationSemantics.ClonePromptIdentity
     ) {
-        voiceClonePromptCache[key] = CachedVoiceClonePrompt(prompt: prompt)
+        voiceClonePromptCache[key] = CachedCloneHandle(handle: handle)
         touchVoiceClonePrompt(key)
         var evicted = false
         while voiceClonePromptLRUKeys.count > capacity {
@@ -888,12 +889,6 @@ actor NativePreparedCloneConditioningCache {
             .joined()
     }
 
-    private func writeVoiceClonePrompt(
-        _ prompt: VocelloQwen3ClonePrompt,
-        to directory: URL
-    ) throws {
-        try prompt.writeAtomically(to: directory)
-    }
 }
 
 enum NativeSavedVoiceNaming {

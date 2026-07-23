@@ -7,7 +7,7 @@
 - Swift tests: 389 cases in 54 files
 - Python tests: 645 cases in 50 files
 - Required-step assurance: 55 steps across 12 workflows, all covered by forced-failure fixtures
-- Unsafe-concurrency annotations: 49 (49 registered with owner and invariant; contract complete)
+- Unsafe-concurrency annotations: 48 (48 registered with owner and invariant; contract complete)
 
 ## Canonical hardware evidence
 
@@ -20,7 +20,7 @@
 
 | Domain | Owner | Production files | Direct test files / cases | Hardware evidence |
 | --- | --- | ---: | ---: | --- |
-| generation-terminal | backend | 4 | 2 / 16 | macos: fresh, ios: fresh |
+| generation-terminal | backend | 4 | 2 / 16 | macos: stale, ios: stale |
 | clone-conditioning | backend | 30 | 2 / 31 | macos: stale, ios: stale |
 | event-delivery | backend | 3 | 2 / 10 | macos: stale, ios: stale |
 | memory-policy | backend-platform | 6 | 2 / 25 | macos: fresh, ios: fresh |

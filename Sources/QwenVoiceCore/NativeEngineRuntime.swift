@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 import MLX
-@_spi(VocelloQwen3LegacyCompatibility) @preconcurrency import VocelloQwen3Core
+@preconcurrency import VocelloQwen3Core
 import OSLog
 
 enum NativeRuntimeStage: String, Codable, Sendable {
@@ -420,7 +420,7 @@ actor NativeEngineRuntime {
             ),
             memory: requestMemory
         )
-        model.resetPreparationDiagnostics()
+        await model.resetPreparationDiagnostics()
         var booleanFlags = loadResult.booleanFlags
         var timingsMS: [String: Int] = [
             "interactive_prefetch_load_model_ms": loadResult.didLoad ? prefetchStartedAt.elapsedMilliseconds : 0
@@ -445,10 +445,10 @@ actor NativeEngineRuntime {
                         model: model,
                         customPrewarmDepth: customPrewarmDepth
                     )
-                    booleanFlags.merge(model.latestPreparationBooleanFlags) { _, rhs in rhs }
+                    booleanFlags.merge(await model.latestPreparationBooleanFlags()) { _, rhs in rhs }
                 }
                 requestKey = identity?.cacheKey
-                timingsMS.merge(model.latestPreparationTimingsMS) { _, rhs in rhs }
+                timingsMS.merge(await model.latestPreparationTimingsMS()) { _, rhs in rhs }
             }
         case .design:
             let conditioningStartedAt = ContinuousClock.now
@@ -459,7 +459,7 @@ actor NativeEngineRuntime {
             )
             conditioningPrepareMS = warmState.prewarmed ? conditioningStartedAt.elapsedMilliseconds : 0
             requestKey = warmState.requestKey.isEmpty ? nil : warmState.requestKey
-            booleanFlags.merge(model.latestPreparationBooleanFlags) { _, rhs in rhs }
+            booleanFlags.merge(await model.latestPreparationBooleanFlags()) { _, rhs in rhs }
             booleanFlags["design_conditioning_reused"] = warmState.reused
             booleanFlags["design_conditioning_prefetch_hit"] = warmState.prefetchHit
             booleanFlags["interactive_design_prefetch_hit"] = warmState.prefetchHit
@@ -467,7 +467,7 @@ actor NativeEngineRuntime {
             booleanFlags["design_stream_step_prewarmed"] = warmState.streamStepPrewarmed
             booleanFlags["design_stream_step_prefetch_hit"] = warmState.streamStepPrefetchHit
             timingsMS["prewarm_slot_wait_ms"] = warmState.prewarmSlotWaitMS
-            if let streamStepWarmMS = model.latestPreparationTimingsMS["design_stream_step_warm_ms"] {
+            if let streamStepWarmMS = await model.latestPreparationTimingsMS()["design_stream_step_warm_ms"] {
                 timingsMS["design_stream_step_warm_ms"] = streamStepWarmMS
             }
         case .clone:
@@ -587,7 +587,7 @@ actor NativeEngineRuntime {
             to: samplingConfiguration,
             memory: requestMemory
         )
-        model.resetPreparationDiagnostics()
+        await model.resetPreparationDiagnostics()
         await recordDiagnosticEvent(
             "runtime-prepare-after-reset-preparation-diagnostics",
             request: request,
@@ -663,7 +663,7 @@ actor NativeEngineRuntime {
                 )
                 await telemetrySampler?.captureBoundary("after_prewarm")
                 timingOverridesMS.merge(prewarmTimings) { _, rhs in rhs }
-                booleanFlags.merge(model.latestPreparationBooleanFlags) { _, rhs in rhs }
+                booleanFlags.merge(await model.latestPreparationBooleanFlags()) { _, rhs in rhs }
             }
             mlxMemorySnapshots["after_prewarm"] = NativeMemoryPolicyResolver.snapshot()
             booleanFlags["clone_optimized_handler_used"] = model.supportsOptimizedVoiceClone
@@ -709,7 +709,7 @@ actor NativeEngineRuntime {
                 )
                 await telemetrySampler?.captureBoundary("after_prewarm")
                 timingOverridesMS.merge(prewarmTimings) { _, rhs in rhs }
-                booleanFlags.merge(model.latestPreparationBooleanFlags) { _, rhs in rhs }
+                booleanFlags.merge(await model.latestPreparationBooleanFlags()) { _, rhs in rhs }
             }
             mlxMemorySnapshots["after_prewarm"] = NativeMemoryPolicyResolver.snapshot()
             booleanFlags["custom_dedicated_handler_used"] = model.supportsDedicatedCustomVoice
@@ -723,9 +723,9 @@ actor NativeEngineRuntime {
                 source: .generation
             )
             await telemetrySampler?.captureBoundary("after_prewarm")
-            timingOverridesMS.merge(model.latestPreparationTimingsMS) { _, rhs in rhs }
+            timingOverridesMS.merge(await model.latestPreparationTimingsMS()) { _, rhs in rhs }
             timingOverridesMS["prewarm_slot_wait_ms"] = warmState.prewarmSlotWaitMS
-            booleanFlags.merge(model.latestPreparationBooleanFlags) { _, rhs in rhs }
+            booleanFlags.merge(await model.latestPreparationBooleanFlags()) { _, rhs in rhs }
             let warmBucket = warmState.bucket
             booleanFlags["design_conditioning_reused"] = warmState.reused
             booleanFlags["design_conditioning_prefetch_hit"] = warmState.prefetchHit
@@ -785,18 +785,12 @@ actor NativeEngineRuntime {
         let cloneHandle: VocelloQwen3CloneHandle?
         if case .voiceClone = actorRequest.input {
             guard let cloneConditioning,
-                  let prompt = cloneConditioning.voiceClonePrompt else {
+                  let resolvedHandle = cloneConditioning.cloneHandle else {
                 throw MLXTTSEngineError.unsupportedRequest(
                     "Voice Cloning requires validated schema-3 conditioning before generation."
                 )
             }
-            cloneHandle = try await model.engine.adoptValidatedClonePrompt(
-                prompt,
-                capability: cloneConditioning.conditioningMode.isXVectorOnly
-                    ? .decoderOnly
-                    : .encoderAndDecoder,
-                conditioningDigest: cloneConditioning.internalIdentity.digest
-            )
+            cloneHandle = resolvedHandle
         } else {
             cloneHandle = nil
         }
@@ -1288,7 +1282,7 @@ actor NativeEngineRuntime {
                         message: "Clone generation needs resolved native clone conditioning."
                     )
                 }
-                guard let voiceClonePrompt = cloneConditioning.voiceClonePrompt else {
+                guard let cloneHandle = cloneConditioning.cloneHandle else {
                     throw NativeRuntimeError(
                         stage: .clonePreparation,
                         message: "Clone generation needs optimized Qwen3 clone conditioning."
@@ -1301,11 +1295,11 @@ actor NativeEngineRuntime {
                 try await model.prewarmVoiceClone(
                     text: lightweightWarmupText,
                     language: language,
-                    voiceClonePrompt: voiceClonePrompt
+                    cloneHandle: cloneHandle
                 )
             }
             await loadCoordinator.markPrewarmed(identityKey: identityKey)
-            var timings = model.latestPreparationTimingsMS
+            var timings = await model.latestPreparationTimingsMS()
             timings["prewarm_model"] = prewarmStartedAt.elapsedMilliseconds
             timings["prewarm_slot_wait_ms"] = prewarmSlotWaitMS
             timings["native_explicit_prewarm_ms"] = explicitPrewarmStartedAt.elapsedMilliseconds
@@ -1557,31 +1551,31 @@ actor NativeEngineRuntime {
         token: UUID
     ) async throws -> [String: Int] {
         let startedAt = ContinuousClock.now
-        guard let voiceClonePrompt = conditioning.voiceClonePrompt else {
+        guard let cloneHandle = conditioning.cloneHandle else {
             throw NativeRuntimeError(
                 stage: .clonePreparation,
                 message: "Clone priming needs optimized Qwen3 clone conditioning."
             )
         }
-        // Phase 14 retirement of the direct-mode stream trio: priming runs
-        // the completion variant. The warmup text is one syllable ("Hi."),
-        // so completing the take costs the same as the retired
-        // first-chunk-then-break stream loop it replaces.
+        // Priming runs the actor-owned bounded completion generation; audio
+        // is discarded inside the actor. The warmup text is one syllable
+        // ("Hi."), so completing the take stays as cheap as the retired
+        // first-chunk-then-break stream loop it replaced in Phase 14a.
         try ensureActiveClonePrimeToken(token)
-        let completion = try await model.generateVoiceClone(
+        let primedFrameCount = try await model.primeVoiceClone(
             text: lightweightWarmupText,
             language: language,
-            voiceClonePrompt: voiceClonePrompt
+            cloneHandle: cloneHandle
         )
         try ensureActiveClonePrimeToken(token)
-        guard !completion.audio.isEmpty else {
+        guard primedFrameCount > 0 else {
             throw NativeRuntimeError(
                 stage: .prewarm,
                 message: "Clone priming produced no audio."
             )
         }
 
-        var timings = model.latestPreparationTimingsMS
+        var timings = await model.latestPreparationTimingsMS()
         timings["prime_clone_reference"] = startedAt.elapsedMilliseconds
         return timings
     }
@@ -1726,7 +1720,7 @@ actor NativeEngineRuntime {
             )
             activeDesignConditioningWarmIdentity = conditioningWarmIdentity
             activeDesignConditioningWarmSource = source
-            let streamStepPrewarmed = model.latestPreparationBooleanFlags["design_stream_step_prewarmed"] == true
+            let streamStepPrewarmed = await model.latestPreparationBooleanFlags()["design_stream_step_prewarmed"] == true
             if streamStepPrewarmed {
                 activeDesignStreamStepWarmIdentity = conditioningWarmIdentity
                 activeDesignStreamStepWarmSource = source

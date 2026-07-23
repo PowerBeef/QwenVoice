@@ -90,6 +90,72 @@ public struct VocelloQwen3EngineSnapshot: Codable, Hashable, Sendable {
     }
 }
 
+/// Bounded local-diagnostics channel for prepared-model loading. Actions and
+/// details are package-defined load-stage breadcrumbs and may contain local
+/// filesystem paths; hosts must confine them to untracked local diagnostics
+/// and never publish them in tracked artifacts, telemetry history, or logs
+/// that leave the machine. Stable telemetry uses `VocelloQwen3DiagnosticSink`.
+public typealias VocelloQwen3VerboseLoadDiagnosticSink =
+    @Sendable (_ action: String, _ details: [String: String]) async -> Void
+
+/// Immutable diagnostics snapshot exposed by the actor without granting model
+/// access. Values mirror the owned runtime's load/preparation instrumentation.
+public struct VocelloQwen3RuntimeDiagnosticsSnapshot: Sendable {
+    public let timingsMilliseconds: [String: Int]
+    public let booleanFlags: [String: Bool]
+    public let stringFlags: [String: String]
+
+    public init(
+        timingsMilliseconds: [String: Int] = [:],
+        booleanFlags: [String: Bool] = [:],
+        stringFlags: [String: String] = [:]
+    ) {
+        self.timingsMilliseconds = timingsMilliseconds
+        self.booleanFlags = booleanFlags
+        self.stringFlags = stringFlags
+    }
+
+    init(_ diagnostics: VocelloQwen3CompatibilityDiagnostics) {
+        self.timingsMilliseconds = diagnostics.timingsMilliseconds
+        self.booleanFlags = diagnostics.booleanFlags
+        self.stringFlags = diagnostics.stringFlags
+    }
+}
+
+/// Post-load facts about the actor-owned model: identity, audio format, and
+/// capability inventory plus the immutable load diagnostics. This is the
+/// supported metadata surface; the loaded model itself never escapes the actor.
+public struct VocelloQwen3LoadedModelFacts: Sendable {
+    public let identity: VocelloQwen3ModelIdentity
+    public let sampleRate: Int
+    public let capabilities: VocelloQwen3CapabilitySet
+    public let loadDiagnostics: VocelloQwen3RuntimeDiagnosticsSnapshot
+
+    public init(
+        identity: VocelloQwen3ModelIdentity,
+        sampleRate: Int,
+        capabilities: VocelloQwen3CapabilitySet,
+        loadDiagnostics: VocelloQwen3RuntimeDiagnosticsSnapshot
+    ) {
+        self.identity = identity
+        self.sampleRate = sampleRate
+        self.capabilities = capabilities
+        self.loadDiagnostics = loadDiagnostics
+    }
+}
+
+/// Result of a bounded actor-owned priming generation. Audio is discarded
+/// inside the actor; only counts cross the boundary.
+public struct VocelloQwen3PrimeResult: Sendable {
+    public let audioFrameCount: Int
+    public let sampleRate: Int
+
+    public init(audioFrameCount: Int, sampleRate: Int) {
+        self.audioFrameCount = audioFrameCount
+        self.sampleRate = sampleRate
+    }
+}
+
 public enum VocelloQwen3EngineError: Error, Equatable, Sendable {
     case operationInProgress(VocelloQwen3RuntimeOperationKind)
     case noLoadedModel
@@ -239,8 +305,7 @@ public actor VocelloQwen3Engine {
     /// adopts the exact already-loaded model instance so product integration
     /// cannot double-load weights. The SPI disappears when loading itself is
     /// fully actor-owned.
-    @_spi(VocelloQwen3LegacyCompatibility)
-    public init(adoptingCompatibilityModel loadedModel: VocelloQwen3LoadedModel) {
+    init(adoptingCompatibilityModel loadedModel: VocelloQwen3LoadedModel) {
         self.loadedModel = loadedModel
         modelEpoch = 1
         cloneHandleCapacity = 1
@@ -289,6 +354,30 @@ public actor VocelloQwen3Engine {
     /// Records pressure ingress without exposing an admission-reopen switch.
     /// Critical pressure is monotonic until this actor completes the matching
     /// relief operation; warning/normal observations cannot reopen it.
+    /// Post-load metadata for the actor-owned model, or `nil` when unloaded.
+    public func loadedModelFacts() -> VocelloQwen3LoadedModelFacts? {
+        guard let model = loadedModel else { return nil }
+        return VocelloQwen3LoadedModelFacts(
+            identity: model.identity,
+            sampleRate: model.sampleRate,
+            capabilities: model.capabilities,
+            loadDiagnostics: VocelloQwen3RuntimeDiagnosticsSnapshot(model.loadDiagnostics)
+        )
+    }
+
+    /// Latest prewarm/prime instrumentation from the owned runtime, or `nil`
+    /// when no model is loaded.
+    public func preparationDiagnostics() -> VocelloQwen3RuntimeDiagnosticsSnapshot? {
+        guard let model = loadedModel else { return nil }
+        return VocelloQwen3RuntimeDiagnosticsSnapshot(model.latestPreparationDiagnostics)
+    }
+
+    /// Clears the owned runtime's preparation instrumentation so a following
+    /// prewarm/prime window reports only its own work.
+    public func resetPreparationDiagnostics() {
+        loadedModel?.resetPreparationDiagnostics()
+    }
+
     public func observeMemoryPressure(_ level: VocelloQwen3MemoryPressureLevel) {
         if pressure.admissionClosed, level != .critical {
             return
@@ -309,7 +398,8 @@ public actor VocelloQwen3Engine {
         _ bundle: VocelloQwen3PreparedModelBundle,
         behavior: VocelloQwen3LoadBehavior? = nil,
         cachePolicy: VocelloQwen3CachePolicy = .systemDefault,
-        diagnosticSink: VocelloQwen3DiagnosticSink? = nil
+        diagnosticSink: VocelloQwen3DiagnosticSink? = nil,
+        verboseDiagnosticSink: VocelloQwen3VerboseLoadDiagnosticSink? = nil
     ) async throws -> VocelloQwen3ModelIdentity {
         let lease = try beginOperation(kind: .load, generationID: nil, phase: .loading)
         do {
@@ -318,6 +408,7 @@ public actor VocelloQwen3Engine {
                 loadBehavior: behavior,
                 cachePolicy: cachePolicy,
                 diagnosticSink: diagnosticSink,
+                verboseDiagnosticSink: verboseDiagnosticSink,
                 isolation: self
             )
             try revalidate(lease)
@@ -363,6 +454,10 @@ public actor VocelloQwen3Engine {
                 referenceText: referenceText,
                 xVectorOnlyMode: xVectorOnlyMode
             )
+            guard prompt.xVectorOnlyMode == xVectorOnlyMode,
+                  prompt.inContextLearningMode == !xVectorOnlyMode else {
+                throw VocelloQwen3EngineError.cloneConditioningIdentityMismatch
+            }
             try revalidate(lease)
             try Task.checkCancellation()
             let handle = VocelloQwen3CloneHandle(
@@ -384,8 +479,7 @@ public actor VocelloQwen3Engine {
     /// Adopts a prompt already validated by the schema-3 artifact reader. The
     /// compatibility bridge exposes only an epoch-bound handle; prompt tensors
     /// remain actor-owned and cannot be serialized through the handle.
-    @_spi(VocelloQwen3LegacyCompatibility)
-    public func adoptValidatedClonePrompt(
+    func adoptValidatedClonePrompt(
         _ prompt: VocelloQwen3ClonePrompt,
         capability: VocelloQwen3CloneHandleCapability,
         conditioningDigest: String
@@ -443,6 +537,46 @@ public actor VocelloQwen3Engine {
         return true
     }
 
+    /// Reports whether `handle` still resolves to an actor-held clone record
+    /// for the current model epoch. Host-side handle caches use this to drop
+    /// entries invalidated by reload, critical trim, or full unload.
+    public func isCloneHandleValid(_ handle: VocelloQwen3CloneHandle) -> Bool {
+        validCloneRecord(for: handle) != nil
+    }
+
+    /// Persists the actor-held clone conditioning for `handle` as a schema-3
+    /// artifact. Prompt tensors are serialized directly from the actor's
+    /// record; the caller never observes them.
+    public func persistCloneArtifact(
+        _ handle: VocelloQwen3CloneHandle,
+        to directory: URL,
+        metadata: VocelloQwen3CloneArtifactMetadata
+    ) throws {
+        guard let record = validCloneRecord(for: handle) else {
+            throw VocelloQwen3EngineError.invalidCloneHandle
+        }
+        try record.prompt.withArtifactMetadata(metadata).writeAtomically(to: directory)
+    }
+
+    /// Loads and validates a persisted schema-3 clone artifact inside the
+    /// actor and returns only an epoch-bound handle. This replaces host-side
+    /// prompt loading: tensors never cross the actor boundary.
+    public func adoptCloneArtifact(
+        from directory: URL,
+        expectedMetadata: VocelloQwen3CloneArtifactMetadata,
+        conditioningDigest: String
+    ) throws -> VocelloQwen3CloneHandle {
+        let prompt = try VocelloQwen3ClonePrompt.load(
+            from: directory,
+            expectedMetadata: expectedMetadata
+        )
+        return try adoptValidatedClonePrompt(
+            prompt,
+            capability: prompt.xVectorOnlyMode ? .decoderOnly : .encoderAndDecoder,
+            conditioningDigest: conditioningDigest
+        )
+    }
+
     /// Prepares the currently loaded model without exposing its mutable facade.
     public func prewarm(
         request: VocelloQwen3SynthesisRequest,
@@ -494,6 +628,66 @@ public actor VocelloQwen3Engine {
             try Task.checkCancellation()
             activeOperation = nil
             phase = .ready
+        } catch {
+            failOperationIfCurrent(lease)
+            throw error
+        }
+    }
+
+    /// Runs one bounded actor-owned priming generation and discards the audio
+    /// inside the actor. Hosts use this to warm conditioning paths beyond
+    /// prewarm depth (for example first-generation Clone priming) without a
+    /// model handle; only frame counts cross the boundary.
+    public func prime(
+        request: VocelloQwen3SynthesisRequest,
+        cloneHandle: VocelloQwen3CloneHandle? = nil
+    ) async throws -> VocelloQwen3PrimeResult {
+        guard let model = loadedModel else {
+            throw VocelloQwen3EngineError.noLoadedModel
+        }
+        _ = try request.validated(for: model.capabilities)
+        let lease = try beginOperation(kind: .prewarm, generationID: nil, phase: .prewarming)
+        do {
+            let completion: VocelloQwen3GenerationCompletion
+            switch request.input {
+            case .customVoice(let speakerID, let instruction):
+                completion = try await model.generateCustomVoice(
+                    text: request.text,
+                    language: request.language,
+                    speaker: speakerID,
+                    instruction: instruction,
+                    sampling: request.sampling,
+                    memory: request.memory
+                )
+            case .voiceDesign(let description):
+                completion = try await model.generateVoiceDesign(
+                    text: request.text,
+                    language: request.language,
+                    description: description,
+                    sampling: request.sampling,
+                    memory: request.memory
+                )
+            case .voiceClone:
+                guard let cloneHandle,
+                      let record = validCloneRecord(for: cloneHandle) else {
+                    throw VocelloQwen3EngineError.invalidCloneHandle
+                }
+                completion = try await model.generateVoiceClone(
+                    text: request.text,
+                    language: request.language,
+                    prompt: record.prompt,
+                    sampling: request.sampling,
+                    memory: request.memory
+                )
+            }
+            try revalidate(lease)
+            try Task.checkCancellation()
+            activeOperation = nil
+            phase = .ready
+            return VocelloQwen3PrimeResult(
+                audioFrameCount: completion.audio.count,
+                sampleRate: model.sampleRate
+            )
         } catch {
             failOperationIfCurrent(lease)
             throw error

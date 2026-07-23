@@ -83,7 +83,7 @@ class RuntimeSecurityContractTests(unittest.TestCase):
         errors = MODULE.runtime_refactor_contract_errors(contract)
         self.assertTrue(any("mode-cutover" in error for error in errors))
         self.assertTrue(any("telemetry v9" in error for error in errors))
-        self.assertTrue(any("foundation must ship only through Phase 4" in error for error in errors))
+        self.assertTrue(any("retired-SPI actor-owned state" in error for error in errors))
         self.assertTrue(any("shipping-authority change" in error for error in errors))
         self.assertTrue(any("engine actor shipping status" in error for error in errors))
 
@@ -104,7 +104,9 @@ class RuntimeSecurityContractTests(unittest.TestCase):
             ROOT / "Packages/VocelloQwen3Core/COMPATIBILITY.json"
         )
         observed = MODULE.phase2_legacy_spi_product_consumers()
-        contract["phase2PublicMutationBoundary"]["legacyShippingSPIConsumers"].pop()
+        contract["phase2PublicMutationBoundary"]["legacyShippingSPIConsumers"].append(
+            "Sources/QwenVoiceCore/ReintroducedConsumer.swift"
+        )
         contract["phase2PublicMutationBoundary"]["cloneHandleLifecycle"][
             "defaultCapacity"
         ] = 2
@@ -153,8 +155,11 @@ class RuntimeSecurityContractTests(unittest.TestCase):
 
     def test_runtime_refactor_contract_rejects_direct_product_mode_calls(self) -> None:
         contract = MODULE.load_json(ROOT / "config/runtime-refactor-contract.json")
+        # The actor's internal prime path legitimately calls the completion
+        # generators; adding it to the scanned product sources must trip the
+        # direct-mode detector, proving the scanner still sees such calls.
         contract["phase4ProductCutover"]["shippingImplementationSources"].append(
-            "Sources/QwenVoiceCore/UnsafeSpeechGenerationModel.swift"
+            "Packages/VocelloQwen3Core/Sources/VocelloQwen3Core/Engine.swift"
         )
 
         errors = MODULE.runtime_refactor_contract_errors(contract)

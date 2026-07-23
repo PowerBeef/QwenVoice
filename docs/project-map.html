@@ -1956,7 +1956,7 @@ scripts/macos_test.sh test
     },
     {
       "name":"Packages/VocelloQwen3Core/","plat":"owned","desc":"First-party Qwen3-TTS core runtime with a stable VocelloQwen3Core product facade and compatibility-preserved MLXAudio implementation products.",
-      "children":[{"name":"Sources/VocelloQwen3Core/","desc":"Typed model-bundle, request-local sampling/memory, shipping engine lease, bounded epoch-bound Clone handles, classified session, terminal, cancellation, finalization, and diagnostic facade; product generation is actor-owned while load/prewarm and conditioning adoption remain quarantined behind VocelloQwen3LegacyCompatibility SPI"},{"name":"Package.swift","desc":"Exact MLX, MLXLM, and Hugging Face dependencies"}]
+      "children":[{"name":"Sources/VocelloQwen3Core/","desc":"Typed model-bundle, request-local sampling/memory, shipping engine lease, bounded epoch-bound Clone handles, classified session, terminal, cancellation, finalization, and diagnostic facade; generation, loading, metadata, priming, and clone-artifact adoption are all actor-owned; the legacy compatibility SPI is retired (2026-07-23)"},{"name":"Package.swift","desc":"Exact MLX, MLXLM, and Hugging Face dependencies"}]
     },
     {
       "name":"Tests/","plat":"macOS + physical-device iOS","desc":"Core/output/telemetry tests, macOS XPC integration, and explicit UI automation.",

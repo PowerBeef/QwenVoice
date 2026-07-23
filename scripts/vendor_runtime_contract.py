@@ -89,27 +89,18 @@ LEGACY_COMPATIBILITY_DECLARATION = re.compile(
     r"VocelloQwen3LoadedModel"
     r")\b|"
     r"extension\s+VocelloQwen3LoadedModel\b|"
-    r"(?:nonisolated\s+)?static\s+func\s+(?:loadPreparedModel|clearRuntimeCaches)\b"
+    # clearRuntimeCaches is a sanctioned public lifecycle API since Phase 14b;
+    # only public prepared-model loading remains forbidden outside the actor.
+    r"(?:nonisolated\s+)?static\s+func\s+loadPreparedModel\b"
     r")"
 )
 VOCELLO_QWEN3_CORE_IMPORT = re.compile(r"\bimport\s+VocelloQwen3Core\b")
-LEGACY_COMPATIBILITY_SPI_CONSUMERS = frozenset({
-    "Sources/QwenVoiceCore/MLXModelLoadCoordinator.swift",
-    "Sources/QwenVoiceCore/NativeCloneSupport.swift",
-    "Sources/QwenVoiceCore/NativeEngineRuntime.swift",
-    "Sources/QwenVoiceCore/UnsafeSpeechGenerationModel.swift",
-})
-LEGACY_COMPATIBILITY_SPI_SURFACES = frozenset({
-    "VocelloQwen3GenerationSignal",
-    "VocelloQwen3GenerationCompletion",
-    "VocelloQwen3ClonePrompt",
-    "VocelloQwen3CompatibilityDiagnostics",
-    "VocelloQwen3LoadedModel",
-    "VocelloQwen3Engine.init(adoptingCompatibilityModel:)",
-    "VocelloQwen3Engine.adoptValidatedClonePrompt",
-    "VocelloQwen3Runtime.loadPreparedModel",
-    "VocelloQwen3Runtime.clearRuntimeCaches",
-})
+# Phase 14b (2026-07-23) retired the legacy compatibility SPI: loading,
+# metadata, priming, and clone-artifact adoption are actor-owned, and the
+# previously SPI-gated symbols are internal to the package. The empty sets keep
+# the fail-closed checks alive so no consumer or surface can silently return.
+LEGACY_COMPATIBILITY_SPI_CONSUMERS: frozenset[str] = frozenset()
+LEGACY_COMPATIBILITY_SPI_SURFACES: frozenset[str] = frozenset()
 RELOCATION_POST_PATHS = {
     CURRENT_INVENTORY_NAME,
     RELOCATION_INVENTORY_NAME,
@@ -368,12 +359,13 @@ def canonical_public_declarations(path: Path) -> list[str]:
 def legacy_compatibility_declaration_errors(declarations: list[str]) -> list[str]:
     errors: list[str] = []
     for declaration in declarations:
-        if (
-            LEGACY_COMPATIBILITY_DECLARATION.search(declaration)
-            and LEGACY_COMPATIBILITY_SPI_ATTRIBUTE_PATTERN.search(declaration) is None
-        ):
+        if LEGACY_COMPATIBILITY_SPI_ATTRIBUTE_PATTERN.search(declaration):
             errors.append(
-                "VocelloQwen3Core exposes an ordinary public loaded-model, cache-mutation, "
+                f"the retired {LEGACY_COMPATIBILITY_SPI} SPI may not reappear: {declaration}"
+            )
+        elif LEGACY_COMPATIBILITY_DECLARATION.search(declaration):
+            errors.append(
+                "VocelloQwen3Core exposes a retired public loaded-model, cache-mutation, "
                 f"or combined-session declaration: {declaration}"
             )
     return errors
@@ -406,14 +398,19 @@ def legacy_compatibility_consumer_errors(observed: set[str]) -> list[str]:
 
 
 def legacy_compatibility_metadata_errors(compatibility: dict) -> list[str]:
-    metadata = compatibility.get("sourceCompatibility", {}).get("temporaryLegacySPI", {})
+    source_compatibility = compatibility.get("sourceCompatibility", {})
     errors: list[str] = []
+    if "temporaryLegacySPI" in source_compatibility:
+        errors.append("COMPATIBILITY must not reintroduce the temporary legacy SPI record")
+    metadata = source_compatibility.get("retiredLegacySPI", {})
     if metadata.get("name") != LEGACY_COMPATIBILITY_SPI:
-        errors.append("COMPATIBILITY legacy SPI name differs from the enforced boundary")
+        errors.append("COMPATIBILITY retired SPI name differs from the enforced boundary")
+    if metadata.get("status") != "retired-2026-07-23-phase14b-actor-owned-loading":
+        errors.append("COMPATIBILITY retired SPI status token drifted")
     if set(metadata.get("surfaces", [])) != LEGACY_COMPATIBILITY_SPI_SURFACES:
-        errors.append("COMPATIBILITY legacy SPI surface inventory is missing or stale")
+        errors.append("COMPATIBILITY retired SPI surface inventory must stay empty")
     if set(metadata.get("consumerAllowlist", [])) != LEGACY_COMPATIBILITY_SPI_CONSUMERS:
-        errors.append("COMPATIBILITY legacy SPI consumer allowlist is missing or stale")
+        errors.append("COMPATIBILITY retired SPI consumer allowlist must stay empty")
     return errors
 
 

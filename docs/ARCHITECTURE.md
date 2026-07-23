@@ -257,7 +257,7 @@ actors that own the heavy, isolated work:
 | `NativeMemoryPolicyResolver` | `NativeMemoryPolicyResolver.swift` | Per-device-tier MLX memory policy (see [§4.5](#45-memory-policy)). |
 | `ActiveGenerationCoordinator` | `ActiveGenerationCoordinator.swift` | One active task, typed cancellation reason, and awaited terminal barrier. |
 | `GenerationEventDeliveryProbe` | `GenerationEventDeliveryProbe.swift` | Per-generation bounded suspending frontend-event routing plus accepted/terminated/unobserved accounting; audio-bearing preview events are never evicted. |
-| `UnsafeSpeechGenerationModel` | `UnsafeSpeechGenerationModel.swift` | `@unchecked Sendable` single-owner transitional wrapper over the named `VocelloQwen3LegacyCompatibility` SPI for load/prewarm and conditioning adoption. It shares the associated engine actor; the product adapter does not call its direct mode streams. |
+| `UnsafeSpeechGenerationModel` | `UnsafeSpeechGenerationModel.swift` | `Sendable` single-owner pairing of the runtime actor with immutable post-load facts and request bindings; all mutation routes through `VocelloQwen3Engine`. |
 
 ### 4.2 Generation domain model
 
@@ -330,11 +330,11 @@ flowchart TD
     Lim --> QC["AudioQCReport → telemetry"]
 ```
 
-`UnsafeSpeechGenerationModel` imports the opaque loaded-model handle only through
-`VocelloQwen3Core`'s named `VocelloQwen3LegacyCompatibility` SPI. The remaining bridge supports
-prepared-model loading/prewarm and validated schema-3 conditioning adoption. Direct compatibility
-mode methods may remain temporarily for mechanical retirement, but `GenerationOutputAdapter` does
-not invoke them and normal facade clients cannot reach them.
+`UnsafeSpeechGenerationModel` holds no model handle: it pairs the runtime actor with its
+immutable post-load facts, and every lifecycle operation (load, prewarm, priming, clone
+conditioning and artifacts, diagnostics) routes through `VocelloQwen3Engine`'s public surface.
+The legacy compatibility SPI is retired (Phase 14b, 2026-07-23); the previously SPI-gated
+symbols are internal to the package.
 
 The shipping product-generation path is `VocelloQwen3Engine` plus its classified session and
 QwenVoiceCore's `GenerationOutputAdapter`. Sampling and Qwen generation-memory settings remain

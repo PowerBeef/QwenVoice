@@ -8,8 +8,9 @@
 This checkpoint tracks the staged runtime convergence program. Focused Phase 4 acceptance landed
 at `00c9eea637259cfce858d1fc7d43a1a2c52ff86d` (delivered by [PR #78](https://github.com/PowerBeef/QwenVoice/pull/78)
 as `d39b9a6…`). On 2026-07-20, Phase 0/5/6 closed and Phase 4 **`overallPromotion: passed`**
-(`a4bb483`). That closes the cutover gate; it does **not** close the full program — Phases 7–13
-and Phase 14 retirement remain open. `config/runtime-refactor-contract.json` is the
+(`a4bb483`). That closed the cutover gate. On 2026-07-23, Phases 7 (UI-context gap), 8 (shared-component
+live validation), and 14 (mechanical retirement, 14a + 14b SPI evaporation) also closed; Phases
+9–13 remain open. `config/runtime-refactor-contract.json` is the
 machine-readable status record and wins over older prose that still says promotion is pending.
 
 | Plan phase | Current state |
@@ -18,7 +19,7 @@ machine-readable status record and wins over older prose that still says promoti
 | 1 — Correctness prerequisites | Shipping. XPC reserves before side effects, pressure snapshots are synchronized, and critical relief holds admission continuously through cancellation, terminal cleanup, and relief. |
 | 2 — Plans and actor | The actor foundation is now the shipping generation-mutation authority through Phase 4. Immutable plans remain in shadow comparison. A narrow named SPI still bridges prepared-model loading/prewarm and validated schema-3 Clone prompt adoption; do not describe the actor as the sole MLX mutator until that bridge retires. Reserved/generating/aborting ownership, critical-relief lease transfer, and epoch-bound Clone handles remain unchanged. |
 | 3 — Classified sessions | Shipping through Phase 4. Custom, Design, and Clone materialize `[Float]` before an awaited, frame-bounded, single-consumer channel send. Producer/receiver cancellation, delayed drains, maximum-length ordering, consumer failure, typed terminal outcomes, and stale-safe product finalization remain deterministic contracts. |
-| 4 — Product adapter and mode cutover | Closed 2026-07-20. Source implementation, deterministic verification, focused platform acceptance, clean Phase 0 controls, canonical 29-take matrices, Phase 5 packaging, and Phase 6 v9 sidecar authority are all closed. Contract `overallPromotion`: `passed`. QwenVoiceCore's `GenerationOutputAdapter` remains the shipping product session; Phase 14 still owns mechanical retirement of deferred surfaces. |
+| 4 — Product adapter and mode cutover | Closed 2026-07-20. Source implementation, deterministic verification, focused platform acceptance, clean Phase 0 controls, canonical 29-take matrices, Phase 5 packaging, and Phase 6 v9 sidecar authority are all closed. Contract `overallPromotion`: `passed`. QwenVoiceCore's `GenerationOutputAdapter` remains the shipping product session. |
 | 5 — Request-local sampling | Closed 2026-07-20. Shipping path packages fail-closed `SamplingTakeEvidence.packagedTelemetryNotes()` (`validatedForPromotion()` + `samplingPromotionPackaged=true`). Fixed-seed equal/diverge pairs remain live identity proof. Contract `requestLocalSamplingV2`: `shipping-promotion-packaged-evidence-live`. Long-form/candidate sub-seed execution remains Phase 11/12. |
 | 6 — Telemetry v9 | Closed 2026-07-20 for history sidecar authority. JSONL envelope remains schema v8 with nested transition; publication-ready transitions with exact MLX chunk instants publish complete `*.streaming-telemetry-v9.json` sidecars and stamp digests. Contract `telemetry: 9`, `telemetryV9`: `complete-sidecar-authority-with-v8-envelope`. |
 | 7 — UI-context gap (implemented 2026-07-23) | **Closed in two acts** (`amendment20260723`, OPTIMIZATION.md §K). Act 1: the canonical macOS decline was XCUITest's automatic screen recording (fixed via `preferredScreenCaptureFormat: screenshots`). Act 2: the honest residual (~23%) was Liquid Glass's continuous compositor work while visible; the XPC topology itself measures ~3%. The endorsed **generation performance gate** (`generationPerformanceGate` environment value from `hasActiveGeneration`) renders glass surfaces with the shipped solid-fill fallback during generation — acceptance 1.833 one-cell, full matrix custom 1.67–1.84 / design 1.79–1.94 / clone 1.43–1.86, engine capability delivered to visible users on the floor tier. Three diagnostic engine-loop experiments remain reverted (fixed-seed QC soak required for re-introduction). |
@@ -28,7 +29,7 @@ machine-readable status record and wins over older prose that still says promoti
 | 11 — Long-form v4 | Planner and bounded assembler foundations only. Sequential streaming, resume/replacement, segment QA, History integration, and product cutover are pending; manifest-v3 non-streaming remains shipping. |
 | 12 — Bounded analysis and unified quality | Partial. Bounded prosody algorithm v2 is shipping; persisted-WAV consolidation and the typed registry/scheduler are not integrated. |
 | 13 — Benchmark/history v3 | Not started; schema v2 remains authoritative until shipping plan/session/quality identities stabilize. |
-| 14 — Organization and retirement | 14a closed 2026-07-23: the combined characterization session (`VocelloQwen3ModelGenerationSession`, its protocol/event types, and event channel), the product/priming stream APIs (`generate*Stream`, stream-based Clone priming), and the adapter filename (`GenerationOutputAdapter.swift` now holds `GenerationOutputAdapter`) are retired; Clone priming uses the completion-variant generate path. The `VocelloQwen3LegacyCompatibility` SPI remains the sole deferred surface for 14b (actor-owned prepared-model loading), which needs a design decision, not mechanical work. Contract `mechanicalRetirement`: `phase14a-complete-2026-07-23-combined-session-stream-trio-and-filename-retired-spi-surface-remains-for-14b`. |
+| 14 — Organization and retirement | 14a closed 2026-07-23: the combined characterization session (`VocelloQwen3ModelGenerationSession`, its protocol/event types, and event channel), the product/priming stream APIs (`generate*Stream`, stream-based Clone priming), and the adapter filename (`GenerationOutputAdapter.swift` now holds `GenerationOutputAdapter`) are retired; Clone priming uses the completion-variant generate path. 14b closed the same day: prepared-model loading, post-load facts, preparation diagnostics, priming, and schema-3 clone-artifact persistence/adoption are actor-owned public surfaces (`load`+verbose sink, `loadedModelFacts`, `preparationDiagnostics`, `prime`, `persistCloneArtifact`/`adoptCloneArtifact`, `isCloneHandleValid`); the `VocelloQwen3LegacyCompatibility` SPI is retired with its symbols internal, `UnsafeSpeechGenerationModel` is a plain-`Sendable` actor/facts pairing, and clone conditioning flows as epoch-bound handles end to end. Contract `mechanicalRetirement`: `phase14-complete-2026-07-23-spi-retired-actor-owned-loading-metadata-priming-and-clone-artifacts`. |
 
 **2026-07-22 amendment (maintainer-endorsed).** The backend refactor review counter-verified the
 research corpus (imported under [`docs/research/`](research/)) and ran the R1 characterization
@@ -126,8 +127,7 @@ Historical checklist (all done):
 
 Overall promotion no longer forces a single linear gate. Choose by goal:
 
-1. **Phase 14b** — actor-owned prepared-model loading so the Legacy SPI can evaporate inward
-   (14a's mechanical retirements closed 2026-07-23; 14b needs a design brief first).
+1. ~~**Phase 14**~~ — closed 2026-07-23 (14a mechanical retirements + 14b SPI evaporation).
 2. **Phase 7** — chunk/preview A/B and calibration when the priority is perceived latency
    (requires shipping v9 evidence, now available; protect secret-sauce cells).
 3. **Phase 8** — closed 2026-07-23 (live all-artifact validation on both canonical platforms).
@@ -200,9 +200,10 @@ identifiers differ. Restoring that component does not authorize Simulator execut
   token/decode loop without moving an `MLXArray` across a task or actor boundary. The adapter drains
   every frame, preserves the existing limiter/WAV/Fast-QC/telemetry behavior, publishes one product
   terminal, and returns the generation/lease/finalization token before ownership can release.
-  Prepared-model loading/prewarm and validated schema-3 Clone prompt adoption still use a narrow
-  `VocelloQwen3LegacyCompatibility` bridge; therefore the actor is the shipping generation mutation
-  authority, not yet the sole MLX mutator across every lifecycle operation.
+  Phase 14b (2026-07-23) moved prepared-model loading, post-load facts, preparation
+  diagnostics, priming, and schema-3 clone-artifact persistence/adoption onto the actor; the
+  legacy compatibility SPI is retired and the actor owns every runtime lifecycle operation the
+  product can reach.
   The actor's remaining correctness gaps are also closed: `reserved`, `generating`, and `aborting`
   lifecycle ownership prevents an abort-owned reservation from reopening generation and makes
   duplicate aborts join the same finalization. Typed cache-trim or full-unload relief carries the
@@ -218,7 +219,7 @@ identifiers differ. Restoring that component does not authorize Simulator execut
   Phase 4 does not complete the v9 writer/merger/publication path. Telemetry v8/evidence v2,
   manifest v3, persisted Fast QC, and the existing specialized gates remain operational truth.
   Focused physical-iPhone Phase 4 acceptance now passes; sequential streaming long-form, complete
-  v9 publication, history v3, clean full-matrix promotion evidence, and Phase 14 retirement remain
+  v9 publication, history v3, and clean full-matrix promotion evidence remain
   pending.
 - Clone conditioning is typed as transcript-backed or genuine audio-only x-vector. Both apps own
   the visible `voiceCloning_consentAcknowledgment` in Settings, persist the choice locally, and
@@ -325,14 +326,14 @@ identifiers differ. Restoring that component does not authorize Simulator execut
   model-bundle, capability, sampling, memory, request, terminal, cancellation, and diagnostic
   contracts isolate application code from implementation modules. Product generation now uses
   `VocelloQwen3Engine`, its classified session, and QwenVoiceCore's
-  `GenerationOutputAdapter`. The narrow `VocelloQwen3LegacyCompatibility` import remains for
-  temporary loaded-model load/prewarm and schema-3 conditioning adoption. The legacy `MLXAudio`
+  `GenerationOutputAdapter`; loading, metadata, priming, and clone-artifact adoption are
+  actor-owned public surfaces (the legacy compatibility SPI retired 2026-07-23). The legacy `MLXAudio`
   package, products, targets, modules, and public APIs remain available behind the facade for
   implementation compatibility; synthesis behavior and persistent identities did not change.
   Immutable lineage, compatibility, ownership, and runtime-capability contracts replace
-  patch-stack governance. Phase 14a (2026-07-23) retired the combined characterization session, the
-  stream generation/priming APIs, and the old adapter filename; the named SPI awaits the 14b
-  actor-owned loading design.
+  patch-stack governance. Phase 14 (2026-07-23) retired the combined characterization session, the
+  stream generation/priming APIs, the old adapter filename, and — via 14b actor-owned loading —
+  the named SPI itself.
 - Runtime trust boundaries are machine-readable. `config/runtime-debug-knobs.json` makes every
   production-affecting environment override inert without the `QWENVOICE_DEBUG` master gate;
   `config/concurrency-safety.json` inventories and justifies every owned unchecked/unsafe

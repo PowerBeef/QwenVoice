@@ -172,7 +172,7 @@ must not yet be treated as product authority. At this checkpoint:
   aggregate-only transport list, missing player render callback) may remain listed.
 
 Overall Phase 4 promotion is closed. The broader convergence program remains open for Phases
-8–13 and Phase 14b; Phase 14a mechanical retirement closed 2026-07-23 (see the amendment below).
+9–13; Phases 8 and 14 (14a + 14b) closed 2026-07-23 (see the amendments below).
 
 ## Amendment 2026-07-22 — characterization-gate resequencing (maintainer endorsed)
 
@@ -244,3 +244,32 @@ closure, per the 07-22 resequencing:
   retirement (14b) requires actor-owned loading — a design decision with product consequences,
   recorded separately before implementation. Contract token:
   `phase14a-complete-2026-07-23-combined-session-stream-trio-and-filename-retired-spi-surface-remains-for-14b`.
+
+## Amendment 2026-07-23c — Phase 14b SPI evaporation (complete)
+
+Phase 14b retired the `VocelloQwen3LegacyCompatibility` SPI by making every remaining bridge
+capability an actor-owned public surface:
+
+- **Actor-owned loading.** `VocelloQwen3Engine.load` gains the documented
+  `VocelloQwen3VerboseLoadDiagnosticSink` local-diagnostics channel (package-defined load-stage
+  breadcrumbs, confined to untracked local diagnostics), preserving the detail fidelity the
+  transitional `compatibilityDiagnosticSink` overload existed for; that overload is deleted and
+  `VocelloQwen3Runtime.loadPreparedModel` is internal.
+- **Metadata and diagnostics.** `loadedModelFacts()` (identity, sample rate, capabilities, load
+  diagnostics) and `preparationDiagnostics()`/`resetPreparationDiagnostics()` replace direct
+  loaded-model reads; `UnsafeSpeechGenerationModel` becomes a plain-`Sendable` pairing of the
+  actor with immutable facts and request bindings, and its concurrency-safety registry entry is
+  retired.
+- **Actor-owned priming.** `prime(request:cloneHandle:)` runs the bounded completion generation
+  inside the actor and returns only frame counts; Clone priming and prewarm route through it and
+  `prewarm(request:)`.
+- **Handle-based clone artifacts.** `persistCloneArtifact`/`adoptCloneArtifact` move schema-3
+  artifact write/read inside the actor, `makeCloneHandle` validates the built prompt's mode, and
+  `isCloneHandleValid` lets the product's identity-keyed cache drop epoch-invalidated entries.
+  `ResolvedCloneConditioning` carries an epoch-bound handle instead of a prompt value, so clone
+  tensors never cross the actor boundary anywhere in the product.
+- **Enforcement inverted.** The vendor/security contracts now fail closed on any reappearance of
+  the SPI attribute, a public loaded-model surface, or the temporary-SPI compatibility record;
+  `COMPATIBILITY.json` records `retiredLegacySPI` with empty inventories, and
+  `phase14DeferredSurfaces` is empty. Contract token:
+  `phase14-complete-2026-07-23-spi-retired-actor-owned-loading-metadata-priming-and-clone-artifacts`.

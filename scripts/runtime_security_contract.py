@@ -554,9 +554,9 @@ def runtime_refactor_contract_errors(
             "runtime-refactor-contract must define the complete Phase 2 public mutation boundary"
         )
         phase2 = phase2 if isinstance(phase2, dict) else {}
-    if phase2.get("status") != "complete-foundation-shipping-through-phase4":
+    if phase2.get("status") != "complete-actor-owned-loading-spi-retired-2026-07-23":
         errors.append(
-            "runtime-refactor-contract Phase 2 foundation must ship only through Phase 4"
+            "runtime-refactor-contract Phase 2 must record the retired-SPI actor-owned state"
         )
     if phase2.get("normalPublicMutationAuthority") != "VocelloQwen3Engine":
         errors.append("runtime-refactor-contract Phase 2 mutation authority must be the engine actor")
@@ -581,12 +581,14 @@ def runtime_refactor_contract_errors(
     source_compatibility = (
         source_compatibility_value if isinstance(source_compatibility_value, dict) else {}
     )
-    spi_metadata_value = source_compatibility.get("temporaryLegacySPI", {})
+    spi_metadata_value = source_compatibility.get("retiredLegacySPI", {})
     spi_metadata = spi_metadata_value if isinstance(spi_metadata_value, dict) else {}
+    if "temporaryLegacySPI" in source_compatibility:
+        errors.append("COMPATIBILITY must not reintroduce the temporary legacy SPI record")
     if spi_metadata.get("name") != phase2.get("legacyShippingSPI"):
         errors.append("runtime-refactor-contract Phase 2 SPI differs from COMPATIBILITY")
-    if spi_metadata.get("status") != "shipping-compatibility-only":
-        errors.append("COMPATIBILITY legacy SPI must remain shipping-compatibility-only")
+    if spi_metadata.get("status") != "retired-2026-07-23-phase14b-actor-owned-loading":
+        errors.append("COMPATIBILITY legacy SPI must remain retired")
     declared_consumers = string_list_set(phase2.get("legacyShippingSPIConsumers"))
     registered_consumers = string_list_set(spi_metadata.get("consumerAllowlist"))
     if declared_consumers is None:

@@ -99,14 +99,6 @@
       "tests": ["Tests/VocelloCoreTests/ModelDownloadLifecycleTests.swift"]
     },
     {
-      "id": "speech-model-adapter",
-      "source": "Sources/QwenVoiceCore/UnsafeSpeechGenerationModel.swift",
-      "types": ["UnsafeSpeechGenerationModel"],
-      "owner": "NativeEngineRuntime actor",
-      "invariant": "The wrapped MLX model and generation closures execute only under the runtime generation gate.",
-      "tests": ["Packages/VocelloQwen3Core/Tests/Qwen3RuntimeTests/Qwen3GenerationGateTests.swift"]
-    },
-    {
       "id": "owned-qwen3-facade-runtime",
       "sources": ["Packages/VocelloQwen3Core/Sources/VocelloQwen3Core/LoadedModel.swift"],
       "types": ["ModelBox", "VocelloQwen3ClonePrompt", "VocelloQwen3LoadedModel"],

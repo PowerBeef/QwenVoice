@@ -115,10 +115,11 @@ warning.
   `VocelloQwen3Engine`, its classified session, and QwenVoiceCore's `GenerationOutputAdapter` as
   the shipping generation path for Custom, Design, and Clone. Phase 4 `overallPromotion` passed
   2026-07-20 with clean Phase 0 controls and canonical matrices; the contract JSON is the status
-  authority and later phases (7–13, 14 retirement) remain open. The remaining prepared-model
-  load/prewarm and schema-3 conditioning bridge is available only through
-  `@_spi(VocelloQwen3LegacyCompatibility)`; do not describe the actor as the sole MLX mutator or add
-  a normal-public mutation surface back to `VocelloQwen3LoadedModel`.
+  authority. Phases 7, 8, and 14 closed 2026-07-23; phases 9–13 remain open. Prepared-model
+  loading, post-load metadata/facts, preparation diagnostics, priming, and schema-3 clone-artifact
+  persistence/adoption are actor-owned public surfaces; the legacy compatibility SPI is retired
+  and its symbols are internal to the package. Do not add a public mutation surface back to the
+  loaded model or reintroduce an `@_spi` runtime boundary.
   Preserve the actor's explicit reserved/generating/aborting ownership: open must fail once abort
   owns the reservation, duplicate aborts join one finalization, and typed cache-trim/full-unload
   relief must carry the generation lease without reopening critical admission before completion.

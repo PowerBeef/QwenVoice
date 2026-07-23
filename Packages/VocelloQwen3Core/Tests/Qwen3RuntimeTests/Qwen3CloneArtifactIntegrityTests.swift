@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 import MLX
 @testable import MLXAudioTTS
-@_spi(VocelloQwen3LegacyCompatibility) @testable import VocelloQwen3Core
+@testable import VocelloQwen3Core
 import XCTest
 
 final class Qwen3CloneArtifactIntegrityTests: XCTestCase {

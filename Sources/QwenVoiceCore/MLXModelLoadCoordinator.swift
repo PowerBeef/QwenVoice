@@ -1,6 +1,6 @@
 import Foundation
 @preconcurrency import MLX
-@_spi(VocelloQwen3LegacyCompatibility) @preconcurrency import VocelloQwen3Core
+@preconcurrency import VocelloQwen3Core
 import CoreFoundation
 import CryptoKit
 
@@ -718,36 +718,32 @@ actor MLXModelLoadCoordinator: MLXModelCoordinating {
         preparedMetadata: PreparedModelMetadata,
         capabilityProfile: NativeLoadCapabilityProfile
     ) async throws -> UnsafeSpeechGenerationModel {
-        UnsafeSpeechGenerationModel.qwen3Optimized(
-            model: try await VocelloQwen3Runtime.loadPreparedModel(
-                descriptor.vocelloQwen3PreparedBundle(
-                    directory: preparedMetadata.preparedDirectory,
-                    modelType: preparedMetadata.modelType,
-                    trustedPreparedCheckpoint: preparedMetadata.trustedPreparedCheckpoint
-                ),
-                loadBehavior: MLXTTSEngine.qwenPreparedLoadBehavior(
-                    for: NativeQwenPreparedLoadProfile(capabilityProfile: capabilityProfile),
-                    trustPreparedCheckpoint: preparedMetadata.trustedPreparedCheckpoint,
-                    preparedDirectoryAlreadyValidated: true
-                )
+        try await UnsafeSpeechGenerationModel.load(
+            bundle: descriptor.vocelloQwen3PreparedBundle(
+                directory: preparedMetadata.preparedDirectory,
+                modelType: preparedMetadata.modelType,
+                trustedPreparedCheckpoint: preparedMetadata.trustedPreparedCheckpoint
+            ),
+            loadBehavior: MLXTTSEngine.qwenPreparedLoadBehavior(
+                for: NativeQwenPreparedLoadProfile(capabilityProfile: capabilityProfile),
+                trustPreparedCheckpoint: preparedMetadata.trustedPreparedCheckpoint,
+                preparedDirectoryAlreadyValidated: true
             )
         )
     }
 
-    /// Keeps the temporary package compatibility SPI confined to the model-load
-    /// boundary. Product coordinators construct the immutable bundle and load
-    /// policy, but they never import or call the legacy runtime surface.
-    static func loadPreparedCompatibilityModel(
+    /// Actor-owned load with the local-diagnostics load-stage channel. Product
+    /// coordinators construct the immutable bundle and load policy; the loaded
+    /// model itself never leaves the runtime actor.
+    static func loadPreparedActorModel(
         _ bundle: VocelloQwen3PreparedModelBundle,
         loadBehavior: VocelloQwen3LoadBehavior,
-        compatibilityDiagnosticSink: (@Sendable (String, [String: String]) async -> Void)?
+        verboseDiagnosticSink: VocelloQwen3VerboseLoadDiagnosticSink?
     ) async throws -> UnsafeSpeechGenerationModel {
-        UnsafeSpeechGenerationModel.qwen3Optimized(
-            model: try await VocelloQwen3Runtime.loadPreparedModel(
-                bundle,
-                loadBehavior: loadBehavior,
-                compatibilityDiagnosticSink: compatibilityDiagnosticSink
-            )
+        try await UnsafeSpeechGenerationModel.load(
+            bundle: bundle,
+            loadBehavior: loadBehavior,
+            verboseDiagnosticSink: verboseDiagnosticSink
         )
     }
 

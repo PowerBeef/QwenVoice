@@ -53,12 +53,16 @@ class VendorRuntimeContractTests(unittest.TestCase):
             ),
             [],
         )
-        self.assertTrue(
-            any(
-                MODULE.LEGACY_COMPATIBILITY_SPI_ATTRIBUTE in declaration
-                and "VocelloQwen3LoadedModel" in declaration
+        # Phase 14b: the retired SPI and its loaded-model surface may not
+        # appear in the public baseline at all.
+        self.assertEqual(
+            [
+                declaration
                 for declaration in baseline["publicDeclarations"]
-            )
+                if MODULE.LEGACY_COMPATIBILITY_SPI_ATTRIBUTE in declaration
+                or "VocelloQwen3LoadedModel:" in declaration
+            ],
+            [],
         )
 
     def test_facade_canonicalizer_preserves_only_legacy_spi_attribute_blocks(self) -> None:
@@ -85,10 +89,9 @@ public func stableFacadeEntryPoint() -> Bool { true }
                 ],
             )
 
-    def test_legacy_loaded_model_and_combined_session_require_compatibility_spi(self) -> None:
+    def test_retired_legacy_symbols_may_not_return_publicly_or_via_spi(self) -> None:
         ordinary_declarations = (
             "public class VocelloQwen3LoadedModel: Sendable",
-            "public static func clearRuntimeCaches() async",
             "public enum VocelloQwen3GenerationEvent: Sendable",
             "public protocol VocelloQwen3GenerationSession: Sendable",
             "public final class VocelloQwen3ModelGenerationSession: Sendable",
@@ -98,41 +101,34 @@ public func stableFacadeEntryPoint() -> Bool { true }
             with self.subTest(declaration=declaration):
                 errors = MODULE.legacy_compatibility_declaration_errors([declaration])
                 self.assertEqual(len(errors), 1)
-                self.assertIn("ordinary public", errors[0])
-                self.assertEqual(
-                    MODULE.legacy_compatibility_declaration_errors(
-                        [f"{MODULE.LEGACY_COMPATIBILITY_SPI_ATTRIBUTE} {declaration}"]
-                    ),
-                    [],
+                self.assertIn("retired public", errors[0])
+                spi_errors = MODULE.legacy_compatibility_declaration_errors(
+                    [f"{MODULE.LEGACY_COMPATIBILITY_SPI_ATTRIBUTE} {declaration}"]
                 )
+                self.assertEqual(len(spi_errors), 1)
+                self.assertIn("retired", spi_errors[0])
 
         self.assertEqual(
             MODULE.legacy_compatibility_declaration_errors(
-                ["final class VocelloQwen3ModelGenerationSession: Sendable"]
+                [
+                    "final class VocelloQwen3ModelGenerationSession: Sendable",
+                    "public func loadedModelFacts() -> VocelloQwen3LoadedModelFacts?",
+                ]
             ),
             [],
         )
 
     def test_legacy_compatibility_spi_consumers_match_the_precise_allowlist(self) -> None:
         observed = MODULE.legacy_compatibility_spi_consumers(ROOT)
-        self.assertEqual(observed, set(MODULE.LEGACY_COMPATIBILITY_SPI_CONSUMERS))
+        self.assertEqual(observed, set())
+        self.assertEqual(MODULE.LEGACY_COMPATIBILITY_SPI_CONSUMERS, frozenset())
         self.assertEqual(MODULE.legacy_compatibility_consumer_errors(observed), [])
 
-        extra = set(observed)
-        extra.add("Sources/QwenVoiceCore/UnapprovedConsumer.swift")
+        extra = {"Sources/QwenVoiceCore/UnapprovedConsumer.swift"}
         self.assertTrue(
             any(
                 "unapproved" in error
                 for error in MODULE.legacy_compatibility_consumer_errors(extra)
-            )
-        )
-
-        missing = set(observed)
-        missing.remove(sorted(observed)[0])
-        self.assertTrue(
-            any(
-                "stale" in error
-                for error in MODULE.legacy_compatibility_consumer_errors(missing)
             )
         )
 
@@ -143,12 +139,21 @@ public func stableFacadeEntryPoint() -> Bool { true }
         self.assertEqual(MODULE.legacy_compatibility_metadata_errors(compatibility), [])
 
         drifted = json.loads(json.dumps(compatibility))
-        drifted["sourceCompatibility"]["temporaryLegacySPI"]["consumerAllowlist"].append(
+        drifted["sourceCompatibility"]["retiredLegacySPI"]["consumerAllowlist"].append(
             "Sources/QwenVoiceCore/UnapprovedConsumer.swift"
         )
         self.assertIn(
-            "COMPATIBILITY legacy SPI consumer allowlist is missing or stale",
+            "COMPATIBILITY retired SPI consumer allowlist must stay empty",
             MODULE.legacy_compatibility_metadata_errors(drifted),
+        )
+
+        reintroduced = json.loads(json.dumps(compatibility))
+        reintroduced["sourceCompatibility"]["temporaryLegacySPI"] = {
+            "name": MODULE.LEGACY_COMPATIBILITY_SPI
+        }
+        self.assertIn(
+            "COMPATIBILITY must not reintroduce the temporary legacy SPI record",
+            MODULE.legacy_compatibility_metadata_errors(reintroduced),
         )
 
     def test_facade_type_filter_rejects_third_party_cache_types(self) -> None:

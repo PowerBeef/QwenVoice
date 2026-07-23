@@ -1,4 +1,4 @@
-@_spi(VocelloQwen3LegacyCompatibility) @testable import VocelloQwen3Core
+@testable import VocelloQwen3Core
 import HuggingFace
 @preconcurrency import MLX
 import MLXAudioCore

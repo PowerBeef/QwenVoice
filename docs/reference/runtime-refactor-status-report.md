@@ -8,8 +8,10 @@
 `main`. Shipping Custom/Design/Clone generation uses the actor → classified session →
 `GenerationOutputAdapter` path. Telemetry still uses a **schema-v8 JSONL envelope** plus complete
 `*.streaming-telemetry-v9.json` sidecars as streaming history authority. Sampling v2 ships with
-fail-closed promotion packaging. Load/prewarm still uses the named Legacy SPI. Phase 14
-mechanical retirement is unblocked but not started; Phases 7–13 remain open.
+fail-closed promotion packaging. Phases 7, 8, and 14 closed 2026-07-23: the UI-context gap is
+closed by the generation performance gate, shared-component delivery is live-validated on both
+platforms, and the Legacy SPI is retired — loading, metadata, priming, and clone artifacts are
+actor-owned. Phases 9–13 remain open.
 
 ## Authority order
 
@@ -37,8 +39,8 @@ mechanical retirement is unblocked but not started; Phases 7–13 remain open.
 
 ```text
 MLXTTSEngine (@MainActor product host)
-  → NativeEngineRuntime (load / prewarm / conditioning SPI bridge)
-  → UnsafeSpeechGenerationModel (holds VocelloQwen3Engine + opaque loaded model)
+  → NativeEngineRuntime (load / prewarm / conditioning orchestration)
+  → UnsafeSpeechGenerationModel (pairs VocelloQwen3Engine with immutable post-load facts)
   → GenerationOutputAdapter  [GenerationOutputAdapter.swift]
        reserve → claimAudioConsumer → open → drain lossless channel
        → acknowledgeProductFinalization
@@ -56,7 +58,7 @@ iOS: UI → Core in-process → same owned runtime.
 | --- | --- |
 | 0 Characterization | Closed — clean controls bound |
 | 1 Correctness | Shipping |
-| 2 Actor + plans | Actor shipping; plans shadow-only; SPI load bridge remains |
+| 2 Actor + plans | Actor shipping and owns every product-reachable lifecycle operation (loading actor-owned since 14b); plans shadow-only |
 | 3 Classified sessions | Shipping |
 | 4 Product adapter + mode cutover | Overall promotion passed (`overallPromotion: passed`) |
 | 5 Sampling v2 | Promotion-packaged evidence live |
@@ -64,19 +66,18 @@ iOS: UI → Core in-process → same owned runtime.
 | 7 UI-context gap | Implemented 2026-07-23: screen-recording observer effect fixed, then Liquid Glass compositor cost gated during generation (`generationPerformanceGate`); UI context delivers engine capability (matrix 1.43–1.94; XPC ≈3%) |
 | 8 Shared component storage | Closed 2026-07-23: live six-artifact Mac + three-artifact iPhone validation with exact shared-component reuse (wire = expected − 682,295,738 on reused installs) |
 | 9–13 | Foundations / not started / partial as in the runtime contract |
-| 14 Mechanical retirement | 14a complete 2026-07-23: combined characterization session, product/priming stream APIs, and the adapter filename retired; `VocelloQwen3LegacyCompatibility` SPI remains for 14b (actor-owned loading) |
+| 14 Mechanical retirement | Complete 2026-07-23 (14a + 14b): combined characterization session, stream APIs, adapter filename, and the `VocelloQwen3LegacyCompatibility` SPI all retired; loading/metadata/priming/clone artifacts are actor-owned |
 
 ## In-progress dual surfaces (do not misread as dual backends)
 
 - Package `VocelloQwen3ProductOutputAdapter` vs Core `GenerationOutputAdapter` (only Core ships)
-- Legacy SPI for load/prewarm/Clone adoption
 - Shadow plan mapper — comparison only
 - Nested v9-in-v8 plus complete `*.streaming-telemetry-v9.json` sidecars when ready
 
 ## Risks
 
 1. JSONL envelope remains v8; do not treat nested transitions alone as history v9 rows.
-2. Actor is generation mutation authority, not sole MLX mutator until the Legacy SPI retires.
+2. The retired SPI must not return; vendor/security contracts fail closed on any `@_spi` runtime boundary.
 3. Stale prose that still says “promotion pending” is wrong — trust the machine contract.
 4. Phase 7+ work must not regress secret-sauce first-preview latency or trim/unload safety.
 
@@ -90,7 +91,7 @@ iOS: UI → Core in-process → same owned runtime.
    (`macos-xcui-benchmark-20260720-172920-591696d1`,
    `ios-xcui-benchmark-20260720-174441-16fc128c`).
 4. ~~Phase 5 promotion packaging + Phase 6 v9 sidecar authority~~ closed 2026-07-20.
-5. ~~`overallPromotion: passed`~~ claimed 2026-07-20. Next: Phase 14 mechanical retirement.
+5. ~~`overallPromotion: passed`~~ claimed 2026-07-20. ~~Phase 14 mechanical retirement~~ closed 2026-07-23 (14a + 14b). Next: phases 9–13 by priority.
 
 ## Implementation landed with this report
 

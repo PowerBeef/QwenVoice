@@ -421,7 +421,7 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
                     ].merging(preparedMetadata.qwenRuntimeProfile.diagnosticStringFlags()) { _, rhs in rhs },
                     appSupportDirectoryURL: diagnosticAppSupportBox.url
                 )
-                let base = try await MLXModelLoadCoordinator.loadPreparedCompatibilityModel(
+                let base = try await MLXModelLoadCoordinator.loadPreparedActorModel(
                         descriptor.vocelloQwen3PreparedBundle(
                             directory: preparedMetadata.preparedDirectory,
                             modelType: preparedMetadata.modelType,
@@ -432,7 +432,7 @@ public final class MLXTTSEngine: TTSEngineRuntimeControlling, NativeMemoryReport
                             trustPreparedCheckpoint: preparedMetadata.trustedPreparedCheckpoint,
                             preparedDirectoryAlreadyValidated: true
                         ),
-                        compatibilityDiagnosticSink: { action, details in
+                        verboseDiagnosticSink: { action, details in
                             await Self.recordDiagnosticEvent(
                                 action,
                                 details: details,
