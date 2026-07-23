@@ -19,6 +19,12 @@ from schema-v2 memory trends.
 |---|---|---|---|---|---|---:|---|---|---|---|
 | 2026-07-19 | [`ios-gate-bench-20260719-232101-283a4b1c`](runs/engine-generation/ios-gate-bench-20260719-232101-283a4b1c.json) | focused | exploratory | passedWithWarnings | qualified-with-warnings | 1 | `d07384473fe9` dirty | `excluded` | baseline | ios-gate-bench |
 
+## engine-generation / ios / iphone-17-pro / config `f6a4d1af86a4`
+
+| completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |
+|---|---|---|---|---|---|---:|---|---|---|---|
+| 2026-07-23 | [`ios-engine-20260723-121520-45ee4ab3`](runs/engine-generation/ios-engine-20260723-121520-45ee4ab3.json) | focused | focused | passedWithWarnings | qualified-with-warnings | 1 | `bb4dae82d4be` | `f6a4d1af86a4` | baseline | ios-glass-check3 |
+
 ## engine-generation / ios / iphone-17-pro / config `fd4b7152c9e4`
 
 | completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |

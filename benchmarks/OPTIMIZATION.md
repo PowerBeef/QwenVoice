@@ -703,6 +703,16 @@ one-cell lanes (custom/long warm, identical `-O` engine code, same session):
   diagnostic ceiling), and a full dirty-tree matrix at custom warm 1.67/1.80/1.84, design
   1.79/1.88/1.94, clone 1.43/1.70/1.86 with clean QC and the deterministic suite green. The
   UI context now delivers engine capability on the 8 GB floor tier.
+- **iOS checked: no gate needed.** A headless on-device capability take
+  (`ios-engine-20260723-121520-45ee4ab3`, cold, default text) measured RTF 1.585, while the
+  recording-free UI canonical already runs 1.81 cold / 1.86–2.03 warm with full glass visible —
+  the iPhone shows no UI-context penalty to close. Consistent with display architecture: the
+  phone's adaptive-refresh panel idles for static content, so visible glass composites at
+  ~nothing while the engine runs; the Mac's fixed-refresh external display composited every
+  frame. The `generationPerformanceGate` environment therefore remains macOS-only by evidence,
+  not by omission. (Operator note: the headless bench spec's third segment is the literal text —
+  `custom:speed:` uses the default sentence; `custom:speed:long` speaks the word "long" and
+  fails with zero emitted frames.)
 
 ## Status
 
