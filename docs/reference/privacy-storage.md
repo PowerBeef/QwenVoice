@@ -180,7 +180,7 @@ persistent cache. Xcode GUI DerivedData outside the repository is report-only; c
 only through `--external-xcode --yes` after exact project matching.
 
 `project.yml` remains the source of truth for the CLI and app-host-free iOS logic-test targets.
-XcodeGen 2.45.4 cannot directly emit their shared schemes, so `scripts/regenerate_project.sh`
+XcodeGen cannot directly emit their shared schemes (verified unchanged through 2.46.0), so `scripts/regenerate_project.sh`
 follows XcodeGen with two narrow renderers: `scripts/generate_cli_scheme.py` and
 `scripts/generate_ios_logic_scheme.py`. They substitute generated target identifiers into the
 checked-in `VocelloCLI` and `VocelloiOSLogic` templates; project-input validation rejects a missing

@@ -195,7 +195,8 @@ scripts/clean_build_caches.sh --compact-profile-failure <run-id> --dry-run
   `QwenVoice.xcodeproj/project.pbxproj` directly. There are two narrow post-XcodeGen scheme
   renderers: `scripts/generate_cli_scheme.py` for the tool product and
   `scripts/generate_ios_logic_scheme.py` for the app-host-free iOS policy bundle. Both bind
-  checked-in templates to generated target IDs because XcodeGen 2.45.4 cannot render those schemes.
+  checked-in templates to generated target IDs because XcodeGen cannot render those schemes
+  (verified unchanged through 2.46.0).
 - **Developer ID signing + notarization.** macOS release uses Developer ID Application cert,
   hardened runtime, and `notarytool` stapling. CI uses App Store Connect API key auth.
 - **Gate quick mode is local-only.** `QVOICE_GATES=quick` may skip the script self-test suite
@@ -268,6 +269,10 @@ scripts/clean_build_caches.sh --compact-profile-failure <run-id> --dry-run
   development/QA dependency and is never shipped in Vocello. Keep publication-only tools out of
   compile/test jobs.
   Dependabot may propose updates, but the manifest and adjacent version comment change together.
+  Runner-image drift is not trusted for the drifting tools: xcodegen and ripgrep install from the
+  SHA-pinned release artifacts recorded in `config/toolchain.json` `artifactPins` via
+  `scripts/install_pinned_tools.sh` (in both native CI jobs and Swift CodeQL); bump the version,
+  URL, and digest together with the local `.tool-versions` pin.
 - **Catalog activation is fail closed.** All six Speed/Quality identities are exact and the generated
   production catalog is complete. macOS/CLI use the bundled `downloadFiles` route; never restore
   live repository enumeration, infer a digest, or accept a partial catalog. Deterministic

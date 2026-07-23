@@ -437,6 +437,19 @@ work landed via auto-merge. CI gained a change-routing job, a SwiftPM cache for 
 job, and a `CI required` aggregator that is now the sole branch-protection context. The commit
 hook blocked its first real defect (a stale project-health summary) within minutes of activation.
 
+2026-07-22 — Backend review, characterization gate, and roadmap amendment: the five external
+research documents were counter-verified (~90 claims; zero outright errors, staleness only) and
+imported under [`docs/research/`](research/) with inline editor's notes. The R1 characterization
+gate then localized the post-cutover canonical macOS RTF decline to the app/XPC delivery topology
+(engine flat at 1.02–1.17 in interleaved CLI A/B across the cutover; 0.69–0.81 in the UI lane;
+submission-starved per the Metal System Trace, zero lossless-channel producer suspensions). The
+maintainer-endorsed `amendment20260722` rescoped phase 7 to the delivery-pipeline pacing fix,
+required a UI-context cell in future promotion matrices, and pulled phase 14 retirement forward.
+The same day, GitHub's mixed macOS runner-image roll flapped the exact-version toolchain gate;
+xcodegen (2.46.0) and ripgrep (15.2.0) now install from SHA-pinned release artifacts via
+`scripts/install_pinned_tools.sh` in every native CI job. The §H P0 GPU-busy re-capture (a clean
+CLI-context Metal trace) remains open follow-up work alongside the phase 7 implementation.
+
 ## Open release work
 
 - macOS 2.1.0 is released.
@@ -473,13 +486,13 @@ hook blocked its first real defect (a stale project-health summary) within minut
   written-output/dropout warning and soft memory trims. It is tracked as `exploratory` because the
   owned-runtime worktree was dirty; it proves the exact recorded fingerprint but is excluded from
   clean comparison trends.
-- Clean canonical macOS and iPhone schema-v2 UI baselines exist for their recorded pre-convergence
-  source identities. The request-local sampling/memory and component-delivery changes make those
-  records historical controls rather than current promotion evidence. Focused post-cutover macOS
-  parity now passes for Custom, Design, and Clone on exact dirty worktree fingerprints on both
-  platforms. Clean repeated controls, the applicable full canonical matrices, and exact legacy
-  characterization remain pending. Explicit quality runs remain independent from ordinary
-  publishing and release packaging.
+- Clean canonical post-cutover UI matrices landed 2026-07-20 on both platforms
+  (`macos-xcui-benchmark-20260720-172920-591696d1`, `ios-xcui-benchmark-20260720-174441-16fc128c`)
+  and closed overall promotion; the pre-convergence baselines are historical controls. The
+  2026-07-22 characterization gate showed the macOS UI matrix is sub-realtime for a
+  delivery-topology reason the engine A/B exonerates — the phase 7 pacing fix owns recovery, and
+  its acceptance will need fresh canonical matrices plus the new UI-context promotion cell.
+  Explicit quality runs remain independent from ordinary publishing and release packaging.
 - Physical-iPhone telemetry-v8/evidence-v2 acceptance is complete for the canonical UI matrix,
   retained-memory qualification, and an exact-PID memory profile. The tracked records remain bound
   to their exact source, toolchain, model, and hardware identities; new product changes require

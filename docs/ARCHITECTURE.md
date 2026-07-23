@@ -127,8 +127,8 @@ platform-specific and is created only when explicitly requested.
 **Six shared schemes**: the four XcodeGen schemes, `QwenVoice` (macOS app + deterministic unit/integration tests), `VocelloiOS`
 (iOS app), `VocelloMacUI` (explicit macOS XCUITest), and `VocelloiOSUI` (explicit physical-device
 iOS XCUITest), plus the separately rendered `VocelloCLI` and `VocelloiOSLogic` (standalone iOS
-policy XCTest) schemes. XcodeGen 2.45.4 cannot directly render those tool and app-host-free test
-schemes, so checked-in templates bind to their generated target IDs. The UI schemes are isolated from ordinary test actions; ordinary CI only
+policy XCTest) schemes. XcodeGen cannot directly render those tool and app-host-free test
+schemes (verified unchanged through 2.46.0), so checked-in templates bind to their generated target IDs. The UI schemes are isolated from ordinary test actions; ordinary CI only
 compiles `VocelloiOSLogic` for the generic device SDK and never executes it. A single shippable config,
 **`Release`**, is the only config — there is no `Debug` config or generic `DEBUG` symbol.
 

@@ -227,6 +227,7 @@ gates. Listening remains optional independent annotation →
 | `Sources/iOS/IOSDeviceDiagnosticsRunner.swift` | Headless, non-UI physical-device diagnostics used by `ios_device.sh` |
 | `Sources/SharedSupport/` | Shared player, persistence, transcriber |
 | `scripts/*.sh` | Build, test, release |
+| `docs/research/` | Imported point-in-time research corpus (counter-verified 2026-07-22; editor's notes mark superseded figures; contract JSON stays status authority) |
 | `config/language-bench-*.json` | Language hint bench corpus + matrix |
 | `Tests/UIAutomationSupport/` | Shared XCUITest waits, fixtures, queries, and evidence helpers |
 | `Tests/VocelloMacUITests/` | macOS smoke and benchmark UI tests |
