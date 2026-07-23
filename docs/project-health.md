@@ -13,7 +13,7 @@
 
 | Platform | Latest canonical run | Captured |
 | --- | --- | --- |
-| macos | `macos-xcui-benchmark-20260723-054315-9b6f267b` | 2026-07-23T05:55:29Z |
+| macos | `macos-xcui-benchmark-20260723-083313-d02005ae` | 2026-07-23T08:44:14Z |
 | ios | `ios-xcui-benchmark-20260723-061044-f986bf4d` | 2026-07-23T06:29:03Z |
 
 ## Critical-domain coverage and freshness

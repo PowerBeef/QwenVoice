@@ -294,6 +294,7 @@ from schema-v2 memory trends.
 |---|---|---|---|---|---|---:|---|---|---|---|
 | 2026-07-23 | [`macos-xcui-benchmark-20260723-054315-9b6f267b`](runs/ui-generation/macos-xcui-benchmark-20260723-054315-9b6f267b.json) | canonical | canonical | passedWithWarnings | qualified-with-warnings | 29 | `3a4378534195` | `3bd86418d3bc` | baseline | macos-xcui-benchmark-20260723-054315-9b6f267b |
 | 2026-07-23 | [`macos-xcui-benchmark-20260723-081659-e4a216aa`](runs/ui-generation/macos-xcui-benchmark-20260723-081659-e4a216aa.json) | canonical | exploratory | passedWithWarnings | qualified-with-warnings | 29 | `f7ee0d006e3a` dirty | `excluded` | baseline | macos-xcui-benchmark-20260723-081659-e4a216aa |
+| 2026-07-23 | [`macos-xcui-benchmark-20260723-083313-d02005ae`](runs/ui-generation/macos-xcui-benchmark-20260723-083313-d02005ae.json) | canonical | canonical | passedWithWarnings | qualified-with-warnings | 29 | `b6f11211da85` | `3bd86418d3bc` | vs macos-xcui-benchmark-20260723-054315-9b6f267b: RTF +34.3%, RAM -2.1% | macos-xcui-benchmark-20260723-083313-d02005ae |
 
 ## ui-generation / macos / mac-mini-m2-8gb / config `4a5bd9c374be`
 
