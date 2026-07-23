@@ -195,3 +195,27 @@ that passed. Three changes, recorded machine-readably in `amendment20260722` of
    (`characterization.promotedMatrixRequiresUIContextCell`).
 3. **Phase 14 mechanical retirement is pulled forward** to immediately after the phase 7–9
    block, before phases 10–13, so quality/long-form phases build against one topology.
+
+## Amendment 2026-07-23 — observer-effect correction (supersedes the 07-22 diagnosis)
+
+The phase 7 characterization program (`benchmarks/OPTIMIZATION.md` §J) found the dominant cause
+of the canonical macOS UI decline outside the product entirely: XCUITest's default automatic
+screen recording (`testmanagerd` → `VTEncoderXPCService`/`replayd`) video-encoded the display
+through every UI take. With `preferredScreenCaptureFormat: screenshots` on both UI schemes
+(`project.yml`), the one-cell custom/long lane moved from warm RTF 0.70–0.78 to **1.196** with
+clean QC. Engine code remains exonerated (flat interleaved CLI A/B across the cutover), and true
+Mac capability at the product's `-O` optimization measured **1.81** in an interactive CLI process
+(all historical CLI benches were `-Onone` dev builds). Machine-readable record:
+`amendment20260723`. Consequences:
+
+1. **Phase 7's objective becomes the honest UI/XPC-context gap** (≈1.2 → ≈1.8) with recording
+   disabled, instrumented by the new per-generation `processTaskRole`/`processMainThreadQOS`/
+   `processNice` telemetry notes.
+2. **Pre-2026-07-23 UI-generation records carry the recording overhead** in every cell and are
+   not baselines for post-change comparisons (their comparison keys already differ).
+3. **Three diagnostic engine-loop experiments were reverted** (generation-task priority pin,
+   per-token `publishProgress` coalescing, dedicated `userInteractive` actor executor) after two
+   intermittent Fast-QC hard failures appeared with them in-tree; 12/12 takes passed QC after
+   the revert. Re-introducing any of them requires a fixed-seed QC soak.
+4. The UI-context promotion-cell requirement and the phase 14 pull-forward from the 07-22
+   amendment stand unchanged.

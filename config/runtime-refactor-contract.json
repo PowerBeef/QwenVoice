@@ -185,5 +185,17 @@
       "Promotion characterization matrices must include at least one UI/app-XPC-context cell (promotedMatrixRequiresUIContextCell).",
       "Phase 14 mechanical retirement is pulled forward: scheduled immediately after the phase 7-9 block, before phases 10-13, so quality/long-form work builds on one topology."
     ]
+  },
+  "amendment20260723": {
+    "supersedes": "amendment20260722-diagnosis",
+    "authority": "phase 7 characterization program, 2026-07-23",
+    "diagnosis": "The canonical macOS UI RTF decline was dominated by a benchmark observer effect: XCUITest default automatic screen recording (testmanagerd-spawned VTEncoderXPCService plus replayd) video-encoded the display through every UI take. With preferredScreenCaptureFormat=screenshots on both UI schemes the one-cell custom/long lane moved from warm RTF 0.70-0.78 to 1.196 with clean QC. Engine code remained exonerated (flat interleaved CLI A/B across the cutover). True Mac capability at product -O optimization measured 1.81 in an interactive CLI process; the honest remaining UI/XPC-context gap is approximately 1.2 versus 1.8.",
+    "phase7Objective": "Close the honest UI/XPC-context gap (~1.2 -> ~1.8): quantify and reduce the service-topology cost with recording disabled, using the per-generation processTaskRole/QoS telemetry now recorded in every row. Pre-2026-07-23 UI-generation records carry the recording overhead and are not baselines for post-change comparisons.",
+    "evidence": [
+      "benchmarks/OPTIMIZATION.md#J",
+      "macos-xcui-benchmark-20260723-043320-eb94bb9b",
+      "macos-xcui-benchmark-20260723-042644-e48f8f54"
+    ],
+    "experimentReverts": "Three diagnostic engine-loop changes (generation task priority pin, per-token publishProgress coalescing, dedicated userInteractive actor executor) were reverted after two intermittent Fast-QC hard failures appeared with them in-tree; 12/12 takes passed QC after the revert. Any future re-introduction requires its own fixed-seed QC soak."
   }
 }
