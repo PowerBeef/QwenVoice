@@ -31,6 +31,39 @@ final class VocelloMacSmokeUITests: VocelloMacUITestCase {
         ["QWENVOICE_FAKE_MIC_WAV": Self.virtualClipURL.path]
     }
 
+    /// Ordinary line-separated batch on the unified sequential streaming
+    /// path: two short lines generate as streamed takes with mandatory engine
+    /// QC and land in History individually.
+    func test07_LineBatchJourney() {
+        beginSession()
+        defer { endSession() }
+
+        let nonce = "smoke-batch-\(Self.pronounceableNonce())"
+        prepare(mode: .custom)
+
+        XCTAssertTrue(VocelloUIPrimaryAction.perform(on: button("textInput_batchButton"), timeout: 30))
+        let editor = element("batch_textEditor")
+        XCTAssertTrue(VocelloUIWait.exists(editor, timeout: 30))
+        let lines = "First batch line about the morning tide \(nonce).\nSecond batch line about the evening harbor \(nonce)."
+        XCTAssertTrue(VocelloUITextEntry.replace(in: editor, with: lines, timeout: 20))
+
+        let generateAll = button("batch_generateAllButton")
+        XCTAssertTrue(VocelloUIWait.exists(generateAll, timeout: 20))
+        XCTAssertTrue(VocelloUIPrimaryAction.perform(on: generateAll, timeout: 20))
+
+        let done = button("batch_doneButton")
+        XCTAssertTrue(
+            VocelloUIWait.condition("line batch to settle", timeout: 600) {
+                done.exists && done.isEnabled
+            }
+        )
+        VocelloUIScreenshot.attach(app, named: "mac-smoke-linebatch-complete")
+        XCTAssertTrue(VocelloUIPrimaryAction.perform(on: done, timeout: 20))
+
+        // Both takes must be visible in History exactly once each.
+        assertHistoryRows(matching: nonce, expected: 2)
+    }
+
     /// Emits the project wall time (Generate All → settled outcome) for the
     /// lane to combine with the newest v4 manifest — the Xcode 26 test runner
     /// cannot read another app's Application Support (see `virtualClipURL`),

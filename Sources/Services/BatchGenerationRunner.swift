@@ -264,12 +264,12 @@ struct BatchGenerationRequest {
         return record
     }
 
-    /// Long-form v4 segments stream for flat memory; live preview publication
-    /// stays enabled so the player narrates segments as they generate (playback
-    /// itself is gated by the user's auto-play preference). Ordinary line
-    /// batches keep the quality-first path. `suppressStreamingPreview` remains
-    /// available for contexts that need silent long-form generation.
-    private var streamsSegments: Bool { segmentationMode == .longForm }
+    /// Every batch item — line-separated and long-form — streams for flat
+    /// memory, mandatory engine Fast QC, and standard streaming telemetry;
+    /// live preview publication stays enabled (playback gated by the user's
+    /// auto-play preference). `suppressStreamingPreview` remains available for
+    /// contexts that need silent generation.
+    private var streamsSegments: Bool { true }
 
     private func segmentSeed(batchIndex: Int?, seedOverride: UInt64?) -> UInt64 {
         if let seedOverride { return seedOverride }
@@ -287,11 +287,13 @@ struct BatchGenerationRequest {
         batchTotal rawBatchTotal: Int?,
         seedOverride: UInt64? = nil
     ) -> QwenVoiceNative.GenerationRequest {
-        // Long-form v4 segments are ordinary sequential streaming takes; the
-        // engine's support decision reserves batch markers for the native
-        // batch API, and segment order/identity live in the plan + manifest.
-        let batchIndex = streamsSegments ? nil : rawBatchIndex
-        let batchTotal = streamsSegments ? nil : rawBatchTotal
+        // Every item is an ordinary sequential streaming take; the engine's
+        // support decision reserves batch markers for the retired native batch
+        // route, and item order lives in the visible list (and, for long-form,
+        // the plan + manifest).
+        let batchIndex: Int? = nil
+        let batchTotal: Int? = nil
+        _ = rawBatchTotal
         switch mode {
         case .custom:
             return QwenVoiceNative.GenerationRequest(
@@ -348,19 +350,6 @@ struct BatchGenerationRequest {
         }
     }
 
-    func makeBatchGenerationRequests(
-        makeOutputPath: (String, String) -> String
-    ) -> [QwenVoiceNative.GenerationRequest] {
-        lines.enumerated().map { index, line in
-            let outputText = outputText(for: line, index: index)
-            return makeGenerationRequest(
-                for: line,
-                outputPath: makeOutputPath(model.outputSubfolder, outputText),
-                batchIndex: index + 1,
-                batchTotal: lines.count
-            )
-        }
-    }
 
     func outputText(for line: String, index: Int) -> String {
         switch segmentationMode {
@@ -778,102 +767,6 @@ final class BatchGenerationRunner {
         }
 
         publishItems()
-
-        if total > 1, request.segmentationMode != .longForm {
-            if await cancellationState.wasRequested() {
-                markItemsCancelled(startingAt: 0)
-                publishItems()
-                engineStore.clearGenerationActivity()
-                return .cancelled(items: items, restartFailedMessage: nil)
-            }
-
-            items[0].status = .running
-            publishItems()
-            publishProgress(activeItemIndex: 0, message: "Preparing batch...")
-
-            let batchRequests = request.makeBatchGenerationRequests(makeOutputPath: makeOutputPath)
-
-            do {
-                let results = try await engineStore.generateBatch(
-                    batchRequests,
-                    progressHandler: { fraction, message in
-                        publishProgress(
-                            activeItemIndex: completedCount < total ? completedCount : nil,
-                            message: message,
-                            backendFraction: fraction
-                        )
-                    }
-                )
-
-                guard results.count == request.lines.count else {
-                    if let firstRunningIndex = items.firstIndex(where: { $0.status == .running || $0.status == .pending }) {
-                        items[firstRunningIndex].status = .failed(
-                            message: "Batch generation returned \(results.count) results for \(request.lines.count) requests."
-                        )
-                    }
-                    publishItems()
-                    return .failed(
-                        items: items,
-                        message: "Batch generation returned \(results.count) results for \(request.lines.count) requests."
-                    )
-                }
-
-                for (index, pair) in zip(request.lines, results).enumerated() {
-                    if await cancellationState.wasRequested() {
-                        markItemsCancelled(startingAt: index)
-                        publishItems()
-                        engineStore.clearGenerationActivity()
-                        return .cancelled(items: items, restartFailedMessage: nil)
-                    }
-
-                    items[index].status = .running
-                    publishItems()
-                    publishProgress(activeItemIndex: index, message: "Saving item \(index + 1)/\(total)...")
-
-                    let (line, result) = pair
-                    let generation = request.makeHistoryRecord(for: line, result: result)
-
-                    do {
-                        let savedGeneration = try await store.saveGeneration(generation)
-                        // Use the payload-carrying announce so HistoryView
-                        // (which only subscribes to `generationAppended`)
-                        // refreshes live during batch runs. The helper
-                        // still fires the legacy `generationSaved` event
-                        // for any subscriber that hasn't migrated.
-                        generationEvents.announceGenerationAppended(savedGeneration)
-                        completedCount += 1
-                        items[index].status = .saved(audioPath: result.audioPath)
-                        if index + 1 < items.count {
-                            items[index + 1].status = .pending
-                        }
-                        publishItems()
-                    } catch {
-                        items[index].status = .failed(message: error.localizedDescription)
-                        publishItems()
-                        return .failed(items: items, message: error.localizedDescription)
-                    }
-                }
-
-                publishProgress(activeItemIndex: nil, message: "Done")
-                return .completed(items: items)
-            } catch {
-                let cancellationRequested = await cancellationState.wasRequested()
-                if error is CancellationError || cancellationRequested {
-                    if let firstUnfinished = items.firstIndex(where: { !$0.isSaved }) {
-                        markItemsCancelled(startingAt: firstUnfinished)
-                    }
-                    publishItems()
-                    engineStore.clearGenerationActivity()
-                    return .cancelled(items: items, restartFailedMessage: nil)
-                }
-
-                if let activeIndex = items.firstIndex(where: { $0.status == .running || $0.status == .pending }) {
-                    items[activeIndex].status = .failed(message: error.localizedDescription)
-                }
-                publishItems()
-                return .failed(items: items, message: error.localizedDescription)
-            }
-        }
 
         var longFormQualityReports: [AudioQualityGate.Report?] = []
         for (index, line) in request.lines.enumerated() {

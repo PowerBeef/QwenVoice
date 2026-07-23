@@ -362,3 +362,19 @@ staged WAV (newest only, diagnostics-gated). The three phase-7-era reverted
 engine-loop experiments are reattributed as likely innocent of the historical
 intermittent QC failures (which remain unattributed but now self-document on
 recurrence); they stay reverted on cost/benefit grounds.
+
+## Amendment 2026-07-23g — line batch unified onto sequential streaming
+
+Ordinary line-separated batch no longer routes through the native XPC
+`generateBatch` call: every batch item runs the same sequential streaming path
+long-form uses — flat memory, mandatory engine Fast QC per take, standard
+streaming telemetry, live preview (auto-play-gated), and the sustained
+performance gate across the run. This closes the blueprint's P1 finding
+("long-form batch contradicts the streaming memory pillar") for both batch
+flavors. Batch markers (`batchIndex`/`batchTotal`) are no longer sent on
+singular generates; item order lives in the visible list. The XPC batch API
+remains wired but has no app-side caller — a retirement candidate for a later
+cleanup. A new smoke journey (`test07_LineBatchJourney`) covers the unified
+path; fixing its editor access also re-homed the `batch_textEditor`
+accessibility identifier from a non-hittable wrapper onto the actual text
+view (same stable value).

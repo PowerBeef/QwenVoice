@@ -129,9 +129,9 @@ struct BatchGenerationSheet: View {
             text: $batchText,
             placeholder: "Enter one line per generation...",
             font: .systemFont(ofSize: NSFont.systemFontSize),
-            isFocused: .constant(false)
+            isFocused: .constant(false),
+            accessibilityIdentifier: "batch_textEditor"
         )
-        .accessibilityIdentifier("batch_textEditor")
         .padding(8)
         .frame(minHeight: 220)
         #if QW_UI_LIQUID

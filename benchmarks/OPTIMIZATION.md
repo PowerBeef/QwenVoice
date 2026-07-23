@@ -68,6 +68,12 @@ QC findings:
   sequential pipeline (planning, per-segment QC, assembly, manifest) adds no
   meaningful throughput cost. Registry publication would need the benchmark
   pipeline's schema review and is deliberately not included.
+- **Line batch unified onto sequential streaming (2026-07-23).** Ordinary
+  multi-line batch left the legacy quality-first full-result XPC batch route:
+  every item now streams like a single take (flat memory, mandatory engine
+  Fast QC, standard streaming telemetry, live preview), covered by the new
+  `test07_LineBatchJourney` smoke journey. Blueprint P1 is closed for both
+  batch flavors.
 - **The generation performance gate now holds across whole long-form runs.**
   It previously flickered per segment (off during inter-segment QC/saves and
   the CPU-heavy assembly); a sustained performance-activity refcount on the
