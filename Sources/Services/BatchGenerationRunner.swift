@@ -118,11 +118,18 @@ struct BatchGenerationItemState: Identifiable, Equatable {
 @MainActor
 protocol GenerationPersisting {
     func saveGeneration(_ generation: Generation) async throws -> Generation
+    /// Replaces the project's joined-output row (if any) with `generation`,
+    /// so regeneration and resume keep exactly one joined record per project.
+    func replaceLongFormJoinedGeneration(_ generation: Generation) async throws -> Generation
 }
 
 extension DatabaseService: GenerationPersisting {
     func saveGeneration(_ generation: Generation) async throws -> Generation {
         try await saveGenerationAsync(generation)
+    }
+
+    func replaceLongFormJoinedGeneration(_ generation: Generation) async throws -> Generation {
+        try await replaceLongFormJoinedGenerationAsync(generation)
     }
 }
 
@@ -192,7 +199,11 @@ struct BatchGenerationRequest {
         return nil
     }
 
-    func makeHistoryRecord(for line: String, result: QwenVoiceNative.GenerationResult) -> Generation {
+    func makeHistoryRecord(
+        for line: String,
+        result: QwenVoiceNative.GenerationResult,
+        longFormRole: String? = nil
+    ) -> Generation {
         let voiceName: String?
         switch mode {
         case .custom:
@@ -209,6 +220,7 @@ struct BatchGenerationRequest {
             }
         }
 
+        let projectID = segmentationMode == .longForm ? longFormPlan?.evidence.planDigest : nil
         return Generation(
             text: line,
             mode: model.mode.rawValue,
@@ -218,15 +230,39 @@ struct BatchGenerationRequest {
             speed: nil,
             audioPath: result.audioPath,
             duration: result.durationSeconds,
-            createdAt: Date()
+            createdAt: Date(),
+            longFormProjectID: projectID,
+            longFormRole: projectID == nil ? nil : (longFormRole ?? "segment")
         )
+    }
+
+    /// History record for the assembled long-form output. Text is the joined
+    /// spoken script; duration derives from the assembler's exact frame count.
+    func makeJoinedHistoryRecord(
+        assembly: LongFormAssemblyEvidence,
+        outputURL: URL
+    ) -> Generation? {
+        guard segmentationMode == .longForm, let plan = longFormPlan else { return nil }
+        var record = makeHistoryRecord(
+            for: lines.joined(separator: " "),
+            result: QwenVoiceNative.GenerationResult(
+                audioPath: outputURL.path,
+                durationSeconds: Double(assembly.outputFrameCount) / Double(assembly.sampleRate),
+                streamSessionDirectory: nil,
+                usedStreaming: true
+            ),
+            longFormRole: "joined"
+        )
+        record.longFormProjectID = plan.evidence.planDigest
+        return record
     }
 
     /// Long-form v4 segments stream for flat memory with preview publication
     /// suppressed; ordinary line batches keep the quality-first path.
     private var streamsSegments: Bool { segmentationMode == .longForm }
 
-    private func segmentSeed(batchIndex: Int?) -> UInt64 {
+    private func segmentSeed(batchIndex: Int?, seedOverride: UInt64?) -> UInt64 {
+        if let seedOverride { return seedOverride }
         guard let longFormPlan, let batchIndex,
               batchIndex >= 1, batchIndex <= longFormPlan.segments.count else {
             return batchSeed
@@ -238,7 +274,8 @@ struct BatchGenerationRequest {
         for line: String,
         outputPath: String,
         batchIndex: Int?,
-        batchTotal: Int?
+        batchTotal: Int?,
+        seedOverride: UInt64? = nil
     ) -> QwenVoiceNative.GenerationRequest {
         switch mode {
         case .custom:
@@ -256,7 +293,7 @@ struct BatchGenerationRequest {
                         ? (emotion ?? DeliveryProfile.neutralInstruction)
                         : nil
                 ),
-                seed: segmentSeed(batchIndex: batchIndex),
+                seed: segmentSeed(batchIndex: batchIndex, seedOverride: seedOverride),
                 variation: GenerationVariationPreference.requestValue(),
                 suppressStreamingPreview: streamsSegments ? true : nil
             )
@@ -273,7 +310,7 @@ struct BatchGenerationRequest {
                     voiceDescription: voiceDescription ?? "",
                     deliveryStyle: emotion ?? DeliveryProfile.neutralInstruction
                 ),
-                seed: segmentSeed(batchIndex: batchIndex),
+                seed: segmentSeed(batchIndex: batchIndex, seedOverride: seedOverride),
                 variation: GenerationVariationPreference.requestValue(),
                 suppressStreamingPreview: streamsSegments ? true : nil
             )
@@ -292,7 +329,7 @@ struct BatchGenerationRequest {
                         transcript: refText
                     )
                 ),
-                seed: segmentSeed(batchIndex: batchIndex),
+                seed: segmentSeed(batchIndex: batchIndex, seedOverride: seedOverride),
                 variation: GenerationVariationPreference.requestValue(),
                 suppressStreamingPreview: streamsSegments ? true : nil
             )
@@ -399,6 +436,10 @@ final class BatchGenerationCoordinator: ObservableObject {
     private var runTask: Task<Void, Never>?
     private var cancelTask: Task<Void, Never>?
     private var cancelRestartFailedMessage: String?
+    /// Retained for long-form resume and single-segment regeneration; the plan
+    /// inside is the identity authority for both.
+    private var lastLongFormRequest: BatchGenerationRequest?
+    private var longFormReplacements: [LongFormSegmentReplacementEvidence] = []
 
     func startBatch(
         batchText: String,
@@ -445,6 +486,8 @@ final class BatchGenerationCoordinator: ObservableObject {
             return
         }
         request.longFormPlan = longFormPlan
+        lastLongFormRequest = segmentationMode == .longForm ? request : nil
+        longFormReplacements = []
 
         if let validationError = request.validationError(
             isModelAvailable: isModelAvailable(request.model),
@@ -509,6 +552,99 @@ final class BatchGenerationCoordinator: ObservableObject {
             } else if case .cancelled(_, let restartFailedMessage) = outcome {
                 self.errorMessage = restartFailedMessage
             }
+        }
+    }
+
+    /// A finished long-form run with retained plan identity can resume missing
+    /// segments or regenerate an individual one.
+    var canOperateOnLongFormOutcome: Bool {
+        !isProcessing && lastLongFormRequest != nil && outcome != nil
+    }
+
+    /// Re-runs the retained long-form plan, reusing every already-saved take
+    /// and generating only missing or failed segments.
+    func resumeLongForm(engineStore: TTSEngineStore, store: any GenerationPersisting = DatabaseService.shared) {
+        guard canOperateOnLongFormOutcome,
+              let request = lastLongFormRequest,
+              let priorItems = outcome?.items else { return }
+        let replacements = longFormReplacements
+        let runner = BatchGenerationRunner(engineStore: engineStore, store: store)
+        self.runner = runner
+        runTask?.cancel()
+        cancelTask = nil
+        cancelRestartFailedMessage = nil
+        isProcessing = true
+        isCancelling = false
+        errorMessage = nil
+        outcome = nil
+        runTask = Task { [weak self] in
+            guard let self else { return }
+            let outcome = await runner.run(
+                request: request,
+                reusingItems: priorItems,
+                replacements: replacements,
+                makeOutputPath: { makeOutputPath(subfolder: $0, text: $1) },
+                onProgress: { [weak self] snapshot in
+                    self?.progressSnapshot = snapshot
+                },
+                onItemsUpdated: { [weak self] items in
+                    self?.itemStates = items
+                }
+            )
+            self.finish(with: outcome)
+        }
+    }
+
+    /// Regenerates one segment of the finished long-form run as a new accepted
+    /// take, then reassembles and rewrites the manifest.
+    func regenerateLongFormSegment(
+        _ index: Int,
+        engineStore: TTSEngineStore,
+        store: any GenerationPersisting = DatabaseService.shared
+    ) {
+        guard canOperateOnLongFormOutcome,
+              let request = lastLongFormRequest,
+              let priorItems = outcome?.items else { return }
+        let replacements = longFormReplacements
+        let runner = BatchGenerationRunner(engineStore: engineStore, store: store)
+        self.runner = runner
+        runTask?.cancel()
+        cancelTask = nil
+        cancelRestartFailedMessage = nil
+        isProcessing = true
+        isCancelling = false
+        errorMessage = nil
+        outcome = nil
+        runTask = Task { [weak self] in
+            guard let self else { return }
+            let result = await runner.regenerateSegment(
+                request: request,
+                priorItems: priorItems,
+                segmentIndex: index,
+                priorReplacements: replacements,
+                makeOutputPath: { makeOutputPath(subfolder: $0, text: $1) },
+                onProgress: { [weak self] snapshot in
+                    self?.progressSnapshot = snapshot
+                },
+                onItemsUpdated: { [weak self] items in
+                    self?.itemStates = items
+                }
+            )
+            self.longFormReplacements = result.replacements
+            self.finish(with: result.outcome)
+        }
+    }
+
+    private func finish(with outcome: BatchGenerationOutcome) {
+        isProcessing = false
+        isCancelling = false
+        runner = nil
+        runTask = nil
+        self.outcome = outcome
+        if case .failed(_, let message) = outcome {
+            errorMessage = message
+        } else if case .cancelled(_, let restartFailedMessage) = outcome {
+            errorMessage = restartFailedMessage
         }
     }
 
@@ -583,12 +719,21 @@ final class BatchGenerationRunner {
 
     func run(
         request: BatchGenerationRequest,
+        reusingItems: [BatchGenerationItemState]? = nil,
+        replacements: [LongFormSegmentReplacementEvidence] = [],
         makeOutputPath: (String, String) -> String,
         onProgress: @escaping @MainActor (BatchProgressSnapshot) -> Void,
         onItemsUpdated: @escaping @MainActor ([BatchGenerationItemState]) -> Void
     ) async -> BatchGenerationOutcome {
-        var items = request.lines.enumerated().map { index, line in
-            BatchGenerationItemState(index: index, line: line, status: .pending)
+        var items = request.lines.enumerated().map { index, line -> BatchGenerationItemState in
+            // Long-form resume: keep already-saved takes from the prior run of
+            // the same plan; everything else regenerates.
+            if request.segmentationMode == .longForm,
+               let prior = reusingItems, index < prior.count,
+               prior[index].isSaved, prior[index].line == line {
+                return prior[index]
+            }
+            return BatchGenerationItemState(index: index, line: line, status: .pending)
         }
         var completedCount = 0
         let total = request.lines.count
@@ -723,6 +868,33 @@ final class BatchGenerationRunner {
                 return .cancelled(items: items, restartFailedMessage: nil)
             }
 
+            if request.segmentationMode == .longForm,
+               items[index].isSaved,
+               let reusedPath = items[index].audioPath {
+                // Resume: re-verify the retained take instead of regenerating.
+                let qualityReport = await audioQualityEvaluator(URL(fileURLWithPath: reusedPath))
+                longFormQualityReports.append(qualityReport)
+                if !qualityReport.passed {
+                    items[index].status = .failed(message: qualityReport.failureSummary)
+                    await persistLongFormV4Manifest(
+                        request: request,
+                        items: items,
+                        qualityReports: longFormQualityReports,
+                        assembly: nil,
+                        replacements: replacements
+                    )
+                    publishItems()
+                    return .failed(
+                        items: items,
+                        message: "A previously generated long-form segment no longer passes audio quality checks."
+                    )
+                }
+                completedCount += 1
+                publishProgress(activeItemIndex: index, message: "Reusing item \(index + 1)/\(total)...")
+                publishItems()
+                continue
+            }
+
             items[index].status = .running
             publishItems()
             publishProgress(activeItemIndex: index, message: "Generating item \(index + 1)/\(total)...")
@@ -746,7 +918,8 @@ final class BatchGenerationRunner {
                             request: request,
                             items: items,
                             qualityReports: longFormQualityReports,
-                            assembly: nil
+                            assembly: nil,
+                            replacements: replacements
                         )
                         publishItems()
                         return .failed(
@@ -799,7 +972,8 @@ final class BatchGenerationRunner {
                     request: request,
                     items: items,
                     qualityReports: longFormQualityReports,
-                    assembly: joined.evidence
+                    assembly: joined.evidence,
+                    replacements: replacements
                 )
                 if !joinedReport.passed {
                     return .failed(
@@ -807,12 +981,20 @@ final class BatchGenerationRunner {
                         message: "Long-form joined output failed audio quality checks: \(joinedReport.failureSummary)"
                     )
                 }
+                if let joinedRecord = request.makeJoinedHistoryRecord(
+                    assembly: joined.evidence,
+                    outputURL: joined.outputURL
+                ) {
+                    let savedJoined = try await store.replaceLongFormJoinedGeneration(joinedRecord)
+                    generationEvents.announceGenerationAppended(savedJoined)
+                }
             } catch {
                 await persistLongFormV4Manifest(
                     request: request,
                     items: items,
                     qualityReports: longFormQualityReports,
-                    assembly: nil
+                    assembly: nil,
+                    replacements: replacements
                 )
                 return .failed(
                     items: items,
@@ -828,6 +1010,148 @@ final class BatchGenerationRunner {
     func requestCancellation() async throws {
         await cancellationState.request()
         try await engineStore.cancelActiveGeneration()
+    }
+
+    /// Regenerates one long-form segment as a new accepted take (revision >= 2)
+    /// with a fresh seed, re-verifies it, reassembles the joined output, and
+    /// rewrites the manifest with the appended replacement history. A take
+    /// that fails QC leaves the prior accepted take and history untouched.
+    func regenerateSegment(
+        request: BatchGenerationRequest,
+        priorItems: [BatchGenerationItemState],
+        segmentIndex: Int,
+        priorReplacements: [LongFormSegmentReplacementEvidence],
+        makeOutputPath: (String, String) -> String,
+        onProgress: @escaping @MainActor (BatchProgressSnapshot) -> Void,
+        onItemsUpdated: @escaping @MainActor ([BatchGenerationItemState]) -> Void
+    ) async -> (outcome: BatchGenerationOutcome, replacements: [LongFormSegmentReplacementEvidence]) {
+        guard request.segmentationMode == .longForm,
+              let plan = request.longFormPlan,
+              segmentIndex >= 0,
+              segmentIndex < request.lines.count,
+              segmentIndex < plan.segments.count else {
+            return (
+                .failed(items: priorItems, message: "The segment to regenerate is not part of this long-form project."),
+                priorReplacements
+            )
+        }
+
+        var items = priorItems
+        let line = request.lines[segmentIndex]
+        let segmentID = plan.segments[segmentIndex].segmentID
+        let revision = 2 + priorReplacements.count(where: { $0.segmentID == segmentID })
+        let replacementSeed = UInt64.random(in: UInt64.min ... UInt64.max)
+        let total = request.lines.count
+
+        items[segmentIndex].status = .running
+        onItemsUpdated(items)
+        onProgress(
+            BatchProgressSnapshot(
+                completedCount: items.count(where: \.isSaved),
+                totalCount: total,
+                activeItemIndex: segmentIndex,
+                statusMessage: "Regenerating segment \(segmentIndex + 1)/\(total)..."
+            )
+        )
+
+        let outputPath = makeOutputPath(request.model.outputSubfolder, request.outputText(for: line, index: segmentIndex))
+        do {
+            let result = try await engineStore.generate(
+                request.makeGenerationRequest(
+                    for: line,
+                    outputPath: outputPath,
+                    batchIndex: segmentIndex + 1,
+                    batchTotal: total,
+                    seedOverride: replacementSeed
+                )
+            )
+            let qualityReport = await audioQualityEvaluator(URL(fileURLWithPath: result.audioPath))
+            guard qualityReport.passed else {
+                items[segmentIndex] = priorItems[segmentIndex]
+                onItemsUpdated(items)
+                return (
+                    .failed(
+                        items: items,
+                        message: "The regenerated take failed audio quality checks; the previous take is unchanged. \(qualityReport.failureSummary)"
+                    ),
+                    priorReplacements
+                )
+            }
+
+            let generation = request.makeHistoryRecord(for: line, result: result)
+            let savedGeneration = try await store.saveGeneration(generation)
+            generationEvents.announceGenerationAppended(savedGeneration)
+            items[segmentIndex].status = .saved(audioPath: result.audioPath)
+            onItemsUpdated(items)
+
+            var replacements = priorReplacements
+            replacements.append(
+                LongFormSegmentReplacementEvidence(
+                    segmentID: segmentID,
+                    revision: revision,
+                    effectiveSeed: replacementSeed,
+                    generatedAtUTC: ISO8601DateFormatter().string(from: Date()),
+                    qcPassed: true,
+                    qcWarnings: qualityReport.warnings
+                )
+            )
+
+            onProgress(
+                BatchProgressSnapshot(
+                    completedCount: items.count(where: \.isSaved),
+                    totalCount: total,
+                    activeItemIndex: nil,
+                    statusMessage: "Joining segments..."
+                )
+            )
+            let qualityReports: [AudioQualityGate.Report?] = items.indices.map { index in
+                index == segmentIndex ? qualityReport : nil
+            }
+            let joined = try await assembleLongFormOutput(request: request, items: items)
+            let joinedReport = await audioQualityEvaluator(joined.outputURL)
+            await persistLongFormV4Manifest(
+                request: request,
+                items: items,
+                qualityReports: qualityReports,
+                assembly: joined.evidence,
+                replacements: replacements
+            )
+            guard joinedReport.passed else {
+                return (
+                    .failed(
+                        items: items,
+                        message: "Long-form joined output failed audio quality checks after regeneration: \(joinedReport.failureSummary)"
+                    ),
+                    replacements
+                )
+            }
+            if let joinedRecord = request.makeJoinedHistoryRecord(
+                assembly: joined.evidence,
+                outputURL: joined.outputURL
+            ) {
+                let savedJoined = try await store.replaceLongFormJoinedGeneration(joinedRecord)
+                generationEvents.announceGenerationAppended(savedJoined)
+            }
+            onProgress(
+                BatchProgressSnapshot(
+                    completedCount: items.count(where: \.isSaved),
+                    totalCount: total,
+                    activeItemIndex: nil,
+                    statusMessage: "Done"
+                )
+            )
+            return (.completed(items: items), replacements)
+        } catch {
+            items[segmentIndex] = priorItems[segmentIndex]
+            onItemsUpdated(items)
+            if error is CancellationError {
+                return (.cancelled(items: items, restartFailedMessage: nil), priorReplacements)
+            }
+            return (
+                .failed(items: items, message: "Segment regeneration failed: \(error.localizedDescription)"),
+                priorReplacements
+            )
+        }
     }
 
     private func generateResult(
@@ -884,9 +1208,10 @@ final class BatchGenerationRunner {
         guard let firstPath = items.compactMap(\.audioPath).first else {
             throw LongFormRunError.missingSegmentAudio(index: 0)
         }
+        let digestPrefix = String(plan.evidence.planDigest.prefix(8))
         let outputURL = URL(fileURLWithPath: firstPath)
             .deletingLastPathComponent()
-            .appendingPathComponent("long_form_joined.wav", isDirectory: false)
+            .appendingPathComponent("long_form_joined_\(digestPrefix).wav", isDirectory: false)
         let evidence = try await BoundedLongFormAssembler.assemble(
             segments: sources,
             outputURL: outputURL
@@ -898,7 +1223,8 @@ final class BatchGenerationRunner {
         request: BatchGenerationRequest,
         items: [BatchGenerationItemState],
         qualityReports: [AudioQualityGate.Report?],
-        assembly: LongFormAssemblyEvidence?
+        assembly: LongFormAssemblyEvidence?,
+        replacements: [LongFormSegmentReplacementEvidence] = []
     ) async {
         guard let plan = request.longFormPlan else { return }
         var segmentEvidence: [LongFormSegmentExecutionEvidence] = []
@@ -928,11 +1254,16 @@ final class BatchGenerationRunner {
                 streamingExecution: true,
                 segments: segmentEvidence
             ),
-            assembly: assembly
+            assembly: assembly,
+            replacements: replacements
         )
         guard let directory = items.compactMap(\.audioPath).first
             .map({ URL(fileURLWithPath: $0).deletingLastPathComponent() }) else { return }
-        let manifestURL = directory.appendingPathComponent("long_form_manifest.json", isDirectory: false)
+        let digestPrefix = String(plan.evidence.planDigest.prefix(8))
+        let manifestURL = directory.appendingPathComponent(
+            "long_form_manifest_\(digestPrefix).json",
+            isDirectory: false
+        )
         guard let data = try? manifest.canonicalJSONData() else { return }
         try? data.write(to: manifestURL, options: .atomic)
     }

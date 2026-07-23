@@ -246,6 +246,63 @@ final class LongFormPlanningTests: XCTestCase {
         )
     }
 
+    func testSchemaV4ReplacementHistoryContractFailsClosed() throws {
+        let plan = try makePlan("First sentence. Second sentence.", tokenLimit: 8)
+        let firstID = try XCTUnwrap(plan.evidence.segments.first?.segmentID)
+        let valid = LongFormManifestV4(
+            plan: plan.evidence,
+            replacements: [
+                LongFormSegmentReplacementEvidence(
+                    segmentID: firstID,
+                    revision: 2,
+                    effectiveSeed: 7,
+                    generatedAtUTC: "2026-07-23T00:00:00Z",
+                    qcPassed: true
+                ),
+                LongFormSegmentReplacementEvidence(
+                    segmentID: firstID,
+                    revision: 3,
+                    effectiveSeed: 8,
+                    generatedAtUTC: "2026-07-23T00:01:00Z",
+                    qcPassed: true
+                ),
+            ]
+        )
+        XCTAssertNoThrow(try valid.validated())
+        XCTAssertEqual(
+            try LongFormManifestDocument.decode(valid.canonicalJSONData()),
+            .version4(valid)
+        )
+
+        let skippedRevision = LongFormManifestV4(
+            plan: plan.evidence,
+            replacements: [
+                LongFormSegmentReplacementEvidence(
+                    segmentID: firstID,
+                    revision: 3,
+                    effectiveSeed: 7,
+                    generatedAtUTC: "2026-07-23T00:00:00Z",
+                    qcPassed: true
+                )
+            ]
+        )
+        XCTAssertThrowsError(try skippedRevision.validated())
+
+        let unknownSegment = LongFormManifestV4(
+            plan: plan.evidence,
+            replacements: [
+                LongFormSegmentReplacementEvidence(
+                    segmentID: "not-a-plan-segment",
+                    revision: 2,
+                    effectiveSeed: 7,
+                    generatedAtUTC: "2026-07-23T00:00:00Z",
+                    qcPassed: true
+                )
+            ]
+        )
+        XCTAssertThrowsError(try unknownSegment.validated())
+    }
+
     func testSchemaV3ReadsAsLegacySummaryWithoutFabricatedIdentity() throws {
         let json = #"""
         {

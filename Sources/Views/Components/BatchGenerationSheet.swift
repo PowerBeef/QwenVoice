@@ -246,18 +246,29 @@ struct BatchGenerationSheet: View {
             .keyboardShortcut(.cancelAction)
             .accessibilityIdentifier("batch_doneButton")
 
-            if shouldShowRetryRemaining(for: outcome) {
-                Button("Retry Remaining") {
-                    retryBatch(with: outcome.retryRemainingLines)
+            if segmentationMode == .longForm {
+                if coordinator.canOperateOnLongFormOutcome,
+                   outcome.items.contains(where: { !$0.isSaved }) {
+                    Button("Resume Missing Segments") {
+                        coordinator.resumeLongForm(engineStore: ttsEngineStore)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("batch_resumeLongFormButton")
                 }
-                .buttonStyle(.bordered)
-            }
+            } else {
+                if shouldShowRetryRemaining(for: outcome) {
+                    Button("Retry Remaining") {
+                        retryBatch(with: outcome.retryRemainingLines)
+                    }
+                    .buttonStyle(.bordered)
+                }
 
-            if shouldShowRetryFailed(for: outcome) {
-                Button("Retry Failed") {
-                    retryBatch(with: outcome.retryFailedLines)
+                if shouldShowRetryFailed(for: outcome) {
+                    Button("Retry Failed") {
+                        retryBatch(with: outcome.retryFailedLines)
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.bordered)
             }
 
             Spacer()
@@ -366,7 +377,23 @@ struct BatchGenerationSheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(items) { item in
-                            BatchGenerationItemRow(item: item)
+                            HStack(spacing: 8) {
+                                BatchGenerationItemRow(item: item)
+                                if segmentationMode == .longForm,
+                                   coordinator.canOperateOnLongFormOutcome,
+                                   item.isSaved {
+                                    Spacer(minLength: 4)
+                                    Button("Regenerate") {
+                                        coordinator.regenerateLongFormSegment(
+                                            item.index,
+                                            engineStore: ttsEngineStore
+                                        )
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .font(.caption)
+                                    .accessibilityIdentifier("batch_regenerateSegment_\(item.index)")
+                                }
+                            }
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)

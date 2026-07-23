@@ -64,6 +64,20 @@ enum GenerationMigrations {
             )
         }
 
+        migrator.registerMigration("v5_add_long_form_project") { db in
+            try db.alter(table: "generations") { t in
+                // Nullable additive columns: rows outside a long-form project
+                // keep NULL and all existing readers are unaffected.
+                t.add(column: "longFormProjectID", .text)
+                t.add(column: "longFormRole", .text)
+            }
+            try db.create(
+                index: "idx_generations_longFormProjectID",
+                on: "generations",
+                columns: ["longFormProjectID"]
+            )
+        }
+
         return migrator
     }
 }

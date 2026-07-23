@@ -292,14 +292,34 @@ streaming is the project's primary RAM architecture — is resolved for the macO
   per-segment `effectiveSubseed`s that supersede the shared batch seed — closing the Phase-5
   deferral of long-form sub-seed execution.
 - **Bounded assembly.** After every segment passes QC, `BoundedLongFormAssembler` joins the
-  output (`long_form_joined.wav`): punctuation-aware pauses from boundary kinds, edge trims,
+  output (`long_form_joined_<planDigest8>.wav`): punctuation-aware pauses from boundary kinds, edge trims,
   verified non-speech fades, loudness matching, and a per-segment output frame map. The joined
   file must itself pass Fast QC.
 - **Manifest v4 authoritative.** `LongFormManifestV4` gains optional execution and assembly
   evidence sections (fail-closed consistency with the plan) and replaces v3 writes; v3 documents
   remain readable. Manifests stay privacy-safe: no text, paths, or user data — identities,
   verdicts, and timing only.
-- **Open (stages D–E).** Single-segment regeneration via revision lineage, project resume from a
-  manifest, and History/UI integration (project rows, segment map, per-segment replay) follow as
-  the next change set. iOS long-form remains a later arc; this sequential-streaming design is the
-  basis its batch-removal invariant requires.
+- **Stages D–E followed the same day** (amendment 2026-07-23e below). iOS long-form remains a
+  later arc; this sequential-streaming design is the basis its batch-removal invariant requires.
+
+## Amendment 2026-07-23e — Long-form v4 stages D–E (resume, replacement, History projects)
+
+- **In-session resume.** The batch coordinator retains the long-form request (and therefore the
+  plan identity); "Resume Missing Segments" re-runs the same plan, re-verifies and reuses every
+  already-saved take, and generates only missing or failed segments before reassembling. The
+  long-form retry no longer degrades to a line-separated batch.
+- **Accepted replacement history.** Regenerating one segment produces a new take with a fresh
+  recorded seed at revision ≥ 2 (`LongFormSegmentReplacementEvidence`: segmentID, strictly
+  increasing per-segment revisions, seed, QC verdict — fail-closed in `validated()`). A take that
+  fails QC leaves the prior accepted take and history untouched; an accepted take reassembles the
+  joined output and rewrites the manifest with the appended history.
+- **History projects.** Migration v5 adds nullable `longFormProjectID`/`longFormRole` columns
+  (plan digest as the stable project identity). Segments save as project-tagged rows; the
+  assembled output saves as the project's single `joined` row (replaced atomically on
+  reassembly). The History list renders joined rows as project rows with a segment-map
+  disclosure — segments collapse beneath their project, expand in generation order for
+  per-segment replay, stay flat during search, and orphaned segments (no joined row yet) remain
+  visible. Joined output and manifest filenames are per-project
+  (`long_form_joined_<planDigest8>.wav`, `long_form_manifest_<planDigest8>.json`), removing the
+  cross-project overwrite the fixed names allowed.
+- **Open.** Live long-form acceptance in the app UI, then iOS long-form as its own arc.

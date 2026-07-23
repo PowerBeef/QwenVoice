@@ -67,6 +67,73 @@ private struct HistoryListItem: Identifiable, Sendable {
     }
 }
 
+/// One rendered row of the History list after long-form grouping. Segments of
+/// a project with a joined row collapse under it; searching renders flat.
+private struct HistoryDisplayEntry: Identifiable {
+    let item: HistoryListItem
+    let isSegment: Bool
+    /// Present on a long-form joined ("project") row: toggling reveals its
+    /// segment map beneath.
+    let projectToggle: (projectID: String, segmentCount: Int)?
+
+    var id: String { item.id }
+
+    static func entries(
+        from items: [HistoryListItem],
+        searchActive: Bool,
+        expandedProjects: Set<String>
+    ) -> [HistoryDisplayEntry] {
+        guard !searchActive else {
+            return items.map { HistoryDisplayEntry(item: $0, isSegment: false, projectToggle: nil) }
+        }
+        var segmentsByProject: [String: [HistoryListItem]] = [:]
+        var projectsWithJoinedRow: Set<String> = []
+        for item in items {
+            guard let projectID = item.generation.longFormProjectID else { continue }
+            switch item.generation.longFormRole {
+            case "segment":
+                segmentsByProject[projectID, default: []].append(item)
+            case "joined":
+                projectsWithJoinedRow.insert(projectID)
+            default:
+                break
+            }
+        }
+
+        var entries: [HistoryDisplayEntry] = []
+        for item in items {
+            let projectID = item.generation.longFormProjectID
+            switch item.generation.longFormRole {
+            case "segment":
+                // Collapsed under the joined row; orphaned segments (no joined
+                // row yet) stay visible in place.
+                if let projectID, projectsWithJoinedRow.contains(projectID) {
+                    continue
+                }
+                entries.append(HistoryDisplayEntry(item: item, isSegment: false, projectToggle: nil))
+            case "joined":
+                let segments = projectID.flatMap { segmentsByProject[$0] } ?? []
+                entries.append(
+                    HistoryDisplayEntry(
+                        item: item,
+                        isSegment: false,
+                        projectToggle: projectID.map { ($0, segments.count) }
+                    )
+                )
+                if let projectID, expandedProjects.contains(projectID) {
+                    // Segment map in generation order (oldest first).
+                    for segment in segments.sorted(by: { $0.generation.createdAt < $1.generation.createdAt }) {
+                        entries.append(HistoryDisplayEntry(item: segment, isSegment: true, projectToggle: nil))
+                    }
+                }
+            default:
+                entries.append(HistoryDisplayEntry(item: item, isSegment: false, projectToggle: nil))
+            }
+        }
+        return entries
+    }
+}
+
 private struct HistoryActionAlert: Identifiable {
     let id = UUID()
     let title: String
@@ -151,6 +218,7 @@ struct HistoryView: View {
     @State private var savedVoiceSheetConfiguration: SavedVoiceSheetConfiguration?
     @State private var pendingReloadAfterCurrentLoad = false
     @State private var filteredItems: [HistoryListItem] = []
+    @State private var expandedProjects: Set<String> = []
     @State private var itemsRevision = 0
     @State private var searchDebounceTask: Task<Void, Never>?
     @State private var databaseUnavailable = false
@@ -278,7 +346,9 @@ struct HistoryView: View {
                 )
             }
         } else {
-            List(filteredItems) { item in
+            List(displayEntries) { entry in
+                let item = entry.item
+                VStack(alignment: .leading, spacing: 0) {
                 HistoryRow(
                     item: item,
                     onPlay: {
@@ -306,11 +376,48 @@ struct HistoryView: View {
                     }
                     .disabled(!item.audioFileExists)
                 }
+                if let toggle = entry.projectToggle, toggle.segmentCount > 0 {
+                        HStack {
+                            Button {
+                                if expandedProjects.contains(toggle.projectID) {
+                                    expandedProjects.remove(toggle.projectID)
+                                } else {
+                                    expandedProjects.insert(toggle.projectID)
+                                }
+                            } label: {
+                                Label(
+                                    expandedProjects.contains(toggle.projectID)
+                                        ? "Hide \(toggle.segmentCount) segments"
+                                        : "Show \(toggle.segmentCount) segments",
+                                    systemImage: expandedProjects.contains(toggle.projectID)
+                                        ? "chevron.down"
+                                        : "chevron.right"
+                                )
+                                .font(.caption)
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityIdentifier(
+                                "history_longFormSegmentsToggle_\(String(toggle.projectID.prefix(8)))"
+                            )
+                            Spacer()
+                        }
+                        .padding(.top, 2)
+                }
+                }
+                .padding(.leading, entry.isSegment ? 24 : 0)
                 .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
             }
             .listStyle(.inset)
             .scrollContentBackground(.hidden)
         }
+    }
+
+    private var displayEntries: [HistoryDisplayEntry] {
+        HistoryDisplayEntry.entries(
+            from: filteredItems,
+            searchActive: !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            expandedProjects: expandedProjects
+        )
     }
 }
 

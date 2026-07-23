@@ -542,6 +542,34 @@ public struct LongFormExecutionEvidence: Codable, Equatable, Hashable, Sendable 
     }
 }
 
+/// One accepted per-segment replacement take. Revision 1 is the plan's own
+/// take; replacements start at revision 2 and record the seed that produced
+/// the accepted audio so any take remains reproducible.
+public struct LongFormSegmentReplacementEvidence: Codable, Equatable, Hashable, Sendable {
+    public let segmentID: String
+    public let revision: Int
+    public let effectiveSeed: UInt64
+    public let generatedAtUTC: String
+    public let qcPassed: Bool
+    public let qcWarnings: [String]
+
+    public init(
+        segmentID: String,
+        revision: Int,
+        effectiveSeed: UInt64,
+        generatedAtUTC: String,
+        qcPassed: Bool,
+        qcWarnings: [String] = []
+    ) {
+        self.segmentID = segmentID
+        self.revision = revision
+        self.effectiveSeed = effectiveSeed
+        self.generatedAtUTC = generatedAtUTC
+        self.qcPassed = qcPassed
+        self.qcWarnings = qcWarnings
+    }
+}
+
 public struct LongFormManifestV4: Codable, Equatable, Sendable {
     public static let currentSchemaVersion = 4
 
@@ -553,17 +581,22 @@ public struct LongFormManifestV4: Codable, Equatable, Sendable {
     /// Present once every segment passed and the bounded assembler joined the
     /// output; absent for planning-only or failed runs.
     public let assembly: LongFormAssemblyEvidence?
+    /// Accepted replacement history, oldest first; absent when no segment has
+    /// been regenerated.
+    public let replacements: [LongFormSegmentReplacementEvidence]?
 
     public init(
         plan: LongFormPlanEvidence,
         execution: LongFormExecutionEvidence? = nil,
-        assembly: LongFormAssemblyEvidence? = nil
+        assembly: LongFormAssemblyEvidence? = nil,
+        replacements: [LongFormSegmentReplacementEvidence]? = nil
     ) {
         schemaVersion = Self.currentSchemaVersion
         manifestKind = "long_form_generation"
         self.plan = plan
         self.execution = execution
         self.assembly = assembly
+        self.replacements = replacements?.isEmpty == true ? nil : replacements
     }
 
     public func validated() throws -> Self {
@@ -596,6 +629,18 @@ public struct LongFormManifestV4: Codable, Equatable, Sendable {
                   assembly.segmentCount == plan.segmentCount,
                   assembly.segments.map(\.segmentID) == plan.segments.map(\.segmentID) else {
                 throw LongFormPlanningError.invalidManifest("v4 assembly contract")
+            }
+        }
+        if let replacements {
+            let planIDs = Set(plan.segments.map(\.segmentID))
+            var nextRevisionBySegment: [String: Int] = [:]
+            for replacement in replacements {
+                let expected = nextRevisionBySegment[replacement.segmentID] ?? 2
+                guard planIDs.contains(replacement.segmentID),
+                      replacement.revision == expected else {
+                    throw LongFormPlanningError.invalidManifest("v4 replacement contract")
+                }
+                nextRevisionBySegment[replacement.segmentID] = expected + 1
             }
         }
         return self
