@@ -105,7 +105,12 @@ scripts/macos_test.sh gate            # deterministic macOS platform gate
 - **Reserve before generation side effects.** `EngineServiceHost` must reserve, bind accepted
   state, and only then open generation. A rejected concurrent request must not create timing,
   forwarding, task, or stream state or perturb the accepted request.
-- **Liquid Glass is gated.** `QW_UI_LIQUID` compilation condition controls Liquid Glass surfaces.
+- **Liquid Glass is gated.** `QW_UI_LIQUID` compilation condition controls Liquid Glass surfaces,
+  and the `generationPerformanceGate` environment value (injected from
+  `ttsEngineStore.hasActiveGeneration` in `ContentView`) renders glass surfaces with the shipped
+  solid-fill fallback while a generation is active — Liquid Glass compositor work measurably
+  competed with the engine (OPTIMIZATION.md §K). Do not remove the gate from a glass style or
+  add a glass surface that ignores it.
 - **Reduce Motion / Reduce Transparency.** All animation routes through `appAnimation` /
   `AppLaunchConfiguration.performAnimated`; reduced-transparency fallback uses solid fills.
 - **No color-only signal.** Mode colors pair with icon, label, or position cue.

@@ -364,9 +364,10 @@ while it is suspended by channel backpressure removes that pending send and wake
 Design, and Clone.
 `config/runtime-refactor-contract.json` is the machine-readable status
 record, and [`decisions/runtime-streaming-quality-convergence.md`](decisions/runtime-streaming-quality-convergence.md)
-defines the promotion boundaries. The source cutover and focused macOS plus physical-iPhone
-Custom/Design/Clone proof have passed. Overall promotion remains open for clean repeated controls,
-the applicable full matrices, exact legacy characterization, and later convergence retirement.
+defines the promotion boundaries. The source cutover, focused macOS plus physical-iPhone
+Custom/Design/Clone proof, clean Phase 0 controls, and the canonical matrices all passed:
+`overallPromotion: passed` (2026-07-20). Phases 7, 8, and 14 closed 2026-07-23; the contract
+records the remaining open phases (9–13).
 
 ### 4.5 Memory policy
 
@@ -1010,7 +1011,7 @@ Most-frequent imports across `Sources/**/*.swift`:
 | `ContractBackedModelRegistry` | Loads `qwenvoice_contract.json` and expands it per platform. |
 | `GenerationRequest` / `Payload` | The generation ask + its mode-specific payload (custom/design/clone). |
 | `CloneReference` | Reference audio + typed conditioning mode (`transcriptBacked` or genuine audio-only `xVectorOnly`) + optional prepared voice identity. |
-| `UnsafeSpeechGenerationModel` | `@unchecked Sendable` transitional wrapper sharing one actor with the named legacy SPI's opaque model handle. |
+| `UnsafeSpeechGenerationModel` | `Sendable` pairing of the runtime actor with immutable post-load facts; no model handle, no SPI. |
 
 ---
 

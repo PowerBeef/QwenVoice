@@ -3,7 +3,7 @@
 > Current maintainer checkpoint. Confirm this summary against the checkout before acting; source,
 > `project.yml`, and repository scripts remain authoritative.
 
-## Runtime convergence status — reviewed 2026-07-22
+## Runtime convergence status — reviewed 2026-07-23
 
 This checkpoint tracks the staged runtime convergence program. Focused Phase 4 acceptance landed
 at `00c9eea637259cfce858d1fc7d43a1a2c52ff86d` (delivered by [PR #78](https://github.com/PowerBeef/QwenVoice/pull/78)
@@ -17,7 +17,7 @@ machine-readable status record and wins over older prose that still says promoti
 | --- | --- |
 | 0 — Characterization | Closed 2026-07-20. Clean-tree Mac CLI ×3, Mac UI ×3, and iPhone UI ×3 short Speed warm-10 controls PASS `check_characterization_controls.py` and secret-sauce checks (soft_trim only). `config/characterization-fixtures.json` binds BenchMatrixSpec short/long `promptDigest` values, representative warm WAV digests, and `controlSessions`; status `closed`. Contract `characterizationContract`: `closed-clean-control-sessions-bound`. Post–Phase 0 full 29-take UI matrices are recorded below. |
 | 1 — Correctness prerequisites | Shipping. XPC reserves before side effects, pressure snapshots are synchronized, and critical relief holds admission continuously through cancellation, terminal cleanup, and relief. |
-| 2 — Plans and actor | The actor foundation is now the shipping generation-mutation authority through Phase 4. Immutable plans remain in shadow comparison. A narrow named SPI still bridges prepared-model loading/prewarm and validated schema-3 Clone prompt adoption; do not describe the actor as the sole MLX mutator until that bridge retires. Reserved/generating/aborting ownership, critical-relief lease transfer, and epoch-bound Clone handles remain unchanged. |
+| 2 — Plans and actor | The actor is the shipping generation-mutation authority and, since Phase 14b (2026-07-23), owns every product-reachable runtime lifecycle operation: loading (with the verbose local-diagnostics sink), post-load facts, preparation diagnostics, prewarm/priming, and schema-3 clone-artifact persistence/adoption. Immutable plans remain in shadow comparison. Reserved/generating/aborting ownership, critical-relief lease transfer, and epoch-bound Clone handles remain unchanged. |
 | 3 — Classified sessions | Shipping through Phase 4. Custom, Design, and Clone materialize `[Float]` before an awaited, frame-bounded, single-consumer channel send. Producer/receiver cancellation, delayed drains, maximum-length ordering, consumer failure, typed terminal outcomes, and stale-safe product finalization remain deterministic contracts. |
 | 4 — Product adapter and mode cutover | Closed 2026-07-20. Source implementation, deterministic verification, focused platform acceptance, clean Phase 0 controls, canonical 29-take matrices, Phase 5 packaging, and Phase 6 v9 sidecar authority are all closed. Contract `overallPromotion`: `passed`. QwenVoiceCore's `GenerationOutputAdapter` remains the shipping product session. |
 | 5 — Request-local sampling | Closed 2026-07-20. Shipping path packages fail-closed `SamplingTakeEvidence.packagedTelemetryNotes()` (`validatedForPromotion()` + `samplingPromotionPackaged=true`). Fixed-seed equal/diverge pairs remain live identity proof. Contract `requestLocalSamplingV2`: `shipping-promotion-packaged-evidence-live`. Long-form/candidate sub-seed execution remains Phase 11/12. |
@@ -125,14 +125,17 @@ Historical checklist (all done):
 
 ### Next convergence fork
 
-Overall promotion no longer forces a single linear gate. Choose by goal:
+Phases 7, 8, and 14 all closed 2026-07-23 (UI-context gap via the generation performance gate,
+live all-artifact shared-component validation, and full mechanical retirement including 14b SPI
+evaporation). Remaining work, choose by goal:
 
-1. ~~**Phase 14**~~ — closed 2026-07-23 (14a mechanical retirements + 14b SPI evaporation).
-2. **Phase 7** — chunk/preview A/B and calibration when the priority is perceived latency
-   (requires shipping v9 evidence, now available; protect secret-sauce cells).
-3. **Phase 8** — closed 2026-07-23 (live all-artifact validation on both canonical platforms).
-4. **Phases 10–13** — spoken-text, long-form v4, quality consolidation, history v3 remain later
+1. **Phase 9** — runtime component reuse: optional isolated decoder/immutable-weight A/B, newly
+   unblocked by the live disk-component proof.
+2. **Phases 10–13** — spoken-text, long-form v4, quality consolidation, history v3 remain later
    product work; manifest-v3 and history schema v2 still ship.
+3. **Smaller open threads** — §H P0 GPU-busy re-capture on a clean CLI Metal trace, the
+   iPhone-15-Pro memory-profile diagnostic, and a 60 Hz-device measurement of the iOS
+   fixed-refresh glass gate if such hardware becomes available.
 
 Status report: [`docs/reference/runtime-refactor-status-report.md`](reference/runtime-refactor-status-report.md).
 You-are-here map: trust `config/runtime-refactor-contract.json` over any older “promotion pending”
@@ -218,9 +221,9 @@ identifiers differ. Restoring that component does not authorize Simulator execut
   Shipping schema-v8 rows remain authoritative and embed only a partial v9 transition projection;
   Phase 4 does not complete the v9 writer/merger/publication path. Telemetry v8/evidence v2,
   manifest v3, persisted Fast QC, and the existing specialized gates remain operational truth.
-  Focused physical-iPhone Phase 4 acceptance now passes; sequential streaming long-form, complete
-  v9 publication, history v3, and clean full-matrix promotion evidence remain
-  pending.
+  Focused physical-iPhone Phase 4 acceptance and the clean full-matrix promotion evidence both
+  passed (2026-07-20 promotion, 2026-07-23 gated re-baseline); sequential streaming long-form,
+  complete v9 publication, and history v3 remain pending (Phases 11–13).
 - Clone conditioning is typed as transcript-backed or genuine audio-only x-vector. Both apps own
   the visible `voiceCloning_consentAcknowledgment` in Settings, persist the choice locally, and
   keep Clone Generate disabled until consent is acknowledged. Smoke and benchmark enable it through
@@ -501,9 +504,11 @@ UI-context gap.
 - Clean canonical post-cutover UI matrices landed 2026-07-20 on both platforms
   (`macos-xcui-benchmark-20260720-172920-591696d1`, `ios-xcui-benchmark-20260720-174441-16fc128c`)
   and closed overall promotion; the pre-convergence baselines are historical controls. The
-  2026-07-22 characterization gate showed the macOS UI matrix is sub-realtime for a
-  delivery-topology reason the engine A/B exonerates — the phase 7 pacing fix owns recovery, and
-  its acceptance will need fresh canonical matrices plus the new UI-context promotion cell.
+  2026-07-22/23 characterization arc then explained and recovered the macOS UI decline outside
+  the engine: XCUITest screen recording plus visible Liquid Glass compositor cost. With
+  recording disabled and the generation performance gate shipped, fresh canonical gated
+  matrices landed 2026-07-23 (macOS custom 1.68–1.83 / design 1.78–1.94 / clone 1.49–1.84;
+  iOS 1.86–2.03) and pre-2026-07-23 UI records are not baselines for post-change comparisons.
   Explicit quality runs remain independent from ordinary publishing and release packaging.
 - Physical-iPhone telemetry-v8/evidence-v2 acceptance is complete for the canonical UI matrix,
   retained-memory qualification, and an exact-PID memory profile. The tracked records remain bound
@@ -515,9 +520,10 @@ UI-context gap.
   Speech prerequisites, and the full 19-cell language run. Each result remains bound to its exact
   source or worktree fingerprint; the language run remains exploratory rather than a clean trend
   baseline. It must not be presented as validation of the staged convergence runtime. Focused
-  post-cutover macOS and physical-iPhone focused parity are now separate passing evidence; clean
-  canonical controls and full-matrix promotion QA remain pending and nonblocking for deterministic
-  source publication, packaging, and release artifact preservation.
+  post-cutover macOS and physical-iPhone parity, clean canonical controls, and the full-matrix
+  promotion QA all subsequently passed (2026-07-20 promotion; 2026-07-23 gated re-baseline); none
+  of this evidence blocks deterministic source publication, packaging, or release artifact
+  preservation.
 
 ## Resume rule
 

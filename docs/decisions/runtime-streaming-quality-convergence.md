@@ -1,6 +1,6 @@
 # Runtime, streaming, and quality convergence
 
-- **Status:** Accepted; Phase 4 overall promotion passed (Phases 0–6 closed 2026-07-20). Phases 7–14 remain open.
+- **Status:** Accepted; Phase 4 overall promotion passed (Phases 0–6 closed 2026-07-20; Phases 7, 8, and 14 closed 2026-07-23 by amendment). Phases 9–13 remain open.
 - **Date:** 2026-07-20
 - **Owners:** Backend/MLX, macOS, iOS, and Release/QA
 - **Machine contract:** [`config/runtime-refactor-contract.json`](../../config/runtime-refactor-contract.json)
