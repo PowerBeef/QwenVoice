@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 @preconcurrency import XCTest
 
@@ -405,6 +406,19 @@ class VocelloMacUITestCase: XCTestCase {
             .environment["QVOICE_MAC_BENCH_HIDE_DURING_TAKE"] == "1"
         if hideDuringTake {
             app.typeKey("h", modifierFlags: .command)
+        }
+        // Diagnostic (§K): after clicking Generate the pointer rests on the
+        // control it just clicked, and Liquid Glass hover effects animate at
+        // display refresh under the cursor for the whole take. Parking the
+        // pointer at the screen corner removes the hover surface without
+        // touching the app, isolating hover-animation compositor cost.
+        if ProcessInfo.processInfo.environment["QVOICE_MAC_BENCH_PARK_CURSOR"] == "1" {
+            CGEvent(
+                mouseEventSource: nil,
+                mouseType: .mouseMoved,
+                mouseCursorPosition: CGPoint(x: 2, y: 2),
+                mouseButton: .left
+            )?.post(tap: .cghidEventTap)
         }
         XCTAssertTrue(
             VocelloUIWait.condition(

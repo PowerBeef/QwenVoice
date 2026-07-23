@@ -375,6 +375,7 @@ from schema-v2 memory trends.
 | 2026-07-23 | [`macos-xcui-benchmark-20260723-070906-56da55ec`](runs/ui-generation/macos-xcui-benchmark-20260723-070906-56da55ec.json) | focused | exploratory | passedWithWarnings | qualified-with-warnings | 4 | `34ed607cc810` dirty | `excluded` | baseline | macos-xcui-benchmark-20260723-070906-56da55ec |
 | 2026-07-23 | [`macos-xcui-benchmark-20260723-071837-eefae1ec`](runs/ui-generation/macos-xcui-benchmark-20260723-071837-eefae1ec.json) | focused | exploratory | passedWithWarnings | qualified-with-warnings | 4 | `1cdb94c164ad` dirty | `excluded` | baseline | macos-xcui-benchmark-20260723-071837-eefae1ec |
 | 2026-07-23 | [`macos-xcui-benchmark-20260723-072534-98b7cc52`](runs/ui-generation/macos-xcui-benchmark-20260723-072534-98b7cc52.json) | focused | exploratory | passedWithWarnings | qualified-with-warnings | 4 | `1cdb94c164ad` dirty | `excluded` | baseline | macos-xcui-benchmark-20260723-072534-98b7cc52 |
+| 2026-07-23 | [`macos-xcui-benchmark-20260723-074016-ad57d384`](runs/ui-generation/macos-xcui-benchmark-20260723-074016-ad57d384.json) | focused | exploratory | passedWithWarnings | qualified-with-warnings | 4 | `495a77e6c4ad` dirty | `excluded` | baseline | macos-xcui-benchmark-20260723-074016-ad57d384 |
 
 ## ui-generation / macos / mac-mini-m2-8gb / config `a0ef72d79b71`
 
@@ -416,3 +417,9 @@ from schema-v2 memory trends.
 |---|---|---|---|---|---|---:|---|---|---|---|
 | 2026-07-23 | [`macos-xcui-benchmark-20260723-031943-3820c784`](runs/ui-generation/macos-xcui-benchmark-20260723-031943-3820c784.json) | focused | exploratory | passedWithWarnings | qualified-with-warnings | 4 | `109559888e4d` dirty | `excluded` | baseline | macos-xcui-benchmark-20260723-031943-3820c784 |
 | 2026-07-23 | [`macos-xcui-benchmark-20260723-032529-825cdc6e`](runs/ui-generation/macos-xcui-benchmark-20260723-032529-825cdc6e.json) | focused | exploratory | passedWithWarnings | qualified-with-warnings | 4 | `109559888e4d` dirty | `excluded` | baseline | macos-xcui-benchmark-20260723-032529-825cdc6e |
+
+## ui-generation / macos / mac-mini-m2-8gb / config `fda70137cb9f`
+
+| completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |
+|---|---|---|---|---|---|---:|---|---|---|---|
+| 2026-07-23 | [`macos-xcui-benchmark-20260723-074746-40ab73d6`](runs/ui-generation/macos-xcui-benchmark-20260723-074746-40ab73d6.json) | focused | exploratory | passedWithWarnings | qualified-with-warnings | 4 | `495a77e6c4ad` dirty | `excluded` | baseline | macos-xcui-benchmark-20260723-074746-40ab73d6 |

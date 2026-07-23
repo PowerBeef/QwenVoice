@@ -678,16 +678,22 @@ one-cell lanes (custom/long warm, identical `-O` engine code, same session):
 - **Gate v1 measured neutral; the redraw source is display-refresh-locked.** Becalming every
   named surface (static glyphs for the readiness, starting, and activity indicators; live
   playhead 10 Hz → 3 Hz) left RTF at 1.37 and WindowServer's share unchanged (~42%, 183K
-  events). The trace fingerprint is decisive about the shape: WindowServer composites a steady
-  **60.1 buffers/s comb** (median inter-frame 16.61 ms; no 1.8 Hz chunk, 3 Hz playhead, or 1 Hz
-  polling clusters), while the Vocello app process submits **zero** Metal work of its own. Some
-  layer invalidates the window at exactly display refresh for the whole take; view-level pixel
-  changes are not it. Leading hypothesis: the pointer rests on the just-clicked Generate/Cancel
-  control, and Liquid Glass hover effects animate under the cursor at 60 fps (consistent with
-  the hide-recovery, since hiding removes the hover surface). Next probes: park the cursor
-  off-window after starting a take (harness-level, genuine interaction), and a Core Animation
-  commits capture to attribute the 60 Hz invalidation source app-vs-system. The kept gate-v1
-  changes stand on energy/composition grounds despite the neutral RTF result.
+  events). The trace fingerprint: WindowServer composites a steady **60.1 buffers/s comb**
+  (median inter-frame 16.61 ms; no chunk/playhead/polling clusters) while the Vocello app
+  process submits **zero** Metal work of its own. Cursor-parking
+  (`QVOICE_MAC_BENCH_PARK_CURSOR=1`, CGEvent pointer move to the screen corner mid-take) also
+  measured neutral (1.374), falsifying the hover-effect hypothesis. The kept gate-v1 changes
+  stand on energy/composition grounds despite the neutral RTF result.
+- **Resolved: Liquid Glass is the entire visible-window cost.** A diagnostic build with the
+  `QW_UI_LIQUID` compilation condition removed (the app's shipped solid-fill fallback design,
+  normally reached via Reduce Transparency) measured **1.775 cold / 1.842 warm with the app
+  fully visible** — complete recovery to the engine's 1.84 capability, zero residual. The glass
+  material's continuous compositor-side work (the 60 Hz comb) competes with MLX for the shared
+  GPU on the 8 GB tier whenever the window is visible; this also explains why UI-context records
+  trailed same-day engine capability in every era of the registry. The shipping configuration
+  keeps `QW_UI_LIQUID`; the product decision (generation-time glass gate via the existing
+  solid-fill fallback, a floor-tier default, or accepting 1.37-with-glass) is recorded as the
+  phase 7 implementation choice.
 
 ## Status
 
