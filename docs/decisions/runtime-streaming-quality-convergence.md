@@ -283,9 +283,13 @@ streaming is the project's primary RAM architecture — is resolved for the macO
 
 - **Sequential streaming execution.** Long-form no longer routes through the native batch call.
   Each planned segment runs the ordinary streaming path (actor → classified session →
-  `GenerationOutputAdapter`) one at a time, with the new request-local
-  `suppressStreamingPreview` flag keeping live preview publication off while incremental WAV,
-  Fast QC, and telemetry behavior stay identical. Memory stays flat at audiobook scale.
+  `GenerationOutputAdapter`) one at a time while incremental WAV, Fast QC, and telemetry
+  behavior stay identical; memory stays flat at audiobook scale. Live preview publication is
+  enabled (2026-07-23 follow-up): the player narrates segments as they generate through its
+  ordinary per-generation live sessions, gated by the user's auto-play preference — note the
+  final joined output additionally carries edge trims, inserted boundary pauses, and loudness
+  matching. The new request-local `suppressStreamingPreview` flag remains available for
+  contexts that need silent long-form generation.
 - **Planner-owned segmentation.** `SpokenTextPlanner` + `LongFormPlanner` replace the
   character/sentence segmenter (retired): boundary-kind precedence with protected spans,
   conservative token estimates against the shipping codec-token cap, digest-bound identity, and

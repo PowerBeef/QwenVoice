@@ -264,8 +264,11 @@ struct BatchGenerationRequest {
         return record
     }
 
-    /// Long-form v4 segments stream for flat memory with preview publication
-    /// suppressed; ordinary line batches keep the quality-first path.
+    /// Long-form v4 segments stream for flat memory; live preview publication
+    /// stays enabled so the player narrates segments as they generate (playback
+    /// itself is gated by the user's auto-play preference). Ordinary line
+    /// batches keep the quality-first path. `suppressStreamingPreview` remains
+    /// available for contexts that need silent long-form generation.
     private var streamsSegments: Bool { segmentationMode == .longForm }
 
     private func segmentSeed(batchIndex: Int?, seedOverride: UInt64?) -> UInt64 {
@@ -306,8 +309,7 @@ struct BatchGenerationRequest {
                         : nil
                 ),
                 seed: segmentSeed(batchIndex: rawBatchIndex, seedOverride: seedOverride),
-                variation: GenerationVariationPreference.requestValue(),
-                suppressStreamingPreview: streamsSegments ? true : nil
+                variation: GenerationVariationPreference.requestValue()
             )
         case .design:
             return QwenVoiceNative.GenerationRequest(
@@ -323,8 +325,7 @@ struct BatchGenerationRequest {
                     deliveryStyle: emotion ?? DeliveryProfile.neutralInstruction
                 ),
                 seed: segmentSeed(batchIndex: rawBatchIndex, seedOverride: seedOverride),
-                variation: GenerationVariationPreference.requestValue(),
-                suppressStreamingPreview: streamsSegments ? true : nil
+                variation: GenerationVariationPreference.requestValue()
             )
         case .clone:
             return QwenVoiceNative.GenerationRequest(
@@ -342,8 +343,7 @@ struct BatchGenerationRequest {
                     )
                 ),
                 seed: segmentSeed(batchIndex: rawBatchIndex, seedOverride: seedOverride),
-                variation: GenerationVariationPreference.requestValue(),
-                suppressStreamingPreview: streamsSegments ? true : nil
+                variation: GenerationVariationPreference.requestValue()
             )
         }
     }

@@ -66,7 +66,7 @@ iOS: UI → Core in-process → same owned runtime.
 | 7 UI-context gap | Implemented 2026-07-23: screen-recording observer effect fixed, then Liquid Glass compositor cost gated during generation (`generationPerformanceGate`); UI context delivers engine capability (matrix 1.43–1.94; XPC ≈3%) |
 | 8 Shared component storage | Closed 2026-07-23: live six-artifact Mac + three-artifact iPhone validation with exact shared-component reuse (wire = expected − 682,295,738 on reused installs) |
 | 9 Runtime component reuse | Unblocked (live disk proof); isolated A/B not started |
-| 10–11 Spoken-text + long-form v4 | Complete for macOS 2026-07-23 (stages A–E + live acceptance, 6/6 smoke incl. a three-segment project): planner segmentation, sequential streaming, bounded assembly, manifest v4 with replacement history, resume, History projects; QC pause budgets and duration-aware thresholds calibrated in the same arc; iOS later |
+| 10–11 Spoken-text + long-form v4 | Complete for macOS 2026-07-23 (stages A–E + live acceptance, 6/6 smoke incl. a three-segment project): planner segmentation, sequential streaming with live segment preview (auto-play-gated), bounded assembly, manifest v4 with replacement history, resume, History projects; QC pause budgets and duration-aware thresholds calibrated in the same arc; iOS later |
 | 12–13 | Foundations / not started as in the runtime contract |
 | 14 Mechanical retirement | Complete 2026-07-23 (14a + 14b): combined characterization session, stream APIs, adapter filename, and the `VocelloQwen3LegacyCompatibility` SPI all retired; loading/metadata/priming/clone artifacts are actor-owned |
 
