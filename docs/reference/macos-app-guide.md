@@ -82,6 +82,7 @@ Tests assert these visible production surfaces directly.
 | Sort | `history_sortPicker` (menu) |
 | Clear | `history_clearMenu` → `history_clearKeepFiles` / `history_clearDeleteFiles` |
 | Row | `historyRow_<genID>` / `historyRow_play_<genID>` / `historyRow_saveAs_<genID>` / `historyRow_delete_<genID>` |
+| Long-form project | joined row plus `history_longFormSegmentsToggle_<digest8>` disclosure over the per-segment map; segments collapse under the project, flatten during search, and orphans stay visible |
 | Degraded database state | `history_errorState`; destructive actions stay disabled until a later reload/read succeeds |
 
 Database failures are typed and fail closed: an unavailable store is not shown as empty History.
@@ -125,6 +126,13 @@ Retry button.
 | Segmentation | `batch_segmentationMode` |
 | Editor | `batch_textEditor` |
 | Generate all | `batch_generateAllButton` / `batch_cancelButton` / `batch_doneButton` |
+| Item status | `batch_itemStatusList` / `batch_regenerateSegment_<index>` (long-form, per accepted segment) |
+| Long-form resume | `batch_resumeLongFormButton` (shown when a stopped project has reusable takes) |
+| Delivery summary | `batch_deliverySummary` |
+
+Every item — line-separated and long-form — is an ordinary sequential streaming take (mandatory
+engine Fast QC, streaming telemetry, live preview). Long-form additionally plans segments, joins
+them into one WAV, and lands a single project row in History.
 
 ---
 
@@ -168,7 +176,7 @@ The shell harness owns deterministic proof and evidence:
 | Lane | Purpose |
 |------|---------|
 | `scripts/macos_test.sh test` | Core, XPC transport, and runtime tests; no UI driving |
-| `scripts/ui_test.sh macos smoke` | Five ordered focused journeys (navigation/readiness, completed generation + History, mid-generation cancellation, virtual-mic recording, library surfaces) with named screenshots and automatic on-failure desktop + element-tree evidence |
+| `scripts/ui_test.sh macos smoke` | Seven ordered focused journeys (navigation/readiness, completed generation + History, mid-generation cancellation, virtual-mic recording, library surfaces, three-segment long-form project, two-line batch) with named screenshots and automatic on-failure desktop + element-tree evidence |
 | `scripts/ui_test.sh macos benchmark` | UI-driven generation matrix plus merged telemetry proof |
 
 ### macOS-specific patterns (vs iOS)
@@ -211,7 +219,8 @@ The shell harness owns deterministic proof and evidence:
 macOS controls not currently targeted by the minimal smoke/benchmark lanes:
 - Individual delivery/language menu items.
 - Model "Manage" popover menu items.
-- Batch item rows (derived from `BatchGenerationItemState`, no per-item id).
+- Per-segment long-form controls beyond the batch journeys (`batch_regenerateSegment_<index>` and
+  `batch_resumeLongFormButton` exist but are not yet exercised by the minimal lanes).
 - History context menu items ("Reveal in Finder").
 
 Add stable identifiers before extending autonomous coverage to these controls; do not introduce

@@ -1,7 +1,7 @@
 import AVFoundation
 @preconcurrency import XCTest
 
-/// The macOS smoke suite: five focused journeys that run in the numbered
+/// The macOS smoke suite: seven focused journeys that run in the numbered
 /// order (XCTest executes methods alphabetically). Each test owns a fresh
 /// app session and leaves no persisted state behind, so a mid-suite failure
 /// never poisons the journeys after it and the suite passes back-to-back.

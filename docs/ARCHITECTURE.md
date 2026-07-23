@@ -474,16 +474,18 @@ bounded passes rather than a duration-sized PCM/frame matrix.
 
 ### 4.11 Spoken-text and long-form planning status
 
-`SpokenTextPlanning.swift` and `LongFormPlanning.swift` implement deterministic, privacy-separated
-planning foundations, including typed transformation risk, UTF-8 ranges, stable segment/sub-seed
-identity, token-limit enforcement, CJK-aware boundary precedence, a schema-v4 planning document,
-and read-only schema-v3 summaries. `BoundedLongFormAssembler` is the matching joined-WAV foundation:
-it analyzes and writes each PCM16 segment in two fixed-block passes, bounds edge trim/fade and gain,
-inserts declared pauses, publishes one atomic readable WAV, and returns a privacy-safe segment frame
-map, digest, boundary-jump, and working-set summary. These foundations do not replace the current
-product path. macOS long-form still uses `LongFormBatchSegmenter`, the non-streaming batch
-coordinator, and manifest schema v3; no sequential streaming segment coordinator invokes the new
-planner or assembler. iOS long-form remains out of scope. See
+Long-form v4 is the shipping macOS path (stages A–E since 2026-07-23; contract keys `longForm`,
+`longFormV4`). `SpokenTextPlanning.swift` + `LongFormPlanning.swift` plan the project (typed
+transformation risk, UTF-8 ranges, protected spans, CJK-aware boundary precedence, per-segment
+stable IDs and deterministic sub-seeds, a delivery-validated 300-unit runtime token ceiling);
+`BatchGenerationRunner` executes one ordinary sequential streaming take per segment with mandatory
+per-segment engine Fast QC and live preview; `BoundedLongFormAssembler` joins the persisted PCM16
+segments in fixed blocks into one atomic WAV with a privacy-safe frame map; `LongFormManifestV4`
+records plan + execution + assembly + replacement evidence fail-closed, with schema-v3 documents
+readable only as a limited legacy summary. Resume reuses saved takes, single-segment regeneration
+appends revision-≥2 replacement lineage, and migration v5 History project columns group the joined
+output as one accepted row. Line-separated batch runs on the same sequential streaming path.
+iOS long-form remains a later arc. See
 [`reference/long-form-generation.md`](reference/long-form-generation.md).
 
 ---
@@ -534,7 +536,8 @@ a single envelope method —
 `EngineCommand` cases (the full surface): `initialize`, `ping`, `loadModel`,
 `unloadModel`, `ensureModelLoadedIfNeeded`, `prewarmModelIfNeeded`,
 `prefetchInteractiveReadinessIfNeeded`, `ensureCloneReferencePrimed`,
-`cancelClonePreparationIfNeeded`, `generate`, `generateBatch`,
+`cancelClonePreparationIfNeeded`, `generate`, `generateBatch` (wire case retained;
+no app-side caller since the 2026-07-23 batch unification — retirement candidate),
 `cancelActiveGeneration`, `listPreparedVoices`, `enrollPreparedVoice`,
 `deletePreparedVoice`, `clearGenerationActivity`, `clearVisibleError`,
 `shutdownWhenIdle`.

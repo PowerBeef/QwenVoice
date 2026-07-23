@@ -650,9 +650,10 @@ preserve_ios_ui_dsym() {
 if [[ "$platform" == "macos" ]]; then
   terminate_macos_app
   if [[ "$lane" == "smoke" ]]; then
-    # The smoke class runs its five ordered journeys (navigation/readiness,
+    # The smoke class runs its seven ordered journeys (navigation/readiness,
     # completed generation + History, mid-generation cancellation, virtual-mic
-    # recording, library surfaces) in method-name order.
+    # recording, library surfaces, long-form project, line batch) in
+    # method-name order.
     only_test="VocelloMacUITests/VocelloMacSmokeUITests"
   else
     only_test="VocelloMacUITests/VocelloMacBenchmarkUITests/testOrderedConfigurableMatrix"

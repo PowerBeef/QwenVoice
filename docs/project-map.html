@@ -1648,7 +1648,8 @@ scripts/macos_test.sh test
     {"name":"Speed (4-bit) models","macos":"yes","ios":"yes","cli":"yes","note":"iOS production tier; about 2.31–2.34 GB per mode"},
     {"name":"Quality (8-bit) models","macos":"yes","ios":"no","cli":"yes","note":"macOS and source-built CLI only"},
     {"name":"Streaming synthesis","macos":"yes","ios":"yes","cli":"partial","note":"Apps play live preview; CLI reports events without a live player"},
-    {"name":"Batch generation","macos":"yes","ios":"no","cli":"yes","note":"Intentionally removed from iOS"},
+    {"name":"Batch generation","macos":"yes","ios":"no","cli":"yes","note":"Sequential streaming takes since 2026-07-23; intentionally removed from iOS"},
+    {"name":"Long-form projects (v4)","macos":"yes","ios":"no","cli":"no","note":"Scripts over 900 characters: planner segmentation, sequential streaming, joined WAV, manifest v4, History project rows; iOS is a later arc"},
     {"name":"Saved Voices","macos":"yes","ios":"yes","cli":"yes","note":"List, enroll, use, and delete prepared voices"},
     {"name":"Generation History","macos":"yes","ios":"yes","cli":"no","note":"GRDB history.sqlite; search, playback, export, delete"},
     {"name":"Microphone recording","macos":"yes","ios":"yes","cli":"no","note":"AVFoundation; physical device required for iOS verification"},
@@ -1906,7 +1907,7 @@ scripts/macos_test.sh test
         {"name":"Views/Generate/","desc":"Custom, Design, Clone and GenerationStudioShell"},
         {"name":"Views/Library/","desc":"History, Saved Voices, recording and save sheets"},
         {"name":"Views/Settings/","desc":"Model downloads, clone consent, and preferences"},
-        {"name":"Services/","desc":"Database, audio, telemetry merge, XPC lifecycle, batch and warmup"}
+        {"name":"Services/","desc":"Database, audio, telemetry merge, XPC lifecycle, warmup, and the batch/long-form runner (sequential streaming, planner, bounded assembly)"}
       ]
     },
     {
