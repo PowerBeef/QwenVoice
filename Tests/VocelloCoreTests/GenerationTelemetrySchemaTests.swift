@@ -360,6 +360,49 @@ final class GenerationTelemetrySchemaTests: XCTestCase {
         XCTAssertEqual(decorated.map(\.stage), ["first", "second"])
     }
 
+    func testDropoutThresholdsAreDurationCalibrated() {
+        // A 1.4 s interior gap: hard "dropout" fail on short-form content,
+        // within natural narration pacing on long content (2026-07-23
+        // calibration from a retained failed-qc long-form segment whose gaps
+        // position-correlated with sentence/comma boundaries).
+        var limiter = PCM16StreamLimiter()
+        var destination: [Int16] = []
+        let sampleRate = 1_000
+        limiter.append([0.2], into: &destination)
+        limiter.append([Float](repeating: 0, count: 1_400), into: &destination)
+        limiter.append([0.2], into: &destination)
+
+        let shortForm = StreamingExecutionContext.makeAudioQCReport(
+            metrics: limiter.metrics,
+            sampleRate: sampleRate,
+            durationSeconds: 10,
+            expectedPauseCount: 8
+        )
+        XCTAssertEqual(shortForm.verdict, .fail)
+        XCTAssertTrue(shortForm.flags.contains(where: { $0.hasPrefix("dropout:") }))
+
+        let longContent = StreamingExecutionContext.makeAudioQCReport(
+            metrics: limiter.metrics,
+            sampleRate: sampleRate,
+            durationSeconds: 60,
+            expectedPauseCount: 8
+        )
+        XCTAssertNotEqual(longContent.verdict, .fail, "1.4 s narration pause must not hard-fail long content")
+
+        // The egregious line still exists for long content: a 2.2 s gap fails.
+        var deadAir = PCM16StreamLimiter()
+        deadAir.append([0.2], into: &destination)
+        deadAir.append([Float](repeating: 0, count: 2_200), into: &destination)
+        deadAir.append([0.2], into: &destination)
+        let longDeadAir = StreamingExecutionContext.makeAudioQCReport(
+            metrics: deadAir.metrics,
+            sampleRate: sampleRate,
+            durationSeconds: 60,
+            expectedPauseCount: 8
+        )
+        XCTAssertEqual(longDeadAir.verdict, .fail)
+    }
+
     func testCrossChunkSilenceAndMergeCompleteness() throws {
         var limiter = PCM16StreamLimiter()
         var destination: [Int16] = []

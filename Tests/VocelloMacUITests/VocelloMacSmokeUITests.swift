@@ -31,6 +31,15 @@ final class VocelloMacSmokeUITests: VocelloMacUITestCase {
         ["QWENVOICE_FAKE_MIC_WAV": Self.virtualClipURL.path]
     }
 
+    /// Random lowercase pseudo-word: unique enough for History matching while
+    /// reading as one spoken token. Hex/UUID nonces are spelled out character
+    /// by character with pauses that can trip the punctuation-budget dropout
+    /// QC rule on real generations.
+    private static func pronounceableNonce() -> String {
+        let letters = Array("abcdefghijklmnopqrstuvwxyz")
+        return String((0..<8).map { _ in letters.randomElement()! })
+    }
+
     func test01_NavigationAndReadiness() {
         beginSession()
         defer { endSession() }
@@ -48,7 +57,7 @@ final class VocelloMacSmokeUITests: VocelloMacUITestCase {
         beginSession()
         defer { endSession() }
 
-        let nonce = "smoke-complete-\(UUID().uuidString.prefix(8))"
+        let nonce = "smoke-complete-\(Self.pronounceableNonce())"
         prepare(mode: .custom)
         replaceScript(with: "Automated Custom Voice smoke generation \(nonce).")
         generateAndWaitForCompletion(mode: .custom, timeout: 240)
@@ -63,7 +72,7 @@ final class VocelloMacSmokeUITests: VocelloMacUITestCase {
         beginSession()
         defer { endSession() }
 
-        let nonce = "smoke-cancel-\(UUID().uuidString.prefix(8))"
+        let nonce = "smoke-cancel-\(Self.pronounceableNonce())"
         prepare(mode: .custom)
         replaceScript(
             with: VocelloUIBenchMatrix.text(for: .long) + " Cancellation token \(nonce)."
@@ -150,6 +159,96 @@ final class VocelloMacSmokeUITests: VocelloMacUITestCase {
         navigate(to: .settings)
         XCTAssertTrue(VocelloUIWait.exists(element("settings_modelDownloadsSummary"), timeout: 20))
         VocelloUIScreenshot.attach(app, named: "mac-smoke-library")
+    }
+
+    /// Live long-form v4 acceptance: a >900-character script routes to the
+    /// long-form sheet, plans multiple segments, streams them sequentially,
+    /// joins the output, and lands in History as a project row with an
+    /// expandable segment map. Real generation: expect several minutes.
+    func test06_LongFormProjectJourney() {
+        beginSession()
+        defer { endSession() }
+
+        let nonce = "smoke-longform-\(Self.pronounceableNonce())"
+        // Varied natural narration (~1,900 characters -> two planned segments):
+        // verbatim sentence repetition can push the model into degenerate
+        // delivery, which would test the corpus rather than the pipeline.
+        let paragraphs = [
+            "Long-form acceptance token \(nonce) opens this narration with a calm, steady voice.",
+            "The morning train slipped quietly out of the station, carrying a handful of sleepy travelers toward the coast.",
+            "Outside the fogged windows, pale fields gave way to grey water, and the rhythm of the rails settled into a low, hypnotic hum.",
+            "By the time the sun finally broke through, most of the passengers had drifted into an unhurried silence.",
+            "A conductor moved down the aisle with practiced ease, greeting familiar faces and pausing to answer a question about the tides.",
+            "Somewhere behind the last carriage, gulls wheeled over the harbor, their cries thin against the wind.",
+            "The narrator lingered on small details: a folded newspaper, a chipped enamel mug, the smell of salt drifting through a cracked window.",
+            "Later, the town appeared all at once, stacked in weathered rows above the seawall, chimneys leaning into the light.",
+            "People stepped down onto the platform and scattered toward their mornings, and the train breathed out and rested.",
+            "The story closed the way it began, with the sea keeping its own patient time beneath a widening sky.",
+            "Every ending leaves a little room, the narrator said, for whatever the afternoon decides to become.",
+            "And with that, the recording came gently to a close, its final sentence trailing into the sound of distant water.",
+            "A second movement began further up the coast, where the road narrowed between dry stone walls and fields of late clover.",
+            "Cyclists passed in twos and threes, and an old dog watched them from a doorway without much opinion either way.",
+            "In the market square, awnings snapped softly in the breeze while crates of plums and greens changed hands with easy talk.",
+            "The clock above the chemist ran four minutes fast, a fact the whole town had agreed to forgive decades ago.",
+            "When the rain finally came, it arrived politely, more mist than storm, silvering the slate roofs one street at a time.",
+            "Children ran the long way home past the bakery, trading exaggerated stories about the size of the waves beyond the pier.",
+            "Evening settled in without ceremony, and the lamps along the seafront warmed to their work one by one.",
+            "The narrator let the last image stand on its own: a small boat turning for home, its wake folding back into the dark water.",
+        ]
+        let script = paragraphs.joined(separator: " ")
+        XCTAssertGreaterThan(script.count, 1_300)
+
+        prepare(mode: .custom)
+        replaceScript(with: script)
+
+        // Long scripts route the visible Generate action to the long-form sheet.
+        XCTAssertTrue(VocelloUIPrimaryAction.perform(on: button("textInput_generateButton"), timeout: 30))
+        let generateAll = button("batch_generateAllButton")
+        XCTAssertTrue(VocelloUIWait.exists(generateAll, timeout: 30))
+        XCTAssertTrue(VocelloUIPrimaryAction.perform(on: generateAll, timeout: 20))
+
+        // Completion: the long-form outcome exposes per-segment regeneration
+        // and, on a clean run, no resume affordance.
+        let firstRegenerate = button("batch_regenerateSegment_0")
+        let resume = button("batch_resumeLongFormButton")
+        XCTAssertTrue(
+            VocelloUIWait.condition("long-form outcome to settle", timeout: 900) {
+                firstRegenerate.exists || resume.exists
+            },
+            "long-form generation must reach a terminal project outcome"
+        )
+        XCTAssertTrue(
+            firstRegenerate.exists && !resume.exists,
+            "a clean long-form run must save every segment (resume affordance means a segment failed)"
+        )
+        VocelloUIScreenshot.attach(app, named: "mac-smoke-longform-complete")
+
+        let done = button("batch_doneButton")
+        XCTAssertTrue(VocelloUIPrimaryAction.perform(on: done, timeout: 20))
+
+        // Search renders flat: the nonce appears in the joined row and the
+        // first segment row.
+        assertHistoryRows(matching: nonce, expected: 2)
+
+        // Cleared search groups the project: the joined row exposes the
+        // segment-map toggle.
+        let search = element("history_searchField", type: .searchField)
+        XCTAssertTrue(VocelloUITextEntry.replace(in: search, with: "", timeout: 20))
+        let togglePredicate = NSPredicate(
+            format: "identifier BEGINSWITH 'history_longFormSegmentsToggle_'"
+        )
+        let toggle = app.descendants(matching: .any).matching(togglePredicate).firstMatch
+        XCTAssertTrue(
+            VocelloUIWait.condition("long-form project row to expose its segment map toggle", timeout: 30) {
+                toggle.exists
+            }
+        )
+        XCTAssertTrue(VocelloUIPrimaryAction.perform(on: toggle, timeout: 20))
+        VocelloUIScreenshot.attach(app, named: "mac-smoke-longform-history-project")
+
+        // Expanded map shows the nonce twice even without search (joined row
+        // plus the first segment row).
+        assertHistoryRows(matching: nonce, expected: 2)
     }
 
     /// Writes a mono 24 kHz speech-like PCM WAV: a two-tone "voice" under a

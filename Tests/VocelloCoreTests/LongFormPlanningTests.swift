@@ -1,5 +1,6 @@
 import Foundation
 @testable import QwenVoiceCore
+import QwenVoiceBackendCore
 import XCTest
 
 final class LongFormPlanningTests: XCTestCase {
@@ -154,6 +155,34 @@ final class LongFormPlanningTests: XCTestCase {
         XCTAssertTrue(annotated.allSatisfy {
             $0.evidence.codeSwitchRanges.allSatisfy { $0.languageIdentifier == "ja-JP" }
         })
+    }
+
+    func testShippingBudgetKeepsWorstCaseAudioUnderCodecCap() throws {
+        let budget = LongFormPlanningConfiguration.shippingRuntimeTokenLimit
+        // Conservative estimate units are ~chars/3 (ASCII); codec tokens are
+        // time-based at 12/s and measure ≈2.6× the estimate at canonical pace
+        // (341-char bench long → ~293 codec vs ~114 estimated), ≈3.6× slow.
+        XCTAssertLessThanOrEqual(
+            Int(Double(budget) * 3.6),
+            Qwen3GenerationConfiguration.officialQualityDefault.maxNewTokens,
+            "worst-case slow-speech audio for one planned segment must stay under the codec cap"
+        )
+        XCTAssertGreaterThanOrEqual(budget, 256, "budget must keep long-form segments usefully large")
+
+        // A dense multi-sentence script beyond one budget must split.
+        let sentence = "The narrator kept a steady, unhurried pace through the winding chapters of the story. "
+        let longScript = String(repeating: sentence, count: 40)  // ~3,480 chars
+        let plan = try LongFormPlanner.plan(
+            spokenTextPlan: SpokenTextPlanner.plan(originalText: longScript),
+            configuration: LongFormPlanningConfiguration(
+                runtimeTokenLimit: budget,
+                baseSeed: 7
+            )
+        )
+        XCTAssertGreaterThan(plan.segments.count, 1)
+        for segment in plan.evidence.segments {
+            XCTAssertLessThanOrEqual(segment.conservativeTokenEstimate, budget)
+        }
     }
 
     func testSchemaV4RoundTripIsPrivacySafe() throws {

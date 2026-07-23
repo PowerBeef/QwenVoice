@@ -236,6 +236,13 @@ struct BatchGenerationRequest {
         )
     }
 
+    /// Pause budget for the assembled output: the whole script's punctuation
+    /// plus the assembler's own inserted boundary pauses.
+    var joinedOutputPauseBudget: Int {
+        lines.reduce(0) { $0 + PersistedWAVAudioQCAnalyzer.expectedPauseCount(in: $1) }
+            + max(0, lines.count - 1)
+    }
+
     /// History record for the assembled long-form output. Text is the joined
     /// spoken script; duration derives from the assembler's exact frame count.
     func makeJoinedHistoryRecord(
@@ -273,10 +280,15 @@ struct BatchGenerationRequest {
     func makeGenerationRequest(
         for line: String,
         outputPath: String,
-        batchIndex: Int?,
-        batchTotal: Int?,
+        batchIndex rawBatchIndex: Int?,
+        batchTotal rawBatchTotal: Int?,
         seedOverride: UInt64? = nil
     ) -> QwenVoiceNative.GenerationRequest {
+        // Long-form v4 segments are ordinary sequential streaming takes; the
+        // engine's support decision reserves batch markers for the native
+        // batch API, and segment order/identity live in the plan + manifest.
+        let batchIndex = streamsSegments ? nil : rawBatchIndex
+        let batchTotal = streamsSegments ? nil : rawBatchTotal
         switch mode {
         case .custom:
             return QwenVoiceNative.GenerationRequest(
@@ -293,7 +305,7 @@ struct BatchGenerationRequest {
                         ? (emotion ?? DeliveryProfile.neutralInstruction)
                         : nil
                 ),
-                seed: segmentSeed(batchIndex: batchIndex, seedOverride: seedOverride),
+                seed: segmentSeed(batchIndex: rawBatchIndex, seedOverride: seedOverride),
                 variation: GenerationVariationPreference.requestValue(),
                 suppressStreamingPreview: streamsSegments ? true : nil
             )
@@ -310,7 +322,7 @@ struct BatchGenerationRequest {
                     voiceDescription: voiceDescription ?? "",
                     deliveryStyle: emotion ?? DeliveryProfile.neutralInstruction
                 ),
-                seed: segmentSeed(batchIndex: batchIndex, seedOverride: seedOverride),
+                seed: segmentSeed(batchIndex: rawBatchIndex, seedOverride: seedOverride),
                 variation: GenerationVariationPreference.requestValue(),
                 suppressStreamingPreview: streamsSegments ? true : nil
             )
@@ -329,7 +341,7 @@ struct BatchGenerationRequest {
                         transcript: refText
                     )
                 ),
-                seed: segmentSeed(batchIndex: batchIndex, seedOverride: seedOverride),
+                seed: segmentSeed(batchIndex: rawBatchIndex, seedOverride: seedOverride),
                 variation: GenerationVariationPreference.requestValue(),
                 suppressStreamingPreview: streamsSegments ? true : nil
             )
@@ -698,16 +710,16 @@ final class BatchGenerationRunner {
     private let engineStore: TTSEngineStore
     private let store: any GenerationPersisting
     private let generationEvents: GenerationLibraryEvents
-    private let audioQualityEvaluator: (URL) async -> AudioQualityGate.Report
+    private let audioQualityEvaluator: (URL, Int) async -> AudioQualityGate.Report
     private let cancellationState = BatchGenerationCancellationState()
 
     init(
         engineStore: TTSEngineStore,
         store: any GenerationPersisting,
         generationEvents: GenerationLibraryEvents = .shared,
-        audioQualityEvaluator: @escaping (URL) async -> AudioQualityGate.Report = { url in
+        audioQualityEvaluator: @escaping (URL, Int) async -> AudioQualityGate.Report = { url, expectedPauseCount in
             await Task.detached(priority: .utility) {
-                AudioQualityGate.evaluate(url: url)
+                AudioQualityGate.evaluate(url: url, expectedPauseCount: expectedPauseCount)
             }.value
         }
     ) {
@@ -872,7 +884,10 @@ final class BatchGenerationRunner {
                items[index].isSaved,
                let reusedPath = items[index].audioPath {
                 // Resume: re-verify the retained take instead of regenerating.
-                let qualityReport = await audioQualityEvaluator(URL(fileURLWithPath: reusedPath))
+                let qualityReport = await audioQualityEvaluator(
+                    URL(fileURLWithPath: reusedPath),
+                    PersistedWAVAudioQCAnalyzer.expectedPauseCount(in: line)
+                )
                 longFormQualityReports.append(qualityReport)
                 if !qualityReport.passed {
                     items[index].status = .failed(message: qualityReport.failureSummary)
@@ -910,7 +925,10 @@ final class BatchGenerationRunner {
                 )
 
                 if request.segmentationMode == .longForm {
-                    let qualityReport = await audioQualityEvaluator(URL(fileURLWithPath: result.audioPath))
+                    let qualityReport = await audioQualityEvaluator(
+                        URL(fileURLWithPath: result.audioPath),
+                        PersistedWAVAudioQCAnalyzer.expectedPauseCount(in: line)
+                    )
                     longFormQualityReports.append(qualityReport)
                     if !qualityReport.passed {
                         items[index].status = .failed(message: qualityReport.failureSummary)
@@ -967,7 +985,10 @@ final class BatchGenerationRunner {
             publishProgress(activeItemIndex: nil, message: "Joining segments...")
             do {
                 let joined = try await assembleLongFormOutput(request: request, items: items)
-                let joinedReport = await audioQualityEvaluator(joined.outputURL)
+                let joinedReport = await audioQualityEvaluator(
+                    joined.outputURL,
+                    request.joinedOutputPauseBudget
+                )
                 await persistLongFormV4Manifest(
                     request: request,
                     items: items,
@@ -1065,7 +1086,10 @@ final class BatchGenerationRunner {
                     seedOverride: replacementSeed
                 )
             )
-            let qualityReport = await audioQualityEvaluator(URL(fileURLWithPath: result.audioPath))
+            let qualityReport = await audioQualityEvaluator(
+                URL(fileURLWithPath: result.audioPath),
+                PersistedWAVAudioQCAnalyzer.expectedPauseCount(in: line)
+            )
             guard qualityReport.passed else {
                 items[segmentIndex] = priorItems[segmentIndex]
                 onItemsUpdated(items)
@@ -1108,7 +1132,10 @@ final class BatchGenerationRunner {
                 index == segmentIndex ? qualityReport : nil
             }
             let joined = try await assembleLongFormOutput(request: request, items: items)
-            let joinedReport = await audioQualityEvaluator(joined.outputURL)
+            let joinedReport = await audioQualityEvaluator(
+                joined.outputURL,
+                request.joinedOutputPauseBudget
+            )
             await persistLongFormV4Manifest(
                 request: request,
                 items: items,
@@ -1219,7 +1246,7 @@ final class BatchGenerationRunner {
         return (evidence, outputURL)
     }
 
-    private nonisolated func persistLongFormV4Manifest(
+    private func persistLongFormV4Manifest(
         request: BatchGenerationRequest,
         items: [BatchGenerationItemState],
         qualityReports: [AudioQualityGate.Report?],
@@ -1227,20 +1254,28 @@ final class BatchGenerationRunner {
         replacements: [LongFormSegmentReplacementEvidence] = []
     ) async {
         guard let plan = request.longFormPlan else { return }
+        let audioPaths: [String?] = plan.evidence.segments.indices.map { index in
+            index < items.count ? items[index].audioPath : nil
+        }
+        // One detached probe for every duration; the evidence loop below is
+        // fully synchronous on the main actor.
+        let durations: [Double?] = await Task.detached(priority: .utility) {
+            audioPaths.map { path -> Double? in
+                guard let path,
+                      let audioFile = try? AVAudioFile(forReading: URL(fileURLWithPath: path)),
+                      audioFile.processingFormat.sampleRate > 0 else { return nil }
+                return Double(audioFile.length) / audioFile.processingFormat.sampleRate
+            }
+        }.value
         var segmentEvidence: [LongFormSegmentExecutionEvidence] = []
         for (index, segment) in plan.evidence.segments.enumerated() {
-            let audioPath = index < items.count ? items[index].audioPath : nil
             let report = index < qualityReports.count ? qualityReports[index] : nil
-            var duration: Double?
-            if let audioPath {
-                duration = await BatchGenerationRequest.audioDurationSeconds(for: audioPath)
-            }
             segmentEvidence.append(
                 LongFormSegmentExecutionEvidence(
                     index: segment.index,
                     segmentID: segment.segmentID,
-                    generated: audioPath != nil,
-                    audioDurationSeconds: duration,
+                    generated: audioPaths[index] != nil,
+                    audioDurationSeconds: durations[index],
                     qcPassed: report?.passed,
                     qcRequiredFailures: report?.requiredFailures ?? [],
                     qcWarnings: report?.warnings ?? []
@@ -1250,15 +1285,15 @@ final class BatchGenerationRunner {
         let manifest = LongFormManifestV4(
             plan: plan.evidence,
             execution: LongFormExecutionEvidence(
-                generatedAtUTC: ISO8601DateFormatter().string(from: Date()),
+                generatedAtUTC: Date().formatted(.iso8601),
                 streamingExecution: true,
                 segments: segmentEvidence
             ),
             assembly: assembly,
             replacements: replacements
         )
-        guard let directory = items.compactMap(\.audioPath).first
-            .map({ URL(fileURLWithPath: $0).deletingLastPathComponent() }) else { return }
+        guard let firstAudioPath = items.compactMap({ $0.audioPath }).first else { return }
+        let directory = URL(fileURLWithPath: firstAudioPath).deletingLastPathComponent()
         let digestPrefix = String(plan.evidence.planDigest.prefix(8))
         let manifestURL = directory.appendingPathComponent(
             "long_form_manifest_\(digestPrefix).json",

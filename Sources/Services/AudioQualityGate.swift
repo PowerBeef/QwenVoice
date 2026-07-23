@@ -33,9 +33,14 @@ enum AudioQualityGate {
         case warning
     }
 
-    static func evaluate(url: URL) -> Report {
+    static func evaluate(url: URL, expectedPauseCount: Int = 0) -> Report {
         do {
-            return report(from: try PersistedWAVAudioQCAnalyzer.evaluate(url: url))
+            return report(
+                from: try PersistedWAVAudioQCAnalyzer.evaluate(
+                    url: url,
+                    expectedPauseCount: expectedPauseCount
+                )
+            )
         } catch {
             let check = Check(
                 name: "persisted_wav_readable",

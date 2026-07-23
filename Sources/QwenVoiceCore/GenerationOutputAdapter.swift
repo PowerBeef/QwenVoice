@@ -1482,8 +1482,16 @@ struct StreamingExecutionContext: Sendable {
             )
             await telemetrySampler?.captureBoundary("after_audio_qc")
             guard finalAudioQC.verdict != .fail else {
+                // Triage evidence for an intermittent failure class: name the
+                // exact failing rule flags (allowlisted labels, privacy-safe)
+                // and, in diagnostics-enabled sessions, retain the rejected
+                // staged WAV (newest only) so the audio itself is inspectable.
+                if TelemetryGate.resolvedEnabled {
+                    Self.preserveFailedQCStagedWAV(stagingURL, sessionDirectory: sessionDirectory)
+                }
                 throw MLXTTSEngineError.generationFailed(
-                    "The finalized streaming WAV failed mandatory Fast audio QC."
+                    "The finalized streaming WAV failed mandatory Fast audio QC "
+                    + "[\(finalAudioQC.flags.joined(separator: ","))]."
                 )
             }
             try finalWriter.publish()
@@ -1683,6 +1691,20 @@ struct StreamingExecutionContext: Sendable {
     /// empty-output, token-cap, or finalization failures that occur outside the
     /// producer-loop catch. The sampler itself is idempotent, so an outer cleanup
     /// may safely call stop again without changing this evidence.
+    /// Newest-only retention of a QC-rejected staged WAV beside the session
+    /// tree (policy-owned cache; routine cleanup prunes it). Diagnostics-gated
+    /// by the caller.
+    private static func preserveFailedQCStagedWAV(_ stagingURL: URL, sessionDirectory: URL) {
+        let holdingDirectory = sessionDirectory
+            .deletingLastPathComponent()
+            .appendingPathComponent("failed-audio-qc", isDirectory: true)
+        let fileManager = FileManager.default
+        try? fileManager.createDirectory(at: holdingDirectory, withIntermediateDirectories: true)
+        let destination = holdingDirectory.appendingPathComponent("failed-qc-latest.wav", isDirectory: false)
+        try? fileManager.removeItem(at: destination)
+        try? fileManager.copyItem(at: stagingURL, to: destination)
+    }
+
     private func writeFailureTelemetry(
         error: Error,
         usedStreaming: Bool,
@@ -2094,9 +2116,16 @@ struct StreamingExecutionContext: Sendable {
         // EGREGIOUS gap no natural pause reaches. A mid-phrase gap that merely
         // replaces a punctuation pause cannot be classified by amplitude alone;
         // fixed-seed exact-WAV, ASR-consensus, and prosody evidence own that gate.
-        let longPauseMS = 350        // "sentence/long-comma" scale pause
-        let egregiousMS = 1200       // no natural pause reaches this → always a defect
-        let suspiciousSingleMS = 900 // above the observed natural max (~810 ms)
+        // Long-content calibration (2026-07-23): ~60 s narration segments show
+        // sentence/comma pauses up to ~1.45 s (retained failed-qc evidence,
+        // gap positions correlated with text boundaries). The short-form
+        // thresholds below were calibrated on the ≤341-char canonical corpus
+        // (natural max ~810 ms) and misclassified narration pacing as
+        // dropouts when extrapolated to minute-scale takes.
+        let longContent = durationSeconds >= 45
+        let longPauseMS = longContent ? 600 : 350
+        let egregiousMS = longContent ? 2_000 : 1_200
+        let suspiciousSingleMS = longContent ? 1_500 : 900
         let longPauseCount = interiorSilencesMS.filter { $0 >= longPauseMS }.count
         let excessLongPauses = max(0, longPauseCount - max(0, expectedPauseCount))
 
@@ -2366,5 +2395,14 @@ public enum PersistedWAVAudioQCAnalyzer {
             at: url,
             expectedPauseCount: expectedPauseCount
         )
+    }
+
+    /// Punctuation-derived pause budget for `expectedPauseCount:` — the same
+    /// counter the engine's mandatory Fast QC applies to its request text.
+    /// Callers validating persisted audio against known source text must pass
+    /// this; a zero budget makes every natural sentence pause count as an
+    /// excess dropout.
+    public static func expectedPauseCount(in text: String) -> Int {
+        StreamingExecutionContext.expectedPauseCount(in: text)
     }
 }

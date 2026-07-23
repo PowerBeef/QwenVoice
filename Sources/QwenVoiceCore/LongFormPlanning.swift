@@ -105,10 +105,27 @@ public struct LongFormPlanningConfiguration: Codable, Equatable, Hashable, Senda
 }
 
 extension LongFormPlanningConfiguration {
-    /// The shipping Qwen codec-token cap used when planning against the app's
-    /// generation policy.
+    /// Per-segment planning budget in the conservative TEXT-token estimate's
+    /// units. Two ceilings apply and the budget honors the tighter one:
+    ///
+    /// 1. **Codec safety.** The estimator yields ~chars/3 for English; codec
+    ///    tokens are time-based (12/s), so codec ≈ 2.6× the estimate at
+    ///    canonical pace and ≈ 3.6× slow. The budget × 3.6 must stay inside
+    ///    `Qwen3GenerationConfiguration.officialQualityDefault.maxNewTokens`.
+    /// 2. **Delivery stability.** Single-request pacing degrades on very long
+    ///    generations: a live 2026-07-23 ~1,100-character segment (~97 s)
+    ///    produced a 2,073 ms interior gap plus 24 pauses ≥ 350 ms and was
+    ///    correctly hard-failed by QC. The historical long-form path was
+    ///    delivery-validated at ≤ 900 characters (~60 s); 300 estimate units
+    ///    ≈ 900 English characters keeps planned segments inside that
+    ///    envelope.
+    ///
+    /// 300 × 3.6 ≈ 1,080 codec tokens — the delivery ceiling binds first.
     public static var shippingRuntimeTokenLimit: Int {
-        Qwen3GenerationConfiguration.officialQualityDefault.maxNewTokens
+        let codecCap = Qwen3GenerationConfiguration.officialQualityDefault.maxNewTokens
+        let codecSafeBudget = max(64, codecCap / 4)
+        let deliveryValidatedBudget = 300
+        return min(codecSafeBudget, deliveryValidatedBudget)
     }
 }
 
@@ -605,38 +622,51 @@ public struct LongFormManifestV4: Codable, Equatable, Sendable {
         }
         guard manifestKind == "long_form_generation",
               plan.schemaVersion == LongFormPlanEvidence.currentSchemaVersion,
-              plan.segmentCount == plan.segments.count,
-              Set(plan.segments.map(\.segmentID)).count == plan.segments.count,
-              plan.segments.enumerated().allSatisfy({ offset, segment in
-                  segment.index == offset + 1
-                      && segment.runtimeTokenLimit == plan.runtimeTokenLimit
-                      && segment.conservativeTokenEstimate <= plan.runtimeTokenLimit
-              }) else {
+              plan.segmentCount == plan.segments.count else {
+            throw LongFormPlanningError.invalidManifest("v4 planning contract")
+        }
+        var planIDs: [String] = []
+        planIDs.reserveCapacity(plan.segments.count)
+        for (offset, segment) in plan.segments.enumerated() {
+            guard segment.index == offset + 1,
+                  segment.runtimeTokenLimit == plan.runtimeTokenLimit,
+                  segment.conservativeTokenEstimate <= plan.runtimeTokenLimit else {
+                throw LongFormPlanningError.invalidManifest("v4 planning contract")
+            }
+            planIDs.append(segment.segmentID)
+        }
+        guard Set(planIDs).count == planIDs.count else {
             throw LongFormPlanningError.invalidManifest("v4 planning contract")
         }
         if let execution {
-            let planIDs = plan.segments.map(\.segmentID)
-            guard execution.segments.count == plan.segmentCount,
-                  execution.segments.map(\.segmentID) == planIDs,
-                  execution.segments.enumerated().allSatisfy({ offset, segment in
-                      segment.index == offset + 1
-                  }) else {
+            guard execution.segments.count == plan.segmentCount else {
                 throw LongFormPlanningError.invalidManifest("v4 execution contract")
+            }
+            for (offset, segment) in execution.segments.enumerated() {
+                guard segment.index == offset + 1,
+                      segment.segmentID == planIDs[offset] else {
+                    throw LongFormPlanningError.invalidManifest("v4 execution contract")
+                }
             }
         }
         if let assembly {
             guard execution != nil,
                   assembly.segmentCount == plan.segmentCount,
-                  assembly.segments.map(\.segmentID) == plan.segments.map(\.segmentID) else {
+                  assembly.segments.count == planIDs.count else {
                 throw LongFormPlanningError.invalidManifest("v4 assembly contract")
+            }
+            for (offset, segment) in assembly.segments.enumerated() {
+                guard segment.segmentID == planIDs[offset] else {
+                    throw LongFormPlanningError.invalidManifest("v4 assembly contract")
+                }
             }
         }
         if let replacements {
-            let planIDs = Set(plan.segments.map(\.segmentID))
+            let planIDSet = Set(planIDs)
             var nextRevisionBySegment: [String: Int] = [:]
             for replacement in replacements {
                 let expected = nextRevisionBySegment[replacement.segmentID] ?? 2
-                guard planIDs.contains(replacement.segmentID),
+                guard planIDSet.contains(replacement.segmentID),
                       replacement.revision == expected else {
                     throw LongFormPlanningError.invalidManifest("v4 replacement contract")
                 }

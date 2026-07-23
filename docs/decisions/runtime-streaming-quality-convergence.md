@@ -323,3 +323,38 @@ streaming is the project's primary RAM architecture — is resolved for the macO
   (`long_form_joined_<planDigest8>.wav`, `long_form_manifest_<planDigest8>.json`), removing the
   cross-project overwrite the fixed names allowed.
 - **Open.** Live long-form acceptance in the app UI, then iOS long-form as its own arc.
+
+## Amendment 2026-07-23f — long-form QC calibration (acceptance-driven)
+
+Driving the live long-form acceptance exposed three compounding QC defects, all
+fixed deterministically (full evidence: `benchmarks/OPTIMIZATION.md` §K
+addendum):
+
+1. The app-side segment gate ran with a zero pause budget (no segment text) —
+   budgets are now threaded through every segment, resume, regeneration, and
+   joined-output check, with the joined budget crediting the assembler's
+   inserted boundary pauses.
+2. The planner budget allowed ~100 s segments beyond the delivery-validated
+   envelope — now bound to min(codec-safe cap/4, 300 delivery-validated
+   estimate units ≈ 900 characters).
+3. Dropout thresholds calibrated on ≤341-char content misclassified
+   minute-scale narration pacing — now duration-aware (≥45 s: long-pause
+   600 ms, suspicious 1,500 ms, egregious 2,000 ms), pinned by a core test and
+   calibrated from a retained rejected segment whose >1 s gaps
+   position-correlate with text boundaries.
+
+Acceptance also exposed a deterministic `-O`-only crash: `objc_release` of a
+garbage address inside `LongFormManifestV4.validated()` (inlined into the
+manifest persist), reproduced 4/4 in the optimized UI-lane build and invisible
+to `-Onone` dev builds and core tests. A stage-breadcrumb bisect isolated the
+validate step; rewriting `validated()` without keypath-literal
+`map(\.segmentID)`/`allSatisfy` (explicit loops, identical semantics)
+eliminated it 1/1 with the full construct → validate → encode → write flow
+restored. Recorded as an optimizer-sensitivity workaround with deterministic
+before/after reproduction, not a proven compiler-bug diagnosis.
+
+Mandatory-QC rejections now name their rule flags and retain the rejected
+staged WAV (newest only, diagnostics-gated). The three phase-7-era reverted
+engine-loop experiments are reattributed as likely innocent of the historical
+intermittent QC failures (which remain unattributed but now self-document on
+recurrence); they stay reverted on cost/benefit grounds.

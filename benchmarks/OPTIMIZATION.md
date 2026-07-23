@@ -22,6 +22,46 @@ Quality RTF **0.77–0.84**, physFoot **3.1–3.6 GB**. All QC pass; `trims = 0`
 on the bench machine. Historical manual ledger: [`LEGACY_HISTORY.md`](LEGACY_HISTORY.md). New comparable
 runs: generated [`HISTORY.md`](HISTORY.md).
 
+### §K addendum — long-form QC calibration and the phase-7 QC-failure reattribution (2026-07-23)
+
+Driving the phase-11 live long-form acceptance surfaced a chain of deterministic
+QC findings:
+
+- **The long-form segment failures were systematic, not flaky.** Three
+  compounding causes: (1) the app-side segment gate ran the persisted-WAV
+  analyzer with `expectedPauseCount: 0` because it never received the segment
+  text, so every natural sentence pause counted as an excess dropout; (2) the
+  initial planner budget (512 estimate units ≈ 1,500 chars ≈ 100 s) exceeded
+  the delivery-validated ≤900-char envelope and produced genuinely degenerate
+  pacing (a live ~1,100-char segment showed a 2,073 ms interior gap); (3) even
+  at the 900-char scale, the dropout thresholds (egregious 1,200 ms /
+  suspicious 900 ms / long-pause 350 ms) were calibrated on the ≤341-char
+  canonical corpus and misclassified minute-scale narration pacing — a
+  retained rejected segment (64 s, healthy RMS −24.6 dBFS) had its six >1 s
+  gaps position-correlated with sentence/comma/pseudo-word boundaries, max
+  1,435 ms. Fixes: pause budgets threaded through every app-side QC call, the
+  planner budget bound to min(codec-safe, 300 delivery-validated units), and
+  duration-aware thresholds (≥45 s content: 600/1,500/2,000 ms) pinned by a
+  deterministic core test.
+- **Failure evidence is no longer discarded.** A mandatory-QC rejection now
+  names its rule flags in the error and, in diagnostics-enabled sessions,
+  retains the rejected staged WAV (newest only) beside the session tree — the
+  mechanism that produced the calibration evidence above.
+- **The phase-7 intermittent QC failures are reattributed to "unknown, now
+  diagnosable."** A near-silent-first-chunk failure fired on a build without
+  the three reverted engine-loop experiments, so they were likely falsely
+  convicted (they stay reverted — they bought no measured win). The two
+  historical ≤341-char intermittents remain unattributed; any recurrence now
+  self-documents via flags plus the retained WAV.
+- **A deterministic `-O`-only crash in manifest validation** (`objc_release`
+  of a garbage address in `LongFormManifestV4.validated()`, 4/4 reproduction
+  in the optimized UI-lane build, invisible at `-Onone`) was isolated with a
+  stage-breadcrumb bisect and eliminated by rewriting the validator without
+  keypath-literal `map`/`allSatisfy` — an optimizer-sensitivity workaround
+  with deterministic before/after evidence.
+- **Smoke nonces are pronounceable words** (hex tokens were spelled out with
+  pause-inducing character breaks that consumed unbudgeted pause allowance).
+
 ## Status at a glance
 
 | # | Workstream | Status | Where |
