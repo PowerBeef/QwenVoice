@@ -1858,6 +1858,7 @@ struct StreamingExecutionContext: Sendable {
         var notesWithTier = tierNotes
             .merging(notes) { _, caller in caller }
             .merging(currentTaskQOSNotes()) { current, _ in current }
+            .merging(currentProcessSchedulingNotes()) { current, _ in current }
             .merging(BenchRunContext.telemetryNotes(intendedWarmState: warmState.rawValue)) { current, _ in current }
         let fixtureDigest: String? = {
             switch request.payload {

@@ -619,10 +619,42 @@ uses a predeclared fixed seed, exact persisted WAV, and three-pass locale-locked
 consensus. The macOS CLI lane remains hint-only; no workflow falls back to subjective listening as a
 required gate.
 
+## J — macOS UI-benchmark observer effect and true -O capability (2026-07-23)
+
+The phase-7 characterization program traced the apparent post-cutover macOS UI RTF decline
+(canonical 1.04 → 0.88 → 0.70–0.93 across 2026-07-16→22) to a benchmark **observer effect**, not
+engine or pipeline code:
+
+- **Engine A/B across the Phase-4 cutover is flat.** Interleaved CLI benches at `9a8da874`,
+  `610125b7`, and HEAD (identical `-Onone` dev builds) measured custom/long warm RTF 1.11–1.16
+  in every arm; environment, backpressure (zero lossless-channel producer suspensions), thread
+  priorities, actor-hop counts, executor placement, app UI animation, live-preview playback, and
+  iPhone Mirroring were each individually falsified as causes.
+- **XCUITest's default automatic screen recording was the load.** `VTEncoderXPCService` spawns one
+  second after `testmanagerd` and, with `replayd`, video-encodes the display for the whole run
+  (confirmed by `powermetrics --samplers tasks` mid-take and a Metal System Trace showing the
+  compositor's GPU stream). Setting `preferredScreenCaptureFormat: screenshots` on the UI schemes
+  (project.yml, both platforms) moved the same one-cell lane from warm RTF 0.70–0.78 to **1.196**
+  (+55%) with clean QC. Run-to-run bimodality (0.70 vs 0.93 lanes) tracked recording-session
+  variability, not code.
+- **True engine capability at product optimization was never previously measured.** All historical
+  CLI benches used the `-Onone` dev build; all `-O` measurements went through the recorded UI
+  lane. A one-off `-O` CLI build measured custom/long warm RTF **1.81** (interactive process;
+  0.97 when forced to `taskpolicy -c background`) — consistent with the iPhone 17 Pro's in-process
+  1.70–1.91. The remaining UI-context gap (≈1.2 vs ≈1.8) is the honest app/XPC-topology cost and
+  is the phase-7 optimization target.
+- Per-generation `processTaskRole` / `processMainThreadQOS` / `processNice` self-reporting now
+  lands in telemetry notes so process-class demotion can never hide in future records.
+- **Registry caveat:** macOS/iOS UI-generation records published before 2026-07-23 carry the
+  screen-recording overhead in every cell and are not comparable with post-change UI records
+  (their `harnessHash`/`projectInputHash` differ, so the registry never links them as baselines).
+
 ## Status
 
 The optimization program tracked in this document is wrapped up. The §H P0–P6 work has been
 completed and validated, streaming is now the default generation path, and the remaining
 delivery-accuracy work is recorded in §I. For UI smoothness (G), compare the typed heartbeat and
 playback metrics in compatible records indexed by generated `HISTORY.md`; the former
-`uiMaxStall ms` column remains historical context in `LEGACY_HISTORY.md`.
+`uiMaxStall ms` column remains historical context in `LEGACY_HISTORY.md`. The §J observer-effect
+correction (2026-07-23) re-baselines UI-lane expectations; §H P0's GPU-busy re-measurement remains
+open follow-up work.

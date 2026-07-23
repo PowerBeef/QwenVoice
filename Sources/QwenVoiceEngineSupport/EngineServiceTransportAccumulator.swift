@@ -169,6 +169,7 @@ public struct EngineServiceTransportAccumulator: Sendable {
         }
         let mergedNotes = notes
             .merging(currentTaskQOSNotes()) { current, _ in current }
+            .merging(currentProcessSchedulingNotes()) { current, _ in current }
             .merging(BenchRunContext.telemetryNotes()) { current, _ in current }
         return GenerationTelemetryRecord(
             generationID: generationID.uuidString,

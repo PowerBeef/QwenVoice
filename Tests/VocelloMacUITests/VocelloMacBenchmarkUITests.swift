@@ -40,8 +40,20 @@ final class VocelloMacBenchmarkUITests: VocelloMacUITestCase {
         assertVisibleSpeedModelReadiness()
         ensureCloneConsentEnabled()
         assertSavedCloneVoice()
-        let autoplayWasEnabled = ensureAutoplayEnabled()
-        defer { restoreAutoplayPreference(originallyEnabled: autoplayWasEnabled) }
+        // QVOICE_MAC_BENCH_AUTOPLAY=0 is a diagnostic lane: it drives the
+        // visible toggle OFF to isolate live-preview playback/UI cost during
+        // generation. The canonical benchmark keeps autoplay on.
+        let autoplayDiagnosticOff = processEnvironment["QVOICE_MAC_BENCH_AUTOPLAY"] == "0"
+        let autoplayWasEnabled = autoplayDiagnosticOff
+            ? ensureAutoplayDisabled()
+            : ensureAutoplayEnabled()
+        defer {
+            if autoplayDiagnosticOff {
+                restoreAutoplayAfterDiagnostic(originallyEnabled: autoplayWasEnabled)
+            } else {
+                restoreAutoplayPreference(originallyEnabled: autoplayWasEnabled)
+            }
+        }
 
         var preparedMode: VocelloUIBenchMatrix.Mode?
         for (offset, take) in takes.enumerated() {

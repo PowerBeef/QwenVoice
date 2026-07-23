@@ -198,6 +198,19 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
         let capturedSessionID = sessionLock.withLock { activeSession?.id }
         Task.detached(priority: .userInitiated) { [weak self, payload] in
             guard let self else { return }
+            // Explicit process-level importance for the span of every command.
+            // The XPC reply for `.generate` stays open across the whole
+            // generation, but the implicit transaction boost does not confer
+            // interactive darwin scheduling for the service's GPU work: the
+            // 2026-07-23 characterization measured the identical -O engine at
+            // RTF 1.81 in an interactive-class process vs 0.97 forced to
+            // background class and ~0.75 in this service. This assertion is
+            // the documented counter to that decay; it releases at reply.
+            let processActivity = ProcessInfo.processInfo.beginActivity(
+                options: [.userInitiated, .latencyCritical],
+                reason: "vocello-engine-command"
+            )
+            defer { ProcessInfo.processInfo.endActivity(processActivity) }
             let response = await self.handleCommandPayload(payload)
             let encodedResponse: Data
             do {

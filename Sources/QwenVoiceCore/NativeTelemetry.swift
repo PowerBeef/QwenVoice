@@ -145,6 +145,65 @@ public func currentTaskQOSNotes() -> [String: String] {
     return ["qosClass": name]
 }
 
+/// Self-reported process scheduling state for telemetry notes. A process may
+/// always inspect its own task policy, so this needs no privileges. Records
+/// the darwin task role (the field `taskpolicy -c` clamps), the main thread's
+/// QoS class, and the unix nice value. Added by the 2026-07-23 pipeline-pacing
+/// diagnosis: identical -O engine code measured RTF 1.81 in an interactive
+/// process versus ~0.75 inside the XPC service, and no unprivileged external
+/// tool can read another process's role — self-reporting makes class demotion
+/// visible in every generation row.
+public func currentProcessSchedulingNotes() -> [String: String] {
+    var notes: [String: String] = [:]
+
+    var category = task_category_policy()
+    var count = mach_msg_type_number_t(
+        MemoryLayout<task_category_policy>.size / MemoryLayout<integer_t>.size
+    )
+    var isDefault: boolean_t = 0
+    let result = withUnsafeMutablePointer(to: &category) { pointer in
+        pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { rebound in
+            task_policy_get(
+                mach_task_self_,
+                task_policy_flavor_t(TASK_CATEGORY_POLICY),
+                rebound,
+                &count,
+                &isDefault
+            )
+        }
+    }
+    if result == KERN_SUCCESS {
+        let role: String
+        switch category.role {
+        case TASK_FOREGROUND_APPLICATION: role = "foreground-application"
+        case TASK_BACKGROUND_APPLICATION: role = "background-application"
+        case TASK_NONUI_APPLICATION: role = "nonui-application"
+        case TASK_DEFAULT_APPLICATION: role = "default-application"
+        case TASK_CONTROL_APPLICATION: role = "control-application"
+        case TASK_GRAPHICS_SERVER: role = "graphics-server"
+        case TASK_UNSPECIFIED: role = "unspecified"
+        default: role = "role-\(category.role.rawValue)"
+        }
+        notes["processTaskRole"] = role
+        notes["processTaskRoleIsDefault"] = isDefault == 0 ? "false" : "true"
+    } else {
+        notes["processTaskRole"] = "unavailable-\(result)"
+    }
+
+    let mainQOS: String
+    switch qos_class_main() {
+    case QOS_CLASS_USER_INTERACTIVE: mainQOS = "userInteractive"
+    case QOS_CLASS_USER_INITIATED: mainQOS = "userInitiated"
+    case QOS_CLASS_DEFAULT: mainQOS = "default"
+    case QOS_CLASS_UTILITY: mainQOS = "utility"
+    case QOS_CLASS_BACKGROUND: mainQOS = "background"
+    default: mainQOS = "qos-\(qos_class_main().rawValue)"
+    }
+    notes["processMainThreadQOS"] = mainQOS
+    notes["processNice"] = String(getpriority(PRIO_PROCESS, 0))
+    return notes
+}
+
 /// Description of an `OSSignposter` interval whose wall-clock duration should
 /// also be mirrored into the durable JSONL timings map.
 public struct NativeTelemetrySignpostInterval: Sendable {

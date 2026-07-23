@@ -112,9 +112,16 @@ struct WorkflowReadinessNote: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             if isBusy {
-                ProgressView()
-                    .controlSize(.small)
-                    .tint(accentColor)
+                // Static busy glyph, deliberately not an indeterminate
+                // spinner: a continuously animating element above the Liquid
+                // Glass stack forces full-window recomposition at display
+                // rate for the whole generation, and on the 8 GB tier that
+                // compositor load queues ahead of the engine's GPU work
+                // (2026-07-22 pipeline-pacing diagnosis). The label text
+                // carries the in-progress state.
+                Image(systemName: "waveform")
+                    .font(.subheadline)
+                    .foregroundStyle(accentColor)
                     .frame(width: 16, height: 16)
             } else {
                 // Audit Batch 5c: stronger ready vs not-ready icon

@@ -450,6 +450,20 @@ xcodegen (2.46.0) and ripgrep (15.2.0) now install from SHA-pinned release artif
 `scripts/install_pinned_tools.sh` in every native CI job. The §H P0 GPU-busy re-capture (a clean
 CLI-context Metal trace) remains open follow-up work alongside the phase 7 implementation.
 
+**2026-07-23 — Phase 7 characterization resolved the macOS decline as a benchmark observer
+effect** (`benchmarks/OPTIMIZATION.md` §J): XCUITest's default automatic screen recording
+(`testmanagerd` → `VTEncoderXPCService`/`replayd`) video-encoded the display through every UI
+take; disabling it (`preferredScreenCaptureFormat: screenshots` on both UI schemes in
+`project.yml`) moved the one-cell custom/long lane from warm RTF 0.70–0.78 to **1.196** with
+clean QC. Engine code was exonerated by flat interleaved CLI A/B across the cutover, and a
+one-off `-O` CLI bench measured true Mac capability at **1.81** (all prior CLI numbers were
+`-Onone` dev builds). Three experimental engine-loop changes from the diagnosis were reverted
+after two intermittent Fast-QC hard failures appeared with them in-tree (12/12 takes clean after
+revert); the surviving instrumentation is per-generation `processTaskRole`/QoS/nice telemetry.
+Pre-2026-07-23 UI-generation records carry the recording overhead in every cell; the amendment's
+phase-7 objective (delivery-pipeline pacing) is now re-aimed at the remaining honest ≈1.2→1.8
+UI-context gap.
+
 ## Open release work
 
 - macOS 2.1.0 is released.

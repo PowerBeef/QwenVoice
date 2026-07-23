@@ -72,6 +72,11 @@ schemes:
       config: Release
     test:
       config: Release
+      # Screenshots-only: Xcode's default automatic screen RECORDING spawns a
+      # replayd/VTEncoder pipeline that video-encodes the display for the whole
+      # run. On the 8 GB floor Mac that observer effect throttled engine RTF
+      # from ~1.2 to 0.70-0.93 in every pre-2026-07-23 UI benchmark record.
+      preferredScreenCaptureFormat: screenshots
       targets:
         - VocelloMacUITests
     profile:
@@ -90,6 +95,9 @@ schemes:
       config: Release
     test:
       config: Release
+      # Same screenshots-only rationale as VocelloMacUI: on-device screen
+      # recording competes with the in-process engine for the phone's SoC.
+      preferredScreenCaptureFormat: screenshots
       targets:
         - VocelloiOSUITests
     profile:
