@@ -352,9 +352,11 @@ private struct IOSConditionalGlassEffect<S: Shape>: ViewModifier {
     let tint: Color
     let shape: S
 
+    @Environment(\.iosGenerationPerformanceGate) private var performanceGate
+
     @ViewBuilder
     func body(content: Content) -> some View {
-        if reduceTransparency {
+        if reduceTransparency || performanceGate {
             content
         } else {
             content.glassEffect(.regular.tint(tint.opacity(0.06)), in: shape)

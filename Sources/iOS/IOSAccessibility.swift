@@ -9,6 +9,17 @@ private struct IOSReduceTransparencyEnabledKey: EnvironmentKey {
     static let defaultValue = false
 }
 
+/// iOS counterpart to the macOS `generationPerformanceGate` (AppTheme.swift):
+/// while a generation is active, glass surfaces render their shipped
+/// solid-fill fallback so Liquid Glass compositor work cannot compete with the
+/// engine. On iPhone the gate engages only on fixed-refresh (non-ProMotion)
+/// displays — the measured iPhone 17 Pro evidence showed adaptive-refresh
+/// panels idle static glass, but the supported iPhone 16/16 Plus/16e tier has
+/// 60 Hz panels where that reasoning does not apply.
+private struct IOSGenerationPerformanceGateKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
 extension EnvironmentValues {
     var iosReduceMotionEnabled: Bool {
         get { self[IOSReduceMotionEnabledKey.self] }
@@ -18,6 +29,24 @@ extension EnvironmentValues {
     var iosReduceTransparencyEnabled: Bool {
         get { self[IOSReduceTransparencyEnabledKey.self] }
         set { self[IOSReduceTransparencyEnabledKey.self] = newValue }
+    }
+
+    var iosGenerationPerformanceGate: Bool {
+        get { self[IOSGenerationPerformanceGateKey.self] }
+        set { self[IOSGenerationPerformanceGateKey.self] = newValue }
+    }
+}
+
+@MainActor
+enum IOSDisplayCapability {
+    /// True on fixed-refresh (non-ProMotion) panels, which cannot idle below
+    /// their 60 Hz cadence. Resolved from the connected window scene; falls
+    /// back to the main screen before a scene attaches.
+    static var isFixedRefreshDisplay: Bool {
+        let sceneMaximum = UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.screen.maximumFramesPerSecond }
+            .max()
+        return (sceneMaximum ?? UIScreen.main.maximumFramesPerSecond) <= 60
     }
 }
 

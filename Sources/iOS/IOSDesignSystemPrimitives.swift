@@ -683,6 +683,7 @@ struct IOSBottomEdgeSheet<Content: View>: View {
     let content: Content
 
     @Environment(\.iosReduceTransparencyEnabled) private var reduceTransparency
+    @Environment(\.iosGenerationPerformanceGate) private var performanceGate
 
     init(
         title: String,
@@ -765,7 +766,7 @@ struct IOSBottomEdgeSheet<Content: View>: View {
         )
 
         Group {
-            if reduceTransparency {
+            if reduceTransparency || performanceGate {
                 panel.background {
                     shape.fill(Color(red: 20 / 255, green: 22 / 255, blue: 30 / 255))
                 }

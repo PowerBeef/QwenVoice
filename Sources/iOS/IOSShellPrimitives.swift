@@ -267,6 +267,7 @@ struct IOSSubtleGlassSurfaceModifier<S: InsettableShape>: ViewModifier {
     let interactive: Bool
 
     @Environment(\.iosReduceTransparencyEnabled) private var reduceTransparency
+    @Environment(\.iosGenerationPerformanceGate) private var performanceGate
 
     @ViewBuilder
     func body(content: Content) -> some View {
@@ -287,9 +288,10 @@ struct IOSSubtleGlassSurfaceModifier<S: InsettableShape>: ViewModifier {
                     .allowsHitTesting(false)
             }
 
-        if reduceTransparency {
+        if reduceTransparency || performanceGate {
             // Solid-fill fallback required by CLAUDE.md when Reduce Transparency
-            // is on. `fill` already paints the base background; skip glassEffect.
+            // is on, and reused by the fixed-refresh generation performance
+            // gate. `fill` already paints the base background; skip glassEffect.
             base
         } else if interactive {
             base.glassEffect(

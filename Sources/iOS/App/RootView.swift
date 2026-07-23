@@ -56,6 +56,13 @@ struct RootView: View {
         .iosAppAnimation(Theme.Motion.modePillSlide, value: appModel.studioMode)
         .environment(\.iosReduceMotionEnabled, effectiveReduceMotion)
         .environment(\.iosReduceTransparencyEnabled, effectiveReduceTransparency)
+        // Fixed-refresh (non-ProMotion) devices render glass with the shipped
+        // solid-fill fallback while a generation is active; see
+        // IOSGenerationPerformanceGateKey.
+        .environment(
+            \.iosGenerationPerformanceGate,
+            IOSDisplayCapability.isFixedRefreshDisplay && ttsEngine.hasActiveGeneration
+        )
         // The dock is the only persistent bottom chrome. Playback is
         // presented inline in Studio or through IOSPlayerSheet.
         .safeAreaInset(edge: .bottom, spacing: 0) {

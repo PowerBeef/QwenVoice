@@ -14,6 +14,7 @@ struct ThemeGlassSurfaceModifier<S: InsettableShape>: ViewModifier {
     let interactive: Bool
 
     @Environment(\.iosReduceTransparencyEnabled) private var reduceTransparency
+    @Environment(\.iosGenerationPerformanceGate) private var performanceGate
 
     @ViewBuilder
     func body(content: Content) -> some View {
@@ -31,7 +32,7 @@ struct ThemeGlassSurfaceModifier<S: InsettableShape>: ViewModifier {
                     .allowsHitTesting(false)
             }
 
-        if reduceTransparency {
+        if reduceTransparency || performanceGate {
             base
         } else if interactive {
             base.glassEffect(

@@ -709,8 +709,13 @@ one-cell lanes (custom/long warm, identical `-O` engine code, same session):
   the iPhone shows no UI-context penalty to close. Consistent with display architecture: the
   phone's adaptive-refresh panel idles for static content, so visible glass composites at
   ~nothing while the engine runs; the Mac's fixed-refresh external display composited every
-  frame. The `generationPerformanceGate` environment therefore remains macOS-only by evidence,
-  not by omission. (Operator note: the headless bench spec's third segment is the literal text —
+  frame. That reasoning covers ProMotion panels only: the supported-hardware gate
+  (iPhone 15 Pro+ via `iPhone16,1/16,2` or major ≥ 17) also admits the fixed-60 Hz
+  iPhone 16, 16 Plus, and 16e, where adaptive idling does not apply. The iOS
+  `iosGenerationPerformanceGate` environment (2026-07-23) therefore renders the four glass
+  containers with their shipped solid-fill fallback during generation on fixed-refresh
+  displays only — inert on every ProMotion device including all measured evidence hardware,
+  defensive on the 60 Hz tier, and unmeasured there until a 60 Hz device is available. (Operator note: the headless bench spec's third segment is the literal text —
   `custom:speed:` uses the default sentence; `custom:speed:long` speaks the word "long" and
   fails with zero emitted frames.)
 

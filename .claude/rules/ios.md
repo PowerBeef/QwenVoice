@@ -96,7 +96,9 @@ scripts/ios_device.sh gate            # deterministic physical-device/runtime pr
 - **Mode color pairs with icon/label/position.** No color-only signal.
 - **Honor Reduce Motion / Reduce Transparency.** Animations route through `appAnimation` /
   `AppLaunchConfiguration.performAnimated`; Liquid Glass falls back to solid fills when reduced
-  transparency is enabled.
+  transparency is enabled. The same solid-fill branch backs `iosGenerationPerformanceGate`:
+  on fixed-refresh (non-ProMotion) devices the four glass containers drop glass while a
+  generation is active; the gate stays inert on ProMotion hardware.
 - **`increased-memory-limit` entitlement.** Required for model load headroom. Do not remove.
 - **Memory-qualified benchmark evidence.** New publishable device generations require telemetry v8
   sample sidecars, lifecycle-boundary coverage, zero capture failures, at least 95% periodic
