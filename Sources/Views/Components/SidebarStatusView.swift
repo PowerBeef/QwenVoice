@@ -95,8 +95,13 @@ struct SidebarStatusView: View {
 
     private var startingView: some View {
         HStack(spacing: 6) {
-            ProgressView()
-                .controlSize(.mini)
+            // Static glyph, not an indeterminate spinner: engine start
+            // includes the GPU-heavy model load, and a continuously
+            // animating element over Liquid Glass contends with it for the
+            // compositor (generation performance gate, OPTIMIZATION.md §K).
+            Image(systemName: "bolt.horizontal")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
             Text("Starting engine…")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
@@ -118,8 +123,13 @@ struct SidebarStatusView: View {
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 if activity.fraction == nil {
-                    ProgressView()
-                        .controlSize(.mini)
+                    // Static glyph for the same §K reason as startingView:
+                    // this row is visible for entire generations, and a
+                    // spinner over glass steals compositor time from the
+                    // engine's GPU work. The label text carries the state.
+                    Image(systemName: "waveform")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppTheme.accent)
                 }
                 Text(activity.label)
                     .font(.caption.weight(.medium))

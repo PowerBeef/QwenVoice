@@ -675,10 +675,19 @@ one-cell lanes (custom/long warm, identical `-O` engine code, same session):
   thermal) — expected inter-take behavior, excluded from the in-take attribution.
 - Diagnostic lever kept in the harness: `QVOICE_MAC_BENCH_HIDE_DURING_TAKE=1` hides the app via
   the genuine ⌘H action for each take and reactivates it before the visible completion asserts.
-- Open follow-up: identify the specific generating-state redraw source (the 10 Hz player
-  cadence and Liquid Glass full-recomposition interaction are the leading joint suspects) and
-  decide the product posture — becalm the surfaces, add a generation-time animation gate, or
-  accept 1.37-visible/1.78-hidden as the documented floor-tier envelope.
+- **Gate v1 measured neutral; the redraw source is display-refresh-locked.** Becalming every
+  named surface (static glyphs for the readiness, starting, and activity indicators; live
+  playhead 10 Hz → 3 Hz) left RTF at 1.37 and WindowServer's share unchanged (~42%, 183K
+  events). The trace fingerprint is decisive about the shape: WindowServer composites a steady
+  **60.1 buffers/s comb** (median inter-frame 16.61 ms; no 1.8 Hz chunk, 3 Hz playhead, or 1 Hz
+  polling clusters), while the Vocello app process submits **zero** Metal work of its own. Some
+  layer invalidates the window at exactly display refresh for the whole take; view-level pixel
+  changes are not it. Leading hypothesis: the pointer rests on the just-clicked Generate/Cancel
+  control, and Liquid Glass hover effects animate under the cursor at 60 fps (consistent with
+  the hide-recovery, since hiding removes the hover surface). Next probes: park the cursor
+  off-window after starting a take (harness-level, genuine interaction), and a Core Animation
+  commits capture to attribute the 60 Hz invalidation source app-vs-system. The kept gate-v1
+  changes stand on energy/composition grounds despite the neutral RTF result.
 
 ## Status
 

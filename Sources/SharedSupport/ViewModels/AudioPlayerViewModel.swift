@@ -1587,11 +1587,31 @@ final class AudioPlayerViewModel: NSObject, ObservableObject, AVAudioPlayerDeleg
 
     // MARK: - Timer
 
+    /// Generation performance gate (benchmarks/OPTIMIZATION.md §K): while the
+    /// live-preview stream plays, the engine competes with window compositing
+    /// for the shared GPU, and a 10 Hz playhead redraw over Liquid Glass
+    /// measurably inflates the engine's GPU queueing delay on the 8 GB tier.
+    /// 3 Hz keeps visible motion during generation; file playback keeps the
+    /// smooth 10 Hz playhead.
+    private var desiredTimerInterval: TimeInterval {
+        playbackMode == .live ? (1.0 / 3.0) : 0.1
+    }
+
+    private var activeTimerInterval: TimeInterval = 0.1
+
     private func startTimer() {
         stopTimer()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+        let interval = desiredTimerInterval
+        activeTimerInterval = interval
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.updatePlaybackProgress()
+                guard let self else { return }
+                if self.activeTimerInterval != self.desiredTimerInterval {
+                    // Live→file handoff (or vice versa) without a playback
+                    // restart: re-arm at the cadence the current mode wants.
+                    self.startTimer()
+                }
+                self.updatePlaybackProgress()
             }
         }
     }
