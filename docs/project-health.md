@@ -22,7 +22,7 @@
 | --- | --- | ---: | ---: | --- |
 | generation-terminal | backend | 4 | 2 / 16 | macos: fresh, ios: fresh |
 | clone-conditioning | backend | 30 | 2 / 31 | macos: stale, ios: stale |
-| event-delivery | backend | 3 | 2 / 10 | macos: fresh, ios: fresh |
+| event-delivery | backend | 3 | 2 / 10 | macos: stale, ios: stale |
 | memory-policy | backend-platform | 6 | 2 / 25 | macos: fresh, ios: fresh |
 | model-delivery | backend-platform | 17 | 3 / 36 | macos: fresh, ios: fresh |
 | xpc-transport | macos | 3 | 3 / 15 | macos: fresh |
