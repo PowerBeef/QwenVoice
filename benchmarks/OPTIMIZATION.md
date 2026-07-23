@@ -649,6 +649,37 @@ engine or pipeline code:
   screen-recording overhead in every cell and are not comparable with post-change UI records
   (their `harnessHash`/`projectInputHash` differ, so the registry never links them as baselines).
 
+## K — Honest topology-gap attribution: compositing, not XPC (2026-07-23)
+
+With recording disabled (§J), the remaining ≈25% UI-context gap was attributed by controlled
+one-cell lanes (custom/long warm, identical `-O` engine code, same session):
+
+| Configuration | warm RTF | stepEval |
+| --- | --- | --- |
+| CLI, in-process | 1.84 | 8.6 s |
+| XPC service, app hidden during takes (⌘H diagnostic) | 1.77–1.80 | 8.3–8.6 s |
+| XPC service, app visible (canonical) | 1.37 | 12.7 s |
+
+- **The XPC/actor topology costs ≈3%.** With the window not composited, the service matches the
+  in-process CLI within noise — forwarding, per-token events, and process class are all cheap.
+- **Visible-window compositing during generation costs ≈23%.** Paired Metal System Traces show
+  the mechanism: WindowServer contributes ~43% of GPU channel activity (226K compositing events
+  in 26 s vs 1.5K in the CLI context), and the service's command buffers pay **+48% median
+  CPU→GPU queueing delay** (4.72 ms vs 3.18 ms; p90 +80%) while per-buffer execution time is
+  identical. An idle app window is free (CLI bench with the app open idle: 1.86); only the
+  *generating-state* window redraw load matters. Individually exonerated by controlled runs:
+  live-preview playback (autoplay off: no change), the readiness spinner (static glyph: no
+  change), the standalone activity spinner (both presentations equally slow), recording (§J),
+  iPhone Mirroring, thermal, and the test runner's CPU.
+- The per-generation silence windows between takes downclock the GPU to Minimum (idle DVFS, not
+  thermal) — expected inter-take behavior, excluded from the in-take attribution.
+- Diagnostic lever kept in the harness: `QVOICE_MAC_BENCH_HIDE_DURING_TAKE=1` hides the app via
+  the genuine ⌘H action for each take and reactivates it before the visible completion asserts.
+- Open follow-up: identify the specific generating-state redraw source (the 10 Hz player
+  cadence and Liquid Glass full-recomposition interaction are the leading joint suspects) and
+  decide the product posture — becalm the surfaces, add a generation-time animation gate, or
+  accept 1.37-visible/1.78-hidden as the documented floor-tier envelope.
+
 ## Status
 
 The optimization program tracked in this document is wrapped up. The §H P0–P6 work has been
@@ -656,5 +687,6 @@ completed and validated, streaming is now the default generation path, and the r
 delivery-accuracy work is recorded in §I. For UI smoothness (G), compare the typed heartbeat and
 playback metrics in compatible records indexed by generated `HISTORY.md`; the former
 `uiMaxStall ms` column remains historical context in `LEGACY_HISTORY.md`. The §J observer-effect
-correction (2026-07-23) re-baselines UI-lane expectations; §H P0's GPU-busy re-measurement remains
+correction (2026-07-23) re-baselines UI-lane expectations; §K attributes the residual UI-context
+gap to generating-state window compositing (XPC ≈3%); §H P0's GPU-busy re-measurement remains
 open follow-up work.

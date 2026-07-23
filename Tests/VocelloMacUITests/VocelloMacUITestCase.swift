@@ -397,6 +397,15 @@ class VocelloMacUITestCase: XCTestCase {
                 cancel.exists || !generate.exists || !generate.isEnabled
             }
         )
+        // Diagnostic: hide the app (the genuine ⌘H user action) for the take
+        // so its window stops compositing, isolating window-compositing cost
+        // from the engine's GPU work. AX queries keep working while hidden;
+        // the app is reactivated before the visible completion assertions.
+        let hideDuringTake = ProcessInfo.processInfo
+            .environment["QVOICE_MAC_BENCH_HIDE_DURING_TAKE"] == "1"
+        if hideDuringTake {
+            app.typeKey("h", modifierFlags: .command)
+        }
         XCTAssertTrue(
             VocelloUIWait.condition(
                 "generation to complete with Generate enabled and the player visible",
@@ -410,6 +419,12 @@ class VocelloMacUITestCase: XCTestCase {
                     && !backendCrash.exists
             }
         )
+        if hideDuringTake {
+            app.activate()
+            _ = VocelloUIWait.condition("app to return to the foreground", timeout: 15) {
+                self.app.state == .runningForeground && generate.isHittable
+            }
+        }
         XCTAssertFalse(backendError.exists, "Generation must not expose a backend error")
         XCTAssertFalse(backendCrash.exists, "Generation must not expose a backend crash")
     }
