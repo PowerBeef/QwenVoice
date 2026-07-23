@@ -8,150 +8,6 @@ enum BatchSegmentationMode: String, Codable, Equatable {
     case longForm
 }
 
-struct LongFormBatchSegmenter {
-    static let defaultMaxCharacters = 900
-
-    static func segments(from text: String, maxCharacters: Int = defaultMaxCharacters) -> [String] {
-        let normalized = text
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
-        let paragraphs = normalized
-            .components(separatedBy: "\n\n")
-            .map { $0.replacingOccurrences(of: "\n", with: " ") }
-            .map { collapseWhitespace($0) }
-            .filter { !$0.isEmpty }
-
-        return paragraphs.flatMap { splitParagraph($0, maxCharacters: maxCharacters) }
-    }
-
-    private static func splitParagraph(_ paragraph: String, maxCharacters: Int) -> [String] {
-        guard paragraph.count > maxCharacters else { return [paragraph] }
-
-        let sentences = splitSentences(paragraph)
-        var segments: [String] = []
-        var current = ""
-
-        func flushCurrent() {
-            let trimmed = current.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
-                segments.append(trimmed)
-            }
-            current = ""
-        }
-
-        for sentence in sentences {
-            if sentence.count > maxCharacters {
-                flushCurrent()
-                segments.append(contentsOf: splitWords(sentence, maxCharacters: maxCharacters))
-                continue
-            }
-
-            let candidate = current.isEmpty ? sentence : "\(current) \(sentence)"
-            if candidate.count <= maxCharacters {
-                current = candidate
-            } else {
-                flushCurrent()
-                current = sentence
-            }
-        }
-        flushCurrent()
-        return segments
-    }
-
-    private static func splitSentences(_ text: String) -> [String] {
-        var sentences: [String] = []
-        var current = ""
-        for character in text {
-            current.append(character)
-            if ".!?".contains(character) {
-                let trimmed = collapseWhitespace(current)
-                if !trimmed.isEmpty {
-                    sentences.append(trimmed)
-                }
-                current = ""
-            }
-        }
-        let trailing = collapseWhitespace(current)
-        if !trailing.isEmpty {
-            sentences.append(trailing)
-        }
-        return sentences
-    }
-
-    private static func splitWords(_ text: String, maxCharacters: Int) -> [String] {
-        let words = text.split(whereSeparator: \.isWhitespace).map(String.init)
-        var segments: [String] = []
-        var current = ""
-
-        for word in words {
-            if word.count > maxCharacters {
-                if !current.isEmpty {
-                    segments.append(current)
-                    current = ""
-                }
-                segments.append(word)
-                continue
-            }
-
-            let candidate = current.isEmpty ? word : "\(current) \(word)"
-            if candidate.count <= maxCharacters {
-                current = candidate
-            } else {
-                if !current.isEmpty {
-                    segments.append(current)
-                }
-                current = word
-            }
-        }
-
-        if !current.isEmpty {
-            segments.append(current)
-        }
-        return segments
-    }
-
-    private static func collapseWhitespace(_ text: String) -> String {
-        text
-            .components(separatedBy: .whitespacesAndNewlines)
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-}
-
-struct LongFormBatchManifest: Codable, Equatable {
-    let schemaVersion: Int
-    let modelID: String
-    let mode: GenerationMode
-    let segmentationMode: BatchSegmentationMode
-    let generatedAtUTC: String
-    let performanceSummary: PerformanceSummary
-    let segments: [Segment]
-
-    struct Segment: Codable, Equatable {
-        let index: Int
-        let text: String
-        let audioPath: String?
-        let audioStats: SegmentAudioStats?
-        let audioQualityReport: AudioQualityGate.Report?
-        let failed: Bool
-    }
-
-    struct SegmentAudioStats: Codable, Equatable {
-        let durationSeconds: Double
-        let rmsAmplitude: Double?
-        let peakAmplitude: Double?
-        let clippingSampleCount: Int
-    }
-
-    struct PerformanceSummary: Codable, Equatable {
-        let totalSegments: Int
-        let generatedSegments: Int
-        let failedSegments: Int
-        let totalAudioDurationSeconds: Double
-    }
-}
-
 struct BatchProgressSnapshot: Equatable {
     let completedCount: Int
     let totalCount: Int
@@ -288,6 +144,11 @@ struct BatchGenerationRequest {
     /// quite as wildly. Minted per batch run, so separate batches still
     /// differ from each other.
     let batchSeed: UInt64
+    /// Long-form v4 plan; present exactly when `segmentationMode == .longForm`.
+    /// Segment text, per-segment sub-seed, boundary pause, and identity all
+    /// derive from this plan; `lines` mirrors its spoken texts for item
+    /// bookkeeping. For long-form, per-segment sub-seeds supersede `batchSeed`.
+    var longFormPlan: LongFormPlan?
 
     init(
         mode: GenerationMode,
@@ -361,6 +222,18 @@ struct BatchGenerationRequest {
         )
     }
 
+    /// Long-form v4 segments stream for flat memory with preview publication
+    /// suppressed; ordinary line batches keep the quality-first path.
+    private var streamsSegments: Bool { segmentationMode == .longForm }
+
+    private func segmentSeed(batchIndex: Int?) -> UInt64 {
+        guard let longFormPlan, let batchIndex,
+              batchIndex >= 1, batchIndex <= longFormPlan.segments.count else {
+            return batchSeed
+        }
+        return longFormPlan.segments[batchIndex - 1].evidence.effectiveSubseed
+    }
+
     func makeGenerationRequest(
         for line: String,
         outputPath: String,
@@ -373,7 +246,7 @@ struct BatchGenerationRequest {
                 modelID: model.id,
                 text: line,
                 outputPath: outputPath,
-                shouldStream: false,
+                shouldStream: streamsSegments,
                 batchIndex: batchIndex,
                 batchTotal: batchTotal,
                 languageHint: languageHint,
@@ -383,15 +256,16 @@ struct BatchGenerationRequest {
                         ? (emotion ?? DeliveryProfile.neutralInstruction)
                         : nil
                 ),
-                seed: batchSeed,
-                variation: GenerationVariationPreference.requestValue()
+                seed: segmentSeed(batchIndex: batchIndex),
+                variation: GenerationVariationPreference.requestValue(),
+                suppressStreamingPreview: streamsSegments ? true : nil
             )
         case .design:
             return QwenVoiceNative.GenerationRequest(
                 modelID: model.id,
                 text: line,
                 outputPath: outputPath,
-                shouldStream: false,
+                shouldStream: streamsSegments,
                 batchIndex: batchIndex,
                 batchTotal: batchTotal,
                 languageHint: languageHint,
@@ -399,15 +273,16 @@ struct BatchGenerationRequest {
                     voiceDescription: voiceDescription ?? "",
                     deliveryStyle: emotion ?? DeliveryProfile.neutralInstruction
                 ),
-                seed: batchSeed,
-                variation: GenerationVariationPreference.requestValue()
+                seed: segmentSeed(batchIndex: batchIndex),
+                variation: GenerationVariationPreference.requestValue(),
+                suppressStreamingPreview: streamsSegments ? true : nil
             )
         case .clone:
             return QwenVoiceNative.GenerationRequest(
                 modelID: model.id,
                 text: line,
                 outputPath: outputPath,
-                shouldStream: false,
+                shouldStream: streamsSegments,
                 batchIndex: batchIndex,
                 batchTotal: batchTotal,
                 languageHint: languageHint,
@@ -417,8 +292,9 @@ struct BatchGenerationRequest {
                         transcript: refText
                     )
                 ),
-                seed: batchSeed,
-                variation: GenerationVariationPreference.requestValue()
+                seed: segmentSeed(batchIndex: batchIndex),
+                variation: GenerationVariationPreference.requestValue(),
+                suppressStreamingPreview: streamsSegments ? true : nil
             )
         }
     }
@@ -446,146 +322,13 @@ struct BatchGenerationRequest {
         }
     }
 
-    func makeLongFormManifest(
-        generatedAtUTC: String = ISO8601DateFormatter().string(from: Date()),
-        audioPaths: [String?],
-        audioQualityReports: [AudioQualityGate.Report?]? = nil
-    ) async -> LongFormBatchManifest? {
-        guard segmentationMode == .longForm else { return nil }
-        let audioStats = await withTaskGroup(of: (Int, LongFormBatchManifest.SegmentAudioStats?).self, returning: [LongFormBatchManifest.SegmentAudioStats?].self) { group in
-            for (index, path) in audioPaths.enumerated() {
-                group.addTask {
-                    let stats: LongFormBatchManifest.SegmentAudioStats? = if let path = path {
-                        await Self.audioStats(for: path)
-                    } else {
-                        nil
-                    }
-                    return (index, stats)
-                }
-            }
-            var indexed = [Int: LongFormBatchManifest.SegmentAudioStats?]()
-            for await (index, stats) in group {
-                indexed[index] = stats
-            }
-            return (0..<audioPaths.count).map { indexed[$0] ?? nil }
-        }
-        let segments = lines.enumerated().map { index, text in
-            LongFormBatchManifest.Segment(
-                index: index + 1,
-                text: text,
-                audioPath: index < audioPaths.count ? audioPaths[index] : nil,
-                audioStats: index < audioStats.count ? audioStats[index] : nil,
-                audioQualityReport: audioQualityReports.flatMap { index < $0.count ? $0[index] : nil },
-                failed: index >= audioPaths.count
-                    || audioPaths[index] == nil
-                    || audioQualityReports.flatMap { index < $0.count ? $0[index] : nil }?.passed == false
-            )
-        }
-        let generatedSegments = audioPaths.compactMap { $0 }.count
-        let qualityFailedSegments = segments.filter { $0.audioQualityReport?.passed == false }.count
-        let totalAudioDuration = audioStats.compactMap { $0?.durationSeconds }.reduce(0, +)
-        return LongFormBatchManifest(
-            schemaVersion: 3,
-            modelID: model.id,
-            mode: mode,
-            segmentationMode: segmentationMode,
-            generatedAtUTC: generatedAtUTC,
-            performanceSummary: LongFormBatchManifest.PerformanceSummary(
-                totalSegments: lines.count,
-                generatedSegments: generatedSegments,
-                failedSegments: max(0, lines.count - generatedSegments) + qualityFailedSegments,
-                totalAudioDurationSeconds: totalAudioDuration
-            ),
-            segments: segments
-        )
-    }
-
-    func makeLongFormManifest(
-        generatedAtUTC: String = ISO8601DateFormatter().string(from: Date()),
-        audioPaths: [String]
-    ) async -> LongFormBatchManifest? {
-        await makeLongFormManifest(
-            generatedAtUTC: generatedAtUTC,
-            audioPaths: audioPaths.map(Optional.some)
-        )
-    }
-
-    private static func audioStats(for path: String) async -> LongFormBatchManifest.SegmentAudioStats? {
+    /// Duration probe for v4 execution evidence; reads only the audio header.
+    static func audioDurationSeconds(for path: String) async -> Double? {
         await Task.detached(priority: .utility) {
-            computeAudioStats(for: path)
+            guard let audioFile = try? AVAudioFile(forReading: URL(fileURLWithPath: path)),
+                  audioFile.processingFormat.sampleRate > 0 else { return nil }
+            return Double(audioFile.length) / audioFile.processingFormat.sampleRate
         }.value
-    }
-
-    private static func computeAudioStats(for path: String) -> LongFormBatchManifest.SegmentAudioStats? {
-        let url = URL(fileURLWithPath: path)
-        guard let audioFile = try? AVAudioFile(forReading: url) else { return nil }
-        let durationSeconds = Double(audioFile.length) / audioFile.processingFormat.sampleRate
-
-        guard let buffer = AVAudioPCMBuffer(
-            pcmFormat: audioFile.processingFormat,
-            frameCapacity: AVAudioFrameCount(audioFile.length)
-        ) else {
-            return LongFormBatchManifest.SegmentAudioStats(
-                durationSeconds: durationSeconds,
-                rmsAmplitude: nil,
-                peakAmplitude: nil,
-                clippingSampleCount: 0
-            )
-        }
-
-        do {
-            try audioFile.read(into: buffer)
-        } catch {
-            return LongFormBatchManifest.SegmentAudioStats(
-                durationSeconds: durationSeconds,
-                rmsAmplitude: nil,
-                peakAmplitude: nil,
-                clippingSampleCount: 0
-            )
-        }
-
-        let frameCount = Int(buffer.frameLength)
-        guard frameCount > 0 else {
-            return LongFormBatchManifest.SegmentAudioStats(
-                durationSeconds: durationSeconds,
-                rmsAmplitude: 0,
-                peakAmplitude: 0,
-                clippingSampleCount: 0
-            )
-        }
-
-        var sumSquares = 0.0
-        var peak = 0.0
-        var clippingCount = 0
-        if let floatData = buffer.floatChannelData?[0] {
-            for index in 0..<frameCount {
-                let value = Double(floatData[index])
-                let magnitude = abs(value)
-                sumSquares += value * value
-                peak = max(peak, magnitude)
-                if magnitude >= 0.999 {
-                    clippingCount += 1
-                }
-            }
-        } else if let int16Data = buffer.int16ChannelData?[0] {
-            for index in 0..<frameCount {
-                let value = Double(int16Data[index]) / Double(Int16.max)
-                let magnitude = abs(value)
-                sumSquares += value * value
-                peak = max(peak, magnitude)
-                if magnitude >= 0.999 {
-                    clippingCount += 1
-                }
-            }
-        }
-
-        let rms = sqrt(sumSquares / Double(frameCount))
-        return LongFormBatchManifest.SegmentAudioStats(
-            durationSeconds: durationSeconds,
-            rmsAmplitude: rms,
-            peakAmplitude: peak,
-            clippingSampleCount: clippingCount
-        )
     }
 }
 
@@ -667,13 +410,28 @@ final class BatchGenerationCoordinator: ObservableObject {
         store: any GenerationPersisting = DatabaseService.shared
     ) {
         let lines: [String]
+        var longFormPlan: LongFormPlan?
         switch segmentationMode {
         case .lineSeparated:
             lines = batchText.components(separatedBy: .newlines)
                 .map { $0.trimmingCharacters(in: .whitespaces) }
                 .filter { !$0.isEmpty }
         case .longForm:
-            lines = LongFormBatchSegmenter.segments(from: batchText)
+            do {
+                let spokenPlan = try SpokenTextPlanner.plan(originalText: batchText)
+                let plan = try LongFormPlanner.plan(
+                    spokenTextPlan: spokenPlan,
+                    configuration: LongFormPlanningConfiguration(
+                        runtimeTokenLimit: LongFormPlanningConfiguration.shippingRuntimeTokenLimit,
+                        baseSeed: UInt64.random(in: UInt64.min ... UInt64.max)
+                    )
+                )
+                longFormPlan = plan
+                lines = plan.segments.map(\.spokenTextForGeneration)
+            } catch {
+                errorMessage = "Long-form planning failed: \(error.localizedDescription)"
+                return
+            }
         }
 
         guard !lines.isEmpty else { return }
@@ -682,10 +440,11 @@ final class BatchGenerationCoordinator: ObservableObject {
             errorMessage = "Batch is too large: \(lines.count) segments exceeds the maximum of \(maxBatchSegments). Please split the text and try again."
             return
         }
-        guard let request = requestBuilder(lines) else {
+        guard var request = requestBuilder(lines) else {
             errorMessage = "Model configuration not found"
             return
         }
+        request.longFormPlan = longFormPlan
 
         if let validationError = request.validationError(
             isModelAvailable: isModelAvailable(request.model),
@@ -859,7 +618,7 @@ final class BatchGenerationRunner {
 
         publishItems()
 
-        if total > 1 {
+        if total > 1, request.segmentationMode != .longForm {
             if await cancellationState.wasRequested() {
                 markItemsCancelled(startingAt: 0)
                 publishItems()
@@ -895,32 +654,6 @@ final class BatchGenerationRunner {
                     return .failed(
                         items: items,
                         message: "Batch generation returned \(results.count) results for \(request.lines.count) requests."
-                    )
-                }
-
-                let batchQualityReports = await qualityReportsIfNeeded(for: request, results: results)
-                if let batchQualityReports,
-                   batchQualityReports.contains(where: { !$0.passed }) {
-                    let audioPaths = results.map { Optional.some($0.audioPath) }
-                    await persistLongFormManifestIfNeeded(
-                        request: request,
-                        audioPaths: audioPaths,
-                        qualityReports: batchQualityReports.map(Optional.some)
-                    )
-                    for index in items.indices {
-                        let report = index < batchQualityReports.count ? batchQualityReports[index] : nil
-                        if let report, !report.passed {
-                            items[index].status = .failed(message: report.failureSummary)
-                        } else {
-                            items[index].status = .failed(
-                                message: "Not saved because another long-form segment failed audio quality checks."
-                            )
-                        }
-                    }
-                    publishItems()
-                    return .failed(
-                        items: items,
-                        message: "Long-form batch failed audio quality checks. Review the failed segment details before retrying."
                     )
                 }
 
@@ -960,11 +693,6 @@ final class BatchGenerationRunner {
                     }
                 }
 
-                await persistLongFormManifestIfNeeded(
-                    request: request,
-                    items: items,
-                    qualityReports: batchQualityReports?.map(Optional.some)
-                )
                 publishProgress(activeItemIndex: nil, message: "Done")
                 return .completed(items: items)
             } catch {
@@ -986,6 +714,7 @@ final class BatchGenerationRunner {
             }
         }
 
+        var longFormQualityReports: [AudioQualityGate.Report?] = []
         for (index, line) in request.lines.enumerated() {
             if await cancellationState.wasRequested() {
                 markItemsCancelled(startingAt: index)
@@ -1010,12 +739,14 @@ final class BatchGenerationRunner {
 
                 if request.segmentationMode == .longForm {
                     let qualityReport = await audioQualityEvaluator(URL(fileURLWithPath: result.audioPath))
+                    longFormQualityReports.append(qualityReport)
                     if !qualityReport.passed {
                         items[index].status = .failed(message: qualityReport.failureSummary)
-                        await persistLongFormManifestIfNeeded(
+                        await persistLongFormV4Manifest(
                             request: request,
-                            audioPaths: [Optional.some(result.audioPath)],
-                            qualityReports: [Optional.some(qualityReport)]
+                            items: items,
+                            qualityReports: longFormQualityReports,
+                            assembly: nil
                         )
                         publishItems()
                         return .failed(
@@ -1059,8 +790,38 @@ final class BatchGenerationRunner {
             return .cancelled(items: items, restartFailedMessage: nil)
         }
 
+        if request.segmentationMode == .longForm {
+            publishProgress(activeItemIndex: nil, message: "Joining segments...")
+            do {
+                let joined = try await assembleLongFormOutput(request: request, items: items)
+                let joinedReport = await audioQualityEvaluator(joined.outputURL)
+                await persistLongFormV4Manifest(
+                    request: request,
+                    items: items,
+                    qualityReports: longFormQualityReports,
+                    assembly: joined.evidence
+                )
+                if !joinedReport.passed {
+                    return .failed(
+                        items: items,
+                        message: "Long-form joined output failed audio quality checks: \(joinedReport.failureSummary)"
+                    )
+                }
+            } catch {
+                await persistLongFormV4Manifest(
+                    request: request,
+                    items: items,
+                    qualityReports: longFormQualityReports,
+                    assembly: nil
+                )
+                return .failed(
+                    items: items,
+                    message: "Long-form assembly failed: \(error.localizedDescription)"
+                )
+            }
+        }
+
         publishProgress(activeItemIndex: nil, message: "Done")
-        await persistLongFormManifestIfNeeded(request: request, items: items)
         return .completed(items: items)
     }
 
@@ -1086,53 +847,96 @@ final class BatchGenerationRunner {
         )
     }
 
-    private nonisolated func persistLongFormManifestIfNeeded(
-        request: BatchGenerationRequest,
-        items: [BatchGenerationItemState],
-        qualityReports: [AudioQualityGate.Report?]? = nil
-    ) async {
-        let audioPaths = items.map(\.audioPath)
-        await persistLongFormManifestIfNeeded(
-            request: request,
-            audioPaths: audioPaths,
-            qualityReports: qualityReports
-        )
+    private enum LongFormRunError: LocalizedError {
+        case missingPlan
+        case missingSegmentAudio(index: Int)
+
+        var errorDescription: String? {
+            switch self {
+            case .missingPlan:
+                return "The long-form run is missing its segmentation plan."
+            case .missingSegmentAudio(let index):
+                return "Segment \(index + 1) has no generated audio to join."
+            }
+        }
     }
 
-    private nonisolated func persistLongFormManifestIfNeeded(
+    private func assembleLongFormOutput(
         request: BatchGenerationRequest,
-        audioPaths: [String?],
-        qualityReports: [AudioQualityGate.Report?]? = nil
-    ) async {
-        guard let manifest = await request.makeLongFormManifest(audioPaths: audioPaths),
-              let firstAudioPath = audioPaths.compactMap({ $0 }).first else {
-            return
+        items: [BatchGenerationItemState]
+    ) async throws -> (evidence: LongFormAssemblyEvidence, outputURL: URL) {
+        guard let plan = request.longFormPlan else { throw LongFormRunError.missingPlan }
+        var sources: [LongFormAssemblySegmentSource] = []
+        for (index, segment) in plan.segments.enumerated() {
+            guard index < items.count, let path = items[index].audioPath else {
+                throw LongFormRunError.missingSegmentAudio(index: index)
+            }
+            sources.append(
+                LongFormAssemblySegmentSource(
+                    segmentID: segment.segmentID,
+                    lineage: segment.evidence.lineage,
+                    audioURL: URL(fileURLWithPath: path),
+                    boundary: segment.evidence.boundary,
+                    intendedPauseMilliseconds: segment.evidence.intendedPauseMilliseconds
+                )
+            )
         }
-        let manifestWithQuality = await request.makeLongFormManifest(
-            audioPaths: audioPaths,
-            audioQualityReports: qualityReports
-        ) ?? manifest
-
-        let manifestURL = URL(fileURLWithPath: firstAudioPath)
+        guard let firstPath = items.compactMap(\.audioPath).first else {
+            throw LongFormRunError.missingSegmentAudio(index: 0)
+        }
+        let outputURL = URL(fileURLWithPath: firstPath)
             .deletingLastPathComponent()
-            .appendingPathComponent("long_form_manifest.json", isDirectory: false)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(manifestWithQuality) else { return }
+            .appendingPathComponent("long_form_joined.wav", isDirectory: false)
+        let evidence = try await BoundedLongFormAssembler.assemble(
+            segments: sources,
+            outputURL: outputURL
+        )
+        return (evidence, outputURL)
+    }
+
+    private nonisolated func persistLongFormV4Manifest(
+        request: BatchGenerationRequest,
+        items: [BatchGenerationItemState],
+        qualityReports: [AudioQualityGate.Report?],
+        assembly: LongFormAssemblyEvidence?
+    ) async {
+        guard let plan = request.longFormPlan else { return }
+        var segmentEvidence: [LongFormSegmentExecutionEvidence] = []
+        for (index, segment) in plan.evidence.segments.enumerated() {
+            let audioPath = index < items.count ? items[index].audioPath : nil
+            let report = index < qualityReports.count ? qualityReports[index] : nil
+            var duration: Double?
+            if let audioPath {
+                duration = await BatchGenerationRequest.audioDurationSeconds(for: audioPath)
+            }
+            segmentEvidence.append(
+                LongFormSegmentExecutionEvidence(
+                    index: segment.index,
+                    segmentID: segment.segmentID,
+                    generated: audioPath != nil,
+                    audioDurationSeconds: duration,
+                    qcPassed: report?.passed,
+                    qcRequiredFailures: report?.requiredFailures ?? [],
+                    qcWarnings: report?.warnings ?? []
+                )
+            )
+        }
+        let manifest = LongFormManifestV4(
+            plan: plan.evidence,
+            execution: LongFormExecutionEvidence(
+                generatedAtUTC: ISO8601DateFormatter().string(from: Date()),
+                streamingExecution: true,
+                segments: segmentEvidence
+            ),
+            assembly: assembly
+        )
+        guard let directory = items.compactMap(\.audioPath).first
+            .map({ URL(fileURLWithPath: $0).deletingLastPathComponent() }) else { return }
+        let manifestURL = directory.appendingPathComponent("long_form_manifest.json", isDirectory: false)
+        guard let data = try? manifest.canonicalJSONData() else { return }
         try? data.write(to: manifestURL, options: .atomic)
     }
 
-    private func qualityReportsIfNeeded(
-        for request: BatchGenerationRequest,
-        results: [QwenVoiceNative.GenerationResult]
-    ) async -> [AudioQualityGate.Report]? {
-        guard request.segmentationMode == .longForm else { return nil }
-        var reports: [AudioQualityGate.Report] = []
-        for result in results {
-            reports.append(await audioQualityEvaluator(URL(fileURLWithPath: result.audioPath)))
-        }
-        return reports
-    }
 }
 
 actor BatchGenerationCancellationState {

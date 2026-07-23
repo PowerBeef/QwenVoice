@@ -1267,7 +1267,9 @@ struct StreamingExecutionContext: Sendable {
                     let observationIndex = chunkIndex
                     let materializedAtNS = DispatchTime.now().uptimeNanoseconds
                     let previewAudio: StreamingAudioChunk?
-                    if !request.shouldStream || previewDataPolicy == .skip {
+                    if !request.shouldStream
+                        || previewDataPolicy == .skip
+                        || request.suppressStreamingPreview == true {
                         previewAudio = nil
                     } else {
                         previewAudio = StreamingAudioChunk(

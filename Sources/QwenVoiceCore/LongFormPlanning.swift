@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import QwenVoiceBackendCore
 
 public enum LongFormPlanningError: Error, Equatable, Sendable {
     case invalidAlgorithmVersion(Int)
@@ -103,6 +104,14 @@ public struct LongFormPlanningConfiguration: Codable, Equatable, Hashable, Senda
     }
 }
 
+extension LongFormPlanningConfiguration {
+    /// The shipping Qwen codec-token cap used when planning against the app's
+    /// generation policy.
+    public static var shippingRuntimeTokenLimit: Int {
+        Qwen3GenerationConfiguration.officialQualityDefault.maxNewTokens
+    }
+}
+
 public struct LongFormSegmentEvidence: Codable, Equatable, Hashable, Sendable {
     public let index: Int
     public let segmentID: String
@@ -126,6 +135,11 @@ public struct LongFormSegmentPlan: Sendable {
     let spokenText: String
 
     public let evidence: LongFormSegmentEvidence
+
+    /// Model-facing segment text for in-process generation requests. Manifests,
+    /// telemetry, and benchmark history must record only `evidence`; this text
+    /// never enters tracked artifacts.
+    public var spokenTextForGeneration: String { spokenText }
 
     public var index: Int { evidence.index }
     public var segmentID: String { evidence.segmentID }
@@ -480,17 +494,76 @@ private enum ConservativeTokenEstimator {
 /// Privacy-safe schema-v4 planning contract. Product execution will add local
 /// output and quality state without putting raw text or paths into this core
 /// projection.
-public struct LongFormManifestV4: Codable, Equatable, Hashable, Sendable {
+/// Per-segment execution outcome recorded by the product coordinator. Values
+/// are privacy-safe: no text, paths, or user data — only identities, verdict
+/// booleans, allowlisted QC labels, and audio timing.
+public struct LongFormSegmentExecutionEvidence: Codable, Equatable, Hashable, Sendable {
+    public let index: Int
+    public let segmentID: String
+    public let generated: Bool
+    public let audioDurationSeconds: Double?
+    public let qcPassed: Bool?
+    public let qcRequiredFailures: [String]
+    public let qcWarnings: [String]
+
+    public init(
+        index: Int,
+        segmentID: String,
+        generated: Bool,
+        audioDurationSeconds: Double? = nil,
+        qcPassed: Bool? = nil,
+        qcRequiredFailures: [String] = [],
+        qcWarnings: [String] = []
+    ) {
+        self.index = index
+        self.segmentID = segmentID
+        self.generated = generated
+        self.audioDurationSeconds = audioDurationSeconds
+        self.qcPassed = qcPassed
+        self.qcRequiredFailures = qcRequiredFailures
+        self.qcWarnings = qcWarnings
+    }
+}
+
+/// Execution summary for one long-form run against its plan.
+public struct LongFormExecutionEvidence: Codable, Equatable, Hashable, Sendable {
+    public let generatedAtUTC: String
+    public let streamingExecution: Bool
+    public let segments: [LongFormSegmentExecutionEvidence]
+
+    public init(
+        generatedAtUTC: String,
+        streamingExecution: Bool,
+        segments: [LongFormSegmentExecutionEvidence]
+    ) {
+        self.generatedAtUTC = generatedAtUTC
+        self.streamingExecution = streamingExecution
+        self.segments = segments
+    }
+}
+
+public struct LongFormManifestV4: Codable, Equatable, Sendable {
     public static let currentSchemaVersion = 4
 
     public let schemaVersion: Int
     public let manifestKind: String
     public let plan: LongFormPlanEvidence
+    /// Present once the coordinator has run (or attempted) the plan.
+    public let execution: LongFormExecutionEvidence?
+    /// Present once every segment passed and the bounded assembler joined the
+    /// output; absent for planning-only or failed runs.
+    public let assembly: LongFormAssemblyEvidence?
 
-    public init(plan: LongFormPlanEvidence) {
+    public init(
+        plan: LongFormPlanEvidence,
+        execution: LongFormExecutionEvidence? = nil,
+        assembly: LongFormAssemblyEvidence? = nil
+    ) {
         schemaVersion = Self.currentSchemaVersion
         manifestKind = "long_form_generation"
         self.plan = plan
+        self.execution = execution
+        self.assembly = assembly
     }
 
     public func validated() throws -> Self {
@@ -507,6 +580,23 @@ public struct LongFormManifestV4: Codable, Equatable, Hashable, Sendable {
                       && segment.conservativeTokenEstimate <= plan.runtimeTokenLimit
               }) else {
             throw LongFormPlanningError.invalidManifest("v4 planning contract")
+        }
+        if let execution {
+            let planIDs = plan.segments.map(\.segmentID)
+            guard execution.segments.count == plan.segmentCount,
+                  execution.segments.map(\.segmentID) == planIDs,
+                  execution.segments.enumerated().allSatisfy({ offset, segment in
+                      segment.index == offset + 1
+                  }) else {
+                throw LongFormPlanningError.invalidManifest("v4 execution contract")
+            }
+        }
+        if let assembly {
+            guard execution != nil,
+                  assembly.segmentCount == plan.segmentCount,
+                  assembly.segments.map(\.segmentID) == plan.segments.map(\.segmentID) else {
+                throw LongFormPlanningError.invalidManifest("v4 assembly contract")
+            }
         }
         return self
     }

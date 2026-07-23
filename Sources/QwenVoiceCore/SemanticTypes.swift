@@ -1384,6 +1384,11 @@ public struct GenerationRequest: Hashable, Codable, Sendable {
     /// Sampling variation (talker temperature/top-p shaping). nil/expressive
     /// = official defaults. Wire-back-compatible like `seed`.
     public let variation: Qwen3SamplingVariation?
+    /// Long-form v4 segments stream for flat memory but must not publish live
+    /// preview audio to the frontend. `true` keeps streaming execution while
+    /// suppressing preview-chunk publication. Optional + synthesized `Codable`
+    /// keeps the IPC wire back-compatible.
+    public let suppressStreamingPreview: Bool?
 
     public init(
         mode: GenerationMode,
@@ -1399,7 +1404,8 @@ public struct GenerationRequest: Hashable, Codable, Sendable {
         payload: Payload,
         generationID: UUID? = nil,
         seed: UInt64? = nil,
-        variation: Qwen3SamplingVariation? = nil
+        variation: Qwen3SamplingVariation? = nil,
+        suppressStreamingPreview: Bool? = nil
     ) {
         self.mode = mode
         self.modelID = modelID
@@ -1415,6 +1421,7 @@ public struct GenerationRequest: Hashable, Codable, Sendable {
         self.generationID = generationID
         self.seed = seed
         self.variation = variation
+        self.suppressStreamingPreview = suppressStreamingPreview
     }
 
     public init(
@@ -1430,7 +1437,8 @@ public struct GenerationRequest: Hashable, Codable, Sendable {
         payload: Payload,
         generationID: UUID? = nil,
         seed: UInt64? = nil,
-        variation: Qwen3SamplingVariation? = nil
+        variation: Qwen3SamplingVariation? = nil,
+        suppressStreamingPreview: Bool? = nil
     ) {
         let resolvedMode: GenerationMode
         switch payload {
@@ -1456,7 +1464,8 @@ public struct GenerationRequest: Hashable, Codable, Sendable {
             payload: payload,
             generationID: generationID,
             seed: seed,
-            variation: variation
+            variation: variation,
+            suppressStreamingPreview: suppressStreamingPreview
         )
     }
 

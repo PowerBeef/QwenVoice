@@ -172,6 +172,80 @@ final class LongFormPlanningTests: XCTestCase {
         )
     }
 
+    func testSchemaV4ExecutionAndAssemblyContractsFailClosed() throws {
+        let plan = try makePlan("First sentence. Second sentence. Third sentence.", tokenLimit: 8)
+        let execution = LongFormExecutionEvidence(
+            generatedAtUTC: "2026-07-23T00:00:00Z",
+            streamingExecution: true,
+            segments: plan.evidence.segments.map { segment in
+                LongFormSegmentExecutionEvidence(
+                    index: segment.index,
+                    segmentID: segment.segmentID,
+                    generated: true,
+                    audioDurationSeconds: 1.5,
+                    qcPassed: true
+                )
+            }
+        )
+        let manifest = LongFormManifestV4(plan: plan.evidence, execution: execution)
+        XCTAssertNoThrow(try manifest.validated())
+        XCTAssertEqual(
+            try LongFormManifestDocument.decode(manifest.canonicalJSONData()),
+            .version4(manifest)
+        )
+
+        // Execution inventory must match the plan exactly.
+        let truncated = LongFormManifestV4(
+            plan: plan.evidence,
+            execution: LongFormExecutionEvidence(
+                generatedAtUTC: "2026-07-23T00:00:00Z",
+                streamingExecution: true,
+                segments: Array(execution.segments.dropLast())
+            )
+        )
+        XCTAssertThrowsError(try truncated.validated())
+
+        // Assembly evidence requires execution and a plan-matching inventory.
+        let assembly = LongFormAssemblyEvidence(
+            schemaVersion: LongFormAssemblyEvidence.currentSchemaVersion,
+            algorithmVersion: LongFormAssemblyConfiguration.currentAlgorithmVersion,
+            sampleRate: 24_000,
+            blockFrames: 4_096,
+            segmentCount: plan.evidence.segmentCount,
+            outputFrameCount: 24_000,
+            workingSetFrameUpperBound: 4_096,
+            outputDigest: String(repeating: "0", count: 64),
+            outputReadable: true,
+            maximumSegmentBoundaryJump: 0,
+            segments: plan.evidence.segments.map { segment in
+                LongFormSegmentOutputFrameMap(
+                    segmentID: segment.segmentID,
+                    lineage: segment.lineage,
+                    boundary: segment.boundary,
+                    sourceFrameCount: 24_000,
+                    trimmedLeadingFrames: 0,
+                    trimmedTrailingFrames: 0,
+                    contentOutputRange: LongFormOutputFrameRange(lowerBound: 0, upperBound: 24_000),
+                    insertedPauseOutputRange: LongFormOutputFrameRange(lowerBound: 24_000, upperBound: 24_000),
+                    sourceRMS: 0.1,
+                    appliedGain: 1.0,
+                    verifiedNonSpeechFadeInFrames: 0,
+                    verifiedNonSpeechFadeOutFrames: 0
+                )
+            }
+        )
+        XCTAssertThrowsError(
+            try LongFormManifestV4(plan: plan.evidence, assembly: assembly).validated()
+        )
+        XCTAssertNoThrow(
+            try LongFormManifestV4(
+                plan: plan.evidence,
+                execution: execution,
+                assembly: assembly
+            ).validated()
+        )
+    }
+
     func testSchemaV3ReadsAsLegacySummaryWithoutFabricatedIdentity() throws {
         let json = #"""
         {

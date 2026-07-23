@@ -159,9 +159,11 @@ must not yet be treated as product authority. At this checkpoint:
   links, and read alongside legacy schema-v1 installations. Delivery-plan resolution now
   authenticates and automatically migrates or repairs each existing installed artifact locally;
   live all-artifact proof remains pending, and runtime component-object reuse is still a separate
-  experiment. Spoken-text/long-form schema-v4 planning and the two-pass bounded PCM16
-  assembler are isolated foundations; neither is wired to the product coordinator. Manifest-v3
-  non-streaming execution remains authoritative.
+  experiment. Long-form v4 stages A–C shipped 2026-07-23: the spoken-text planner and
+  long-form planner drive segmentation, segments execute sequentially through the shipping
+  streaming path with preview publication suppressed, the bounded PCM16 assembler joins the
+  output, and manifest v4 (plan + execution + assembly evidence) replaces v3 writes (v3 stays
+  read-compatible). Resume/replacement and History/UI integration remain open (stages D–E).
 - The low-dependency prosody analyzer is now two-pass and bounded-memory, while the typed unified
   quality registry remains a foundation. Existing persisted-WAV Fast QC and specialized language,
   delivery, and prosody gates still own shipping decisions.
@@ -273,3 +275,31 @@ capability an actor-owned public surface:
   `COMPATIBILITY.json` records `retiredLegacySPI` with empty inventories, and
   `phase14DeferredSurfaces` is empty. Contract token:
   `phase14-complete-2026-07-23-spi-retired-actor-owned-loading-metadata-priming-and-clone-artifacts`.
+
+## Amendment 2026-07-23d — Long-form v4 stages A–C (sequential streaming cutover)
+
+Phase 11's core contradiction — long-form used the memory-heavy non-streaming path even though
+streaming is the project's primary RAM architecture — is resolved for the macOS product:
+
+- **Sequential streaming execution.** Long-form no longer routes through the native batch call.
+  Each planned segment runs the ordinary streaming path (actor → classified session →
+  `GenerationOutputAdapter`) one at a time, with the new request-local
+  `suppressStreamingPreview` flag keeping live preview publication off while incremental WAV,
+  Fast QC, and telemetry behavior stay identical. Memory stays flat at audiobook scale.
+- **Planner-owned segmentation.** `SpokenTextPlanner` + `LongFormPlanner` replace the
+  character/sentence segmenter (retired): boundary-kind precedence with protected spans,
+  conservative token estimates against the shipping codec-token cap, digest-bound identity, and
+  per-segment `effectiveSubseed`s that supersede the shared batch seed — closing the Phase-5
+  deferral of long-form sub-seed execution.
+- **Bounded assembly.** After every segment passes QC, `BoundedLongFormAssembler` joins the
+  output (`long_form_joined.wav`): punctuation-aware pauses from boundary kinds, edge trims,
+  verified non-speech fades, loudness matching, and a per-segment output frame map. The joined
+  file must itself pass Fast QC.
+- **Manifest v4 authoritative.** `LongFormManifestV4` gains optional execution and assembly
+  evidence sections (fail-closed consistency with the plan) and replaces v3 writes; v3 documents
+  remain readable. Manifests stay privacy-safe: no text, paths, or user data — identities,
+  verdicts, and timing only.
+- **Open (stages D–E).** Single-segment regeneration via revision lineage, project resume from a
+  manifest, and History/UI integration (project rows, segment map, per-segment replay) follow as
+  the next change set. iOS long-form remains a later arc; this sequential-streaming design is the
+  basis its batch-removal invariant requires.

@@ -31,6 +31,12 @@ from schema-v2 memory trends.
 |---|---|---|---|---|---|---:|---|---|---|---|
 | 2026-07-13 | [`ios-gate-bench-20260713-045258-6eeb9220`](runs/engine-generation/ios-gate-bench-20260713-045258-6eeb9220.json) | focused | exploratory | passed | memory-contract-incomplete | 1 | `04083b15a4e2` dirty | `excluded` | baseline | ios-gate-bench |
 
+## engine-generation / macos / mac-mini-m2-8gb / config `18e0d6e87912`
+
+| completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |
+|---|---|---|---|---|---|---:|---|---|---|---|
+| 2026-07-23 | [`macos-engine-20260723-171109-97f9e88e`](runs/engine-generation/macos-engine-20260723-171109-97f9e88e.json) | focused | exploratory | passedWithWarnings | qualified-with-warnings | 9 | `394263b59d48` dirty | `excluded` | baseline | phase11-abc-qc-soak |
+
 ## engine-generation / macos / mac-mini-m2-8gb / config `193122b9cb08`
 
 | completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |
