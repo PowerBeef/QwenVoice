@@ -109,7 +109,7 @@
     "modeCutover": "implementation-complete-focused-platform-acceptance-passed-overall-promotion-passed",
     "requestLocalSamplingV2": "shipping-promotion-packaged-evidence-live",
     "telemetryV9": "complete-sidecar-authority-with-v8-envelope",
-    "chunkAndPreviewExperiments": "rescoped-2026-07-22-delivery-pipeline-pacing-fix-engine-rtf-flat-in-cli-ab",
+    "chunkAndPreviewExperiments": "implemented-generation-glass-gate-2026-07-23-ui-context-delivers-engine-capability",
     "sharedComponentStorage": "integrated-production-path-authenticated-auto-reconciliation-live-artifact-validation-pending",
     "runtimeComponentReuse": "not-started-isolated-ab-after-live-disk-component-proof",
     "spokenTextPlanning": "implemented-model-free-foundation-not-shadowed-or-shipping",
@@ -196,6 +196,7 @@
       "macos-xcui-benchmark-20260723-043320-eb94bb9b",
       "macos-xcui-benchmark-20260723-042644-e48f8f54"
     ],
-    "experimentReverts": "Three diagnostic engine-loop changes (generation task priority pin, per-token publishProgress coalescing, dedicated userInteractive actor executor) were reverted after two intermittent Fast-QC hard failures appeared with them in-tree; 12/12 takes passed QC after the revert. Any future re-introduction requires its own fixed-seed QC soak."
+    "experimentReverts": "Three diagnostic engine-loop changes (generation task priority pin, per-token publishProgress coalescing, dedicated userInteractive actor executor) were reverted after two intermittent Fast-QC hard failures appeared with them in-tree; 12/12 takes passed QC after the revert. Any future re-introduction requires its own fixed-seed QC soak.",
+    "phase7Result": "Implemented 2026-07-23: generationPerformanceGate environment value renders glass surfaces with the solid-fill fallback while a generation is active. One-cell custom/long warm RTF 1.833 (pre-gate 1.37; no-glass ceiling 1.842); full matrix custom 1.67-1.84, design 1.79-1.94, clone 1.43-1.86. Root cause chain: XCUITest screen recording (fixed via preferredScreenCaptureFormat) then Liquid Glass compositor work (gated); XPC topology measured ~3%."
   }
 }

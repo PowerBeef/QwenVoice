@@ -61,7 +61,7 @@ iOS: UI → Core in-process → same owned runtime.
 | 4 Product adapter + mode cutover | Overall promotion passed (`overallPromotion: passed`) |
 | 5 Sampling v2 | Promotion-packaged evidence live |
 | 6 Telemetry v9 | Complete sidecar authority with v8 envelope (`telemetry: 9`) |
-| 7 UI/XPC-context gap | Re-aimed 2026-07-23 (`amendment20260723`): the UI decline was the XCUITest screen-recording observer effect (fixed; lane 0.70→1.196). Target: close the honest ≈1.2→≈1.8 gap vs interactive `-O` capability |
+| 7 UI-context gap | Implemented 2026-07-23: screen-recording observer effect fixed, then Liquid Glass compositor cost gated during generation (`generationPerformanceGate`); UI context delivers engine capability (matrix 1.43–1.94; XPC ≈3%) |
 | 8–13 | Foundations / not started / partial as in the runtime contract |
 | 14 Mechanical retirement | Pulled forward 2026-07-22: scheduled after the phase 7–9 block, before 10–13 (`phase14DeferredSurfaces` unchanged) |
 

@@ -231,6 +231,11 @@ struct ContentView: View {
             )
         }
         .navigationSplitViewStyle(.balanced)
+        // Generation performance gate (OPTIMIZATION.md §K): while the engine
+        // generates, glass surfaces fall back to the solid-fill design so the
+        // material's continuous compositor work stops competing with MLX for
+        // the GPU (measured 1.37 with glass vs 1.84 solid on the 8 GB tier).
+        .environment(\.generationPerformanceGate, ttsEngineStore.hasActiveGeneration)
         .onAppear(perform: handleAppear)
         .task { await handleInitialLoad() }
         .onChange(of: selectedItem) { _, newValue in handleSelectionChange(newValue) }

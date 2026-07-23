@@ -694,6 +694,15 @@ one-cell lanes (custom/long warm, identical `-O` engine code, same session):
   keeps `QW_UI_LIQUID`; the product decision (generation-time glass gate via the existing
   solid-fill fallback, a floor-tier default, or accepting 1.37-with-glass) is recorded as the
   phase 7 implementation choice.
+- **Implemented (maintainer-endorsed): the generation performance gate.** A
+  `generationPerformanceGate` SwiftUI environment value, injected at the window root from
+  `TTSEngineStore.hasActiveGeneration`, folds into every glass-choosing branch (the four
+  AppTheme styles plus the eight direct `glassEffect` sites) exactly like Reduce Transparency:
+  while a generation runs, surfaces render the existing solid-fill design; glass returns at
+  idle. Acceptance: one-cell custom/long warm **1.833** (vs 1.37 pre-gate, 1.842 no-glass
+  diagnostic ceiling), and a full dirty-tree matrix at custom warm 1.67/1.80/1.84, design
+  1.79/1.88/1.94, clone 1.43/1.70/1.86 with clean QC and the deterministic suite green. The
+  UI context now delivers engine capability on the 8 GB floor tier.
 
 ## Status
 

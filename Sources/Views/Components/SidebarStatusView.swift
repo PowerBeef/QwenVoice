@@ -16,6 +16,7 @@ struct SidebarFooterPresentation: Equatable {
 }
 
 struct SidebarStatusView: View {
+    @Environment(\.generationPerformanceGate) private var performanceGate
     let sidebarStatus: SidebarStatus
     let clearError: @MainActor () -> Void
 
@@ -222,7 +223,7 @@ struct SidebarStatusView: View {
     @ViewBuilder
     private func statusBackground(color: Color, fillOpacity: Double, strokeOpacity: Double) -> some View {
         #if QW_UI_LIQUID
-        if #available(macOS 26, *) {
+        if #available(macOS 26, *), !performanceGate {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Color.clear)
                 .overlay(

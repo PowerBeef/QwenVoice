@@ -293,6 +293,7 @@ from schema-v2 memory trends.
 | completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |
 |---|---|---|---|---|---|---:|---|---|---|---|
 | 2026-07-23 | [`macos-xcui-benchmark-20260723-054315-9b6f267b`](runs/ui-generation/macos-xcui-benchmark-20260723-054315-9b6f267b.json) | canonical | canonical | passedWithWarnings | qualified-with-warnings | 29 | `3a4378534195` | `3bd86418d3bc` | baseline | macos-xcui-benchmark-20260723-054315-9b6f267b |
+| 2026-07-23 | [`macos-xcui-benchmark-20260723-081659-e4a216aa`](runs/ui-generation/macos-xcui-benchmark-20260723-081659-e4a216aa.json) | canonical | exploratory | passedWithWarnings | qualified-with-warnings | 29 | `f7ee0d006e3a` dirty | `excluded` | baseline | macos-xcui-benchmark-20260723-081659-e4a216aa |
 
 ## ui-generation / macos / mac-mini-m2-8gb / config `4a5bd9c374be`
 
@@ -376,6 +377,7 @@ from schema-v2 memory trends.
 | 2026-07-23 | [`macos-xcui-benchmark-20260723-071837-eefae1ec`](runs/ui-generation/macos-xcui-benchmark-20260723-071837-eefae1ec.json) | focused | exploratory | passedWithWarnings | qualified-with-warnings | 4 | `1cdb94c164ad` dirty | `excluded` | baseline | macos-xcui-benchmark-20260723-071837-eefae1ec |
 | 2026-07-23 | [`macos-xcui-benchmark-20260723-072534-98b7cc52`](runs/ui-generation/macos-xcui-benchmark-20260723-072534-98b7cc52.json) | focused | exploratory | passedWithWarnings | qualified-with-warnings | 4 | `1cdb94c164ad` dirty | `excluded` | baseline | macos-xcui-benchmark-20260723-072534-98b7cc52 |
 | 2026-07-23 | [`macos-xcui-benchmark-20260723-074016-ad57d384`](runs/ui-generation/macos-xcui-benchmark-20260723-074016-ad57d384.json) | focused | exploratory | passedWithWarnings | qualified-with-warnings | 4 | `495a77e6c4ad` dirty | `excluded` | baseline | macos-xcui-benchmark-20260723-074016-ad57d384 |
+| 2026-07-23 | [`macos-xcui-benchmark-20260723-081106-807ae79f`](runs/ui-generation/macos-xcui-benchmark-20260723-081106-807ae79f.json) | focused | exploratory | passedWithWarnings | qualified-with-warnings | 4 | `f7ee0d006e3a` dirty | `excluded` | baseline | macos-xcui-benchmark-20260723-081106-807ae79f |
 
 ## ui-generation / macos / mac-mini-m2-8gb / config `a0ef72d79b71`
 

@@ -1,6 +1,23 @@
 import AppKit
 import SwiftUI
 
+/// Generation performance gate (benchmarks/OPTIMIZATION.md §K): Liquid Glass's
+/// continuous compositor work costs ~23% engine RTF on the 8 GB tier while a
+/// window showing glass is visible (measured 1.37 with glass vs 1.84 with the
+/// solid-fill fallback during generation). While a generation is active the
+/// glass surfaces fall back to the same solid-fill design Reduce Transparency
+/// uses; glass returns when the engine goes idle.
+private struct GenerationPerformanceGateKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var generationPerformanceGate: Bool {
+        get { self[GenerationPerformanceGateKey.self] }
+        set { self[GenerationPerformanceGateKey.self] = newValue }
+    }
+}
+
 enum AppTheme {
     enum UIProfile: String {
         case liquid
@@ -175,6 +192,7 @@ enum AppTheme {
 
 private struct NativeSurfaceStyle: ViewModifier {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.generationPerformanceGate) private var performanceGate
     @Environment(\.cardGlassTint) private var cardGlassTint
 
     let padding: CGFloat
@@ -183,7 +201,7 @@ private struct NativeSurfaceStyle: ViewModifier {
 
     func body(content: Content) -> some View {
         #if QW_UI_LIQUID
-        if #available(macOS 26, *), !reduceTransparency {
+        if #available(macOS 26, *), !reduceTransparency, !performanceGate {
             let resolvedTint: Color = cardGlassTint.map {
                 AppTheme.surfaceGlassTint($0)
             } ?? AppTheme.smokedGlassTint
@@ -425,10 +443,11 @@ struct SectionHeaderStyle: ViewModifier {
 struct GlowingGradientButtonStyle: ButtonStyle {
     let baseColor: Color
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.generationPerformanceGate) private var performanceGate
 
     func makeBody(configuration: Configuration) -> some View {
         #if QW_UI_LIQUID
-        if #available(macOS 26, *), !reduceTransparency {
+        if #available(macOS 26, *), !reduceTransparency, !performanceGate {
             configuration.label
                 .font(.body.weight(.semibold))
                 .foregroundStyle(.white)
@@ -462,10 +481,11 @@ struct GlowingGradientButtonStyle: ButtonStyle {
 struct CompactGenerateButtonStyle: ButtonStyle {
     let baseColor: Color
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.generationPerformanceGate) private var performanceGate
 
     func makeBody(configuration: Configuration) -> some View {
         #if QW_UI_LIQUID
-        if #available(macOS 26, *), !reduceTransparency {
+        if #available(macOS 26, *), !reduceTransparency, !performanceGate {
             configuration.label
                 .foregroundStyle(.white)
                 .padding(12)
@@ -562,10 +582,11 @@ struct StudioGroupBoxStyle: GroupBoxStyle {
 @available(macOS 26, *)
 struct GlassGroupBoxStyle: GroupBoxStyle {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.generationPerformanceGate) private var performanceGate
     @Environment(\.cardGlassTint) private var cardGlassTint
 
     func makeBody(configuration: Configuration) -> some View {
-        if reduceTransparency {
+        if reduceTransparency || performanceGate {
             VStack(alignment: .leading, spacing: 8) {
                 configuration.label
                 configuration.content

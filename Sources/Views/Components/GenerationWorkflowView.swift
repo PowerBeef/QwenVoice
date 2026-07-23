@@ -200,6 +200,7 @@ enum StudioCardStyle {
 }
 
 struct StudioSectionCard<Content: View>: View {
+    @Environment(\.generationPerformanceGate) private var performanceGate
     @Environment(\.cardGlassTint) private var cardGlassTint
 
     let title: String
@@ -263,7 +264,7 @@ struct StudioSectionCard<Content: View>: View {
     @ViewBuilder
     private var styledCard: some View {
         #if QW_UI_LIQUID
-        if #available(macOS 26, *) {
+        if #available(macOS 26, *), !performanceGate {
             cardContent
                 .padding(12)
                 .background(
@@ -314,6 +315,7 @@ struct StudioSectionCard<Content: View>: View {
 }
 
 struct CompactConfigurationSection<Content: View>: View {
+    @Environment(\.generationPerformanceGate) private var performanceGate
     @Environment(\.cardGlassTint) private var cardGlassTint
 
     let title: String
@@ -348,7 +350,7 @@ struct CompactConfigurationSection<Content: View>: View {
             .padding(.vertical, max(panelPadding - 1, 0))
             #if QW_UI_LIQUID
             .background {
-                if #available(macOS 26, *) {
+                if #available(macOS 26, *), !performanceGate {
                     RoundedRectangle(cornerRadius: panelCornerRadius, style: .continuous)
                         .fill(AppTheme.inlineFill)
                         .overlay(

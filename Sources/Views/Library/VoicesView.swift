@@ -10,6 +10,7 @@ private struct VoicesAlertState: Identifiable {
 }
 
 struct VoicesView: View {
+    @Environment(\.generationPerformanceGate) private var performanceGate
     @EnvironmentObject private var ttsEngineStore: TTSEngineStore
     @EnvironmentObject private var audioPlayer: AudioPlayerViewModel
     @Environment(SavedVoicesViewModel.self) private var savedVoicesViewModel
@@ -296,6 +297,7 @@ private extension VoicesView {
 }
 
 private struct VoiceRow: View {
+    @Environment(\.generationPerformanceGate) private var performanceGate
     let voice: Voice
     let isHighlighted: Bool
     let canUseInVoiceCloning: Bool
@@ -339,7 +341,7 @@ private struct VoiceRow: View {
         .padding(.horizontal, 6)
         #if QW_UI_LIQUID
         .background {
-            if #available(macOS 26, *), isHighlighted {
+            if #available(macOS 26, *), isHighlighted, !performanceGate {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(.clear)
                     .glassEffect(.regular.tint(AppTheme.accent), in: .rect(cornerRadius: 12))
