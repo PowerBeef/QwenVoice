@@ -401,59 +401,100 @@ pull_ios_model_download_diagnostics() {
     --source "Library/Application Support/Q-Voice/model-download-acceptance/diagnostics/model-downloads" \
     --destination "$destination" >"$out/model-download-diagnostics-pull.log" 2>&1 \
     || return 1
-  python3 - "$destination" <<'PY'
+  python3 - "$destination" "$ROOT_DIR/Sources/Resources/qwenvoice_production_model_catalog.json" <<'PY'
 import json, pathlib, sys
 
 root = pathlib.Path(sys.argv[1])
+catalog = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+shared_component_bytes = sum(
+    file.get("byteCount", 0)
+    for component in catalog.get("sharedComponents", [])
+    for file in component.get("contentIdentity", {}).get("files", [])
+)
+if shared_component_bytes <= 0:
+    raise SystemExit("production catalog is missing shared-component byte identities")
+
 files = sorted(root.glob("*.json"))
-if not files or len(files) > 20:
-    raise SystemExit(f"expected 1-20 compact diagnostic records, found {len(files)}")
+if not files or len(files) > 60:
+    raise SystemExit(f"expected 1-60 compact diagnostic records, found {len(files)}")
 if sum(path.stat().st_size for path in files) > 5 * 1024 * 1024:
     raise SystemExit("model-download diagnostics exceed the 5 MiB retention contract")
 records = [json.loads(path.read_text(encoding="utf-8")) for path in files]
-successes = [
-    record for record in records
-    if record.get("kind") == "success" and record.get("finalIntegrity") is True
-]
-if not successes:
-    raise SystemExit("missing final-integrity success summary")
-latest = max(successes, key=lambda value: value.get("capturedAtUTC", ""))
-latest_time = latest.get("capturedAtUTC", "")
-prior_terminal_times = sorted(
+successes = sorted(
+    (
+        record for record in records
+        if record.get("kind") == "success" and record.get("finalIntegrity") is True
+    ),
+    key=lambda value: value.get("capturedAtUTC", ""),
+)
+if len(successes) < 3:
+    raise SystemExit(
+        "the three-artifact lifecycle requires at least three final-integrity successes; "
+        f"found {len(successes)}"
+    )
+terminal_times = sorted(
     record.get("capturedAtUTC", "") for record in records
     if record.get("kind") in {"success", "failure"}
-    and record.get("capturedAtUTC", "") < latest_time
 )
-lower_bound = prior_terminal_times[-1] if prior_terminal_times else ""
-current = [
-    record for record in records
-    if lower_bound < record.get("capturedAtUTC", "") <= latest_time
-]
-metrics = [
-    record for record in current
-    if record.get("kind") == "task-metrics" and record.get("relativePath")
-]
-expected = max(
-    (record.get("totalBytes", 0) for record in current if record.get("kind") == "phase"),
-    default=latest.get("expectedBytes", 0),
-)
-wire = sum(max(0, record.get("transferredBytes", 0)) for record in metrics)
-protocols = sorted({record.get("protocolName") for record in metrics if record.get("protocolName")})
-if expected <= 0 or wire < expected or not protocols:
-    raise SystemExit("selected success is missing complete transfer metrics")
+
+validated = []
+for success in successes[-3:]:
+    success_time = success.get("capturedAtUTC", "")
+    prior = [time for time in terminal_times if time < success_time]
+    lower_bound = prior[-1] if prior else ""
+    window = [
+        record for record in records
+        if lower_bound < record.get("capturedAtUTC", "") <= success_time
+    ]
+    metrics = [
+        record for record in window
+        if record.get("kind") == "task-metrics" and record.get("relativePath")
+    ]
+    expected = max(
+        (record.get("totalBytes", 0) for record in window if record.get("kind") == "phase"),
+        default=success.get("expectedBytes", 0),
+    )
+    wire = sum(max(0, record.get("transferredBytes", 0)) for record in metrics)
+    protocols = sorted({record.get("protocolName") for record in metrics if record.get("protocolName")})
+    if expected <= 0 or not protocols:
+        raise SystemExit("a selected success is missing complete transfer metrics")
+    # The shared-component store omits exactly the verified tokenizer bytes from a
+    # later artifact's plan. A success must therefore account for its full catalog
+    # bytes either entirely on the wire or with exactly the component reused; any
+    # other total is duplicate or missing payload and fails closed.
+    if wire == expected:
+        reused = 0
+    elif wire == expected - shared_component_bytes:
+        reused = shared_component_bytes
+    else:
+        raise SystemExit(
+            "wire bytes match neither the full artifact nor exact shared-component reuse: "
+            f"wire={wire} expected={expected} sharedComponent={shared_component_bytes}"
+        )
+    validated.append({
+        "capturedAtUTC": success_time,
+        "finalIntegrity": True,
+        "expectedBytes": expected,
+        "wireBytes": wire,
+        "reusedComponentBytes": reused,
+        "duplicateBytes": 0,
+        "retryCount": success.get("retryCount", 0),
+        "protocols": protocols,
+        "thermalState": success.get("thermalState"),
+        "networkSeconds": success.get("networkSeconds"),
+        "verificationSeconds": success.get("verificationSeconds"),
+        "installationSeconds": success.get("installationSeconds"),
+    })
+
+if sum(1 for entry in validated if entry["reusedComponentBytes"] > 0) < 2:
+    raise SystemExit(
+        "the three-artifact lifecycle must observe shared-component reuse on at "
+        "least two artifacts"
+    )
 summary = {
-    "schemaVersion": 1,
-    "capturedAtUTC": latest_time,
-    "finalIntegrity": True,
-    "expectedBytes": expected,
-    "wireBytes": wire,
-    "duplicateBytes": wire - expected,
-    "retryCount": latest.get("retryCount", 0),
-    "protocols": protocols,
-    "thermalState": latest.get("thermalState"),
-    "networkSeconds": latest.get("networkSeconds"),
-    "verificationSeconds": latest.get("verificationSeconds"),
-    "installationSeconds": latest.get("installationSeconds"),
+    "schemaVersion": 2,
+    "sharedComponentBytes": shared_component_bytes,
+    "artifacts": validated,
 }
 (root.parent / "validated-summary.json").write_text(
     json.dumps(summary, indent=2, sort_keys=True) + "\n",

@@ -54,11 +54,30 @@ final class VocelloiOSModelDownloadUITests: VocelloiOSUITestCase {
         XCTAssertTrue(VocelloUIWait.exists(installed, timeout: 3_600))
         VocelloUIScreenshot.attach(app, named: "ios-model-download-installed")
 
-        XCTAssertTrue(VocelloUIPrimaryAction.perform(on: installed, timeout: 20))
-        let confirmDelete = element("deleteModelSheet_confirm")
-        XCTAssertTrue(VocelloUIWait.exists(confirmDelete, timeout: 20))
-        XCTAssertTrue(VocelloUIPrimaryAction.perform(on: confirmDelete, timeout: 20))
-        XCTAssertTrue(VocelloUIWait.exists(element("iosModelDownload_\(modelID)"), timeout: 120))
+        // Phase 8 shared-component live coverage: with Custom still installed in the
+        // isolated root, deliver the remaining Speed artifacts. Their delivery plans
+        // must reuse the verified speech-tokenizer component; the pulled diagnostics
+        // validator enforces the exact wire-byte accounting.
+        for reusedModelID in ["pro_design", "pro_clone"] {
+            let download = element("iosModelDownload_\(reusedModelID)")
+            XCTAssertTrue(VocelloUIWait.exists(download, timeout: 60))
+            XCTAssertTrue(VocelloUIPrimaryAction.perform(on: download, timeout: 20))
+            XCTAssertTrue(
+                VocelloUIWait.exists(element("iosModelDelete_\(reusedModelID)"), timeout: 3_600),
+                "isolated \(reusedModelID) must reach installed through the shared-component plan"
+            )
+            VocelloUIScreenshot.attach(app, named: "ios-model-download-installed-\(reusedModelID)")
+        }
+
+        for cleanupModelID in ["pro_clone", "pro_design", modelID] {
+            let delete = element("iosModelDelete_\(cleanupModelID)")
+            XCTAssertTrue(VocelloUIWait.exists(delete, timeout: 60))
+            XCTAssertTrue(VocelloUIPrimaryAction.perform(on: delete, timeout: 20))
+            let confirmDelete = element("deleteModelSheet_confirm")
+            XCTAssertTrue(VocelloUIWait.exists(confirmDelete, timeout: 20))
+            XCTAssertTrue(VocelloUIPrimaryAction.perform(on: confirmDelete, timeout: 20))
+            XCTAssertTrue(VocelloUIWait.exists(element("iosModelDownload_\(cleanupModelID)"), timeout: 120))
+        }
         VocelloUIScreenshot.attach(app, named: "ios-model-download-isolated-cleanup")
 
         // Leave the isolated root, then prove the user's canonical installation

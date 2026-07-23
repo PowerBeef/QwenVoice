@@ -821,7 +821,7 @@ verified files. Typed transient retries cover connection loss and HTTP 408/429/5
 failures remain terminal. Shared URLSession callbacks use a serial delegate queue; durable file
 staging is sequenced before terminal continuation, and cumulative progress is bounded per task while
 the exact final byte count is always delivered.
-TLS/filesystem/configuration errors fail without retry. Compact local diagnostics are capped at 20
+TLS/filesystem/configuration errors fail without retry. Compact local diagnostics are capped at 60
 records and 5 MB and contain no raw URLs or absolute paths. Downloads come from Hugging Face over
 HTTPS; **no cloud inference**. iOS catalog validation: `scripts/check_ios_catalog.sh`. Headless
 install: `vocello models install <id>` (CLI) or the app Settings UI. Full lifecycle and storage

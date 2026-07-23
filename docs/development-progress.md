@@ -22,8 +22,8 @@ machine-readable status record and wins over older prose that still says promoti
 | 5 — Request-local sampling | Closed 2026-07-20. Shipping path packages fail-closed `SamplingTakeEvidence.packagedTelemetryNotes()` (`validatedForPromotion()` + `samplingPromotionPackaged=true`). Fixed-seed equal/diverge pairs remain live identity proof. Contract `requestLocalSamplingV2`: `shipping-promotion-packaged-evidence-live`. Long-form/candidate sub-seed execution remains Phase 11/12. |
 | 6 — Telemetry v9 | Closed 2026-07-20 for history sidecar authority. JSONL envelope remains schema v8 with nested transition; publication-ready transitions with exact MLX chunk instants publish complete `*.streaming-telemetry-v9.json` sidecars and stamp digests. Contract `telemetry: 9`, `telemetryV9`: `complete-sidecar-authority-with-v8-envelope`. |
 | 7 — UI-context gap (implemented 2026-07-23) | **Closed in two acts** (`amendment20260723`, OPTIMIZATION.md §K). Act 1: the canonical macOS decline was XCUITest's automatic screen recording (fixed via `preferredScreenCaptureFormat: screenshots`). Act 2: the honest residual (~23%) was Liquid Glass's continuous compositor work while visible; the XPC topology itself measures ~3%. The endorsed **generation performance gate** (`generationPerformanceGate` environment value from `hasActiveGeneration`) renders glass surfaces with the shipped solid-fill fallback during generation — acceptance 1.833 one-cell, full matrix custom 1.67–1.84 / design 1.79–1.94 / clone 1.43–1.86, engine capability delivered to visible users on the floor tier. Three diagnostic engine-loop experiments remain reverted (fixed-seed QC soak required for re-introduction). |
-| 8 — Shared component storage | Production-integrated with deterministic coverage. Live validation across all six macOS artifacts and all three iPhone Speed artifacts is pending. |
-| 9 — Runtime component reuse | Not started. Decoder/immutable-weight reuse remains an optional isolated A/B after disk-component proof. |
+| 8 — Shared component storage | Closed 2026-07-23. Live validation delivered all six artifacts into an isolated Mac root (single tokenizer inode nlink=7 across six models plus the store; newest full window wire = expected − 682,295,738 exactly) and all three iPhone Speed artifacts through the extended isolated lane (Custom full-wire, Design/Clone exact reuse, zero duplicates/retries). Contract `sharedComponentStorage`: `live-validated-2026-07-23-…-exact-reuse`. |
+| 9 — Runtime component reuse | Not started; unblocked 2026-07-23 by the live disk-component proof. Decoder/immutable-weight reuse remains an optional isolated A/B. |
 | 10 — Spoken-text planning | Model-free foundation only; it is not shadowed against or used by shipping generation. |
 | 11 — Long-form v4 | Planner and bounded assembler foundations only. Sequential streaming, resume/replacement, segment QA, History integration, and product cutover are pending; manifest-v3 non-streaming remains shipping. |
 | 12 — Bounded analysis and unified quality | Partial. Bounded prosody algorithm v2 is shipping; persisted-WAV consolidation and the typed registry/scheduler are not integrated. |
@@ -130,7 +130,7 @@ Overall promotion no longer forces a single linear gate. Choose by goal:
    (14a's mechanical retirements closed 2026-07-23; 14b needs a design brief first).
 2. **Phase 7** — chunk/preview A/B and calibration when the priority is perceived latency
    (requires shipping v9 evidence, now available; protect secret-sauce cells).
-3. **Phase 8** — live all-artifact validation when the priority is model-delivery confidence.
+3. **Phase 8** — closed 2026-07-23 (live all-artifact validation on both canonical platforms).
 4. **Phases 10–13** — spoken-text, long-form v4, quality consolidation, history v3 remain later
    product work; manifest-v3 and history schema v2 still ship.
 
@@ -269,8 +269,9 @@ identifiers differ. Restoring that component does not authorize Simulator execut
   read-compatible. Resolving a schema-v2 delivery plan now authenticates all catalog files in an
   existing installation and automatically migrates or repairs its shared-component presentation;
   failed authentication contributes no reusable bytes and falls back to ordinary network repair.
-  Live validation across all supported artifacts is still pending; earlier isolated delivery
-  evidence predates shared-component activation. The isolated
+  Live validation completed 2026-07-23 on both canonical platforms (six-artifact isolated Mac
+  run and three-artifact iPhone lane with exact shared-component reuse; see
+  `docs/reference/model-delivery.md`). The earlier isolated
   macOS/CLI Custom Speed proof at source `9a8da874…` transferred exactly 2,312,057,897 expected and
   wire bytes with zero control or duplicate bytes, zero retries, nominal thermal state, and final
   integrity. Its bounded foreground delegate ingress preserved terminal staging and metrics before

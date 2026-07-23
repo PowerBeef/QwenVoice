@@ -255,7 +255,7 @@ public final class ModelDownloadDiagnosticsStore: @unchecked Sendable {
         var retainedBytes: Int64 = 0
         for (index, file) in files.enumerated() {
             let size = Int64((try? file.resourceValues(forKeys: keys).fileSize) ?? 0)
-            if index >= 20 || retainedBytes + size > 5 * 1_024 * 1_024 {
+            if index >= 60 || retainedBytes + size > 5 * 1_024 * 1_024 {
                 try? fileManager.removeItem(at: file)
             } else {
                 retainedBytes += size

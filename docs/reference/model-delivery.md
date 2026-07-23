@@ -63,7 +63,8 @@ read-compatible but cannot claim shared-component reuse.
 macOS, CLI, and iOS now resolve `ProductionModelCatalog.deliveryPlan(...)` rather than enumerating a
 live repository. `validate --require-complete` proves this static contract. It does not replace the
 isolated Mac/iPhone lifecycle proofs, which must be refreshed after redirect, restoration,
-delivery-routing, or shared-component changes.
+delivery-routing, or shared-component changes; the current proofs are the 2026-07-23
+six-artifact Mac run and three-artifact iPhone run described below.
 
 ## Shared component store
 
@@ -87,9 +88,13 @@ reconciles an existing installed artifact one at a time: every catalog file is a
 the model can publish component bytes, and a healthy model is left alone while a damaged linked
 presentation is repaired only from verified store blobs. A failed local authentication leaves the
 existing directory untouched, grants no reuse, and lets the ordinary downloader repair it from the
-network. Live validation of all six macOS artifacts and the three iOS Speed artifacts is still
-pending. Do not report the projected disk or network savings as observed production evidence until
-those runs complete.
+network. Live validation completed 2026-07-23: an isolated Mac root installed all six artifacts
+(final `models status` complete; one 682,293,092-byte tokenizer blob at a single inode with
+nlink=7 across all six models plus the store; newest fully retained window measured
+wire = expected − 682,295,738 exactly with zero retries), and the extended physical-iPhone lane
+delivered Custom full-wire (2,312,057,897 bytes) then Design and Clone with exact
+shared-component reuse (wire 1,629,761,538 and 1,653,779,429; zero duplicates, zero retries,
+nominal thermal). Observed disk cost on the Mac was 12 GiB for the 16.2 GB catalog total.
 
 The iOS ledger is atomically written, versioned, and contains only privacy-safe identifiers and
 relative paths. It records the logical request, model and artifact version, expected and verified
@@ -135,7 +140,7 @@ and permanent 4xx responses do not retry.
 
 ## Diagnostics and acceptance
 
-Local diagnostic summaries retain at most 20 records and 5 MB. Their allowlisted fields cover
+Local diagnostic summaries retain at most 60 records and 5 MB (raised from 20 in Phase 8 so one three-artifact shared-component lifecycle keeps every per-file record). Their allowlisted fields cover
 timing, protocol, redirect/reuse and constrained/expensive-network flags, transferred bytes, and a
 sanitized failure class. A successful attempt also records expected and wire bytes, duplicate bytes,
 retry count, protocol set, thermal state, phase timings, and final-integrity status. Task completion
@@ -159,8 +164,12 @@ scripts/ui_test.sh ios model-download
 ```
 
 The iPhone proof backgrounds and terminates the app during transfer, relaunches it, requires
-non-regressing adopted progress, waits for exact verified installation, and deletes the isolated
-model through the visible UI. It is not part of smoke, benchmark, CI, release, or packaging.
+non-regressing adopted progress, and waits for exact verified installation of Custom. With Custom
+retained in the isolated root it then delivers Design and Clone, whose plans must reuse the
+verified shared speech-tokenizer component — the pulled diagnostics validator requires each of the
+three newest successes to account for its full catalog bytes either entirely on the wire or with
+exactly the shared-component bytes reused, and at least two artifacts to show reuse. All three
+isolated models are then deleted through the visible UI. It is not part of smoke, benchmark, CI, release, or packaging.
 Crash-delta snapshots retain hashes rather than duplicating the device's historical diagnostics;
 the lane pulls only its bounded model-download summaries into the local untracked result artifact.
 

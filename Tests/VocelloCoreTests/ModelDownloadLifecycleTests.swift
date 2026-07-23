@@ -507,14 +507,14 @@ final class ModelDownloadLifecycleTests: XCTestCase {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let store = ModelDownloadDiagnosticsStore(directory: root)
-        for index in 0..<25 {
+        for index in 0..<70 {
             store.recordFailure(
                 classification: "network-\(index)",
                 message: "failed at https://example.invalid/private from /Users/example/private/file"
             )
         }
         let files = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
-        XCTAssertLessThanOrEqual(files.count, 20)
+        XCTAssertLessThanOrEqual(files.count, 60)
         let payload = try files.map { try String(contentsOf: $0, encoding: .utf8) }.joined()
         XCTAssertFalse(payload.contains("example.invalid"))
         XCTAssertFalse(payload.contains("/Users/example"))

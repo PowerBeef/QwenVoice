@@ -62,7 +62,8 @@ iOS: UI → Core in-process → same owned runtime.
 | 5 Sampling v2 | Promotion-packaged evidence live |
 | 6 Telemetry v9 | Complete sidecar authority with v8 envelope (`telemetry: 9`) |
 | 7 UI-context gap | Implemented 2026-07-23: screen-recording observer effect fixed, then Liquid Glass compositor cost gated during generation (`generationPerformanceGate`); UI context delivers engine capability (matrix 1.43–1.94; XPC ≈3%) |
-| 8–13 | Foundations / not started / partial as in the runtime contract |
+| 8 Shared component storage | Closed 2026-07-23: live six-artifact Mac + three-artifact iPhone validation with exact shared-component reuse (wire = expected − 682,295,738 on reused installs) |
+| 9–13 | Foundations / not started / partial as in the runtime contract |
 | 14 Mechanical retirement | 14a complete 2026-07-23: combined characterization session, product/priming stream APIs, and the adapter filename retired; `VocelloQwen3LegacyCompatibility` SPI remains for 14b (actor-owned loading) |
 
 ## In-progress dual surfaces (do not misread as dual backends)

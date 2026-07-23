@@ -30,7 +30,7 @@ Maintained macOS subtrees and preferences:
   `.qwenvoice-components-v1/` content-addressed store; ordinary model paths remain regular hard
   links, and component liveness is derived from strict installed manifests.
 - `.qwenvoice-downloads/` stores staged model downloads, partial files, resume data, and download-state metadata while a download is in progress.
-- `diagnostics/model-downloads/` stores allowlisted transfer/failure summaries, capped at 20 records and 5 MB; raw URLs and absolute paths are excluded.
+- `diagnostics/model-downloads/` stores allowlisted transfer/failure summaries, capped at 60 records and 5 MB; raw URLs and absolute paths are excluded.
 - `outputs/CustomVoice/`, `outputs/VoiceDesign/`, and `outputs/Clones/` store generated audio unless the user chooses a different output directory. If a user-chosen directory becomes missing or unwritable, new audio falls back to these default folders and Settings shows a warning — a generation is never lost to a vanished folder.
 - `voices/` stores saved voice reference assets (the reference WAV plus an optional `.txt` transcript sidecar).
 - Reference-clip **recording** (macOS, 2026-06) uses two short-lived directories under the system temporary directory: `voice-clone-references/` holds the in-progress capture and `voice-enroll/` holds a stable copy during enrollment. Both are deleted as part of enrollment/cancel; the kept copy is the one in `voices/`.
@@ -79,7 +79,7 @@ Maintained iPhone subtrees:
   hard links; deletion preserves blobs still live in another strict installed manifest.
 - `downloads/ios_model_delivery_state.json` is the atomic schema-v2 delivery ledger. It stores only privacy-safe identifiers, relative paths, receipts, retry counts, byte progress, and terminal state.
 - `downloads/staging/` is the only iPhone delivery staging tree; it holds durable delegate files plus per-model verified files, partials, and resume data.
-- `diagnostics/model-downloads/` stores allowlisted local transfer/failure summaries, capped at 20 records and 5 MB. It excludes raw URLs, absolute paths, device identity, and user data.
+- `diagnostics/model-downloads/` stores allowlisted local transfer/failure summaries, capped at 60 records and 5 MB. It excludes raw URLs, absolute paths, device identity, and user data.
 - `outputs/` stores generated audio. The user can optionally also copy each new clip to an external Files/iCloud folder via Settings → "Saved outputs" (a user-granted security-scoped bookmark; no new entitlement). The internal copy here is always kept and is what History plays from.
 - `voices/` stores saved voice reference assets.
 - `cache/imported_references/` stores app-owned materializations of WAV, MP3, AIFF, or M4A files
