@@ -503,6 +503,45 @@ summary = {
 PY
 }
 
+# Combine the smoke journey's wall-clock line with the newest long-form v4
+# manifest into a local per-run summary artifact. The test runner cannot read
+# the app's Application Support tree, so this measurement is lane-owned.
+# Local evidence only — never a registry record.
+summarize_long_form_project_if_present() {
+  local out_dir="$1"
+  local wall
+  wall=$(grep -oE 'LONGFORM_WALL_SECONDS=[0-9.]+' "$out_dir/xcodebuild.log" 2>/dev/null | tail -1 | cut -d= -f2)
+  [[ -n "$wall" ]] || return 0
+  python3 - "$wall" "$out_dir/long-form-project-summary.txt" <<'PY'
+import glob, json, os, sys
+
+wall = float(sys.argv[1])
+outputs = os.path.expanduser(
+    "~/Library/Application Support/QwenVoice-Debug/outputs/CustomVoice"
+)
+manifests = sorted(
+    glob.glob(os.path.join(outputs, "long_form_manifest_*.json")),
+    key=os.path.getmtime,
+)
+if not manifests:
+    raise SystemExit(0)
+manifest = json.load(open(manifests[-1]))
+assembly = manifest.get("assembly") or {}
+frames = assembly.get("outputFrameCount") or 0
+sample_rate = assembly.get("sampleRate") or 24_000
+audio = frames / sample_rate if sample_rate else 0
+segments = len((manifest.get("execution") or {}).get("segments", []))
+rtf = audio / wall if wall else 0
+summary = (
+    f"long-form project: {segments} segments, audio {audio:.1f}s, "
+    f"wall {wall:.1f}s (plan+stream+QC+assembly), project RTF {rtf:.2f}"
+)
+with open(sys.argv[2], "w") as f:
+    f.write(summary + "\n")
+print(f"==> {summary}")
+PY
+}
+
 run_xcodebuild() {
   local -a command=("$@")
   set +e
@@ -685,6 +724,7 @@ WAV
     || die "macOS XCUITest failed (see $out/xcodebuild.log)"
   required_step_run "$step_ledger" crash-delta check_mac_crash_delta \
     || die "new Vocello crash report detected"
+  summarize_long_form_project_if_present "$out"
   # The lane rebuilt the app/XPC products in the shared cache; re-preserve
   # their dSYMs so the build-output symbol-identity check stays consistent
   # (mirrors preserve_ios_ui_dsym on the device lane).

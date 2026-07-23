@@ -59,6 +59,20 @@ QC findings:
   stage-breadcrumb bisect and eliminated by rewriting the validator without
   keypath-literal `map`/`allSatisfy` — an optimizer-sensitivity workaround
   with deterministic before/after evidence.
+- **First long-form project measurement (2026-07-23, local evidence).** The
+  smoke journey now emits the project wall clock (Generate All → settled
+  outcome) and the smoke lane combines it with the newest v4 manifest into
+  `long-form-project-summary.txt`. First instrumented run: 3 segments
+  (60.8/51.1/49.4 s), 161.5 s joined audio, 92.0 s wall → **project RTF
+  1.76**, inside the canonical gated single-take band (1.68–1.83) — the
+  sequential pipeline (planning, per-segment QC, assembly, manifest) adds no
+  meaningful throughput cost. Registry publication would need the benchmark
+  pipeline's schema review and is deliberately not included.
+- **The generation performance gate now holds across whole long-form runs.**
+  It previously flickered per segment (off during inter-segment QC/saves and
+  the CPU-heavy assembly); a sustained performance-activity refcount on the
+  engine store keeps glass in its solid-fill fallback from first segment
+  through assembly, without touching the single-generation busy guard.
 - **Smoke nonces are pronounceable words** (hex tokens were spelled out with
   pause-inducing character breaks that consumed unbudgeted pause allowance).
 

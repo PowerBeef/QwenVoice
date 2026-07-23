@@ -737,6 +737,10 @@ final class BatchGenerationRunner {
         onProgress: @escaping @MainActor (BatchProgressSnapshot) -> Void,
         onItemsUpdated: @escaping @MainActor ([BatchGenerationItemState]) -> Void
     ) async -> BatchGenerationOutcome {
+        // Hold the generation performance gate across the whole run — segments,
+        // QC, History saves, and assembly — instead of flickering per segment.
+        engineStore.beginSustainedPerformanceActivity()
+        defer { engineStore.endSustainedPerformanceActivity() }
         var items = request.lines.enumerated().map { index, line -> BatchGenerationItemState in
             // Long-form resume: keep already-saved takes from the prior run of
             // the same plan; everything else regenerates.
@@ -1046,6 +1050,8 @@ final class BatchGenerationRunner {
         onProgress: @escaping @MainActor (BatchProgressSnapshot) -> Void,
         onItemsUpdated: @escaping @MainActor ([BatchGenerationItemState]) -> Void
     ) async -> (outcome: BatchGenerationOutcome, replacements: [LongFormSegmentReplacementEvidence]) {
+        engineStore.beginSustainedPerformanceActivity()
+        defer { engineStore.endSustainedPerformanceActivity() }
         guard request.segmentationMode == .longForm,
               let plan = request.longFormPlan,
               segmentIndex >= 0,

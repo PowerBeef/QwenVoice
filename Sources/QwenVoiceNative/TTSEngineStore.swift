@@ -32,6 +32,12 @@ public final class TTSEngineStore: ObservableObject {
     private let engine: any MacTTSEngine
     private var snapshotCancellable: AnyCancellable?
     private var activeGenerationDepth = 0
+    /// Sustained performance-critical activity (for example a long-form
+    /// project spanning several generations plus QC and assembly). Keeps the
+    /// generation performance gate engaged across inter-segment gaps without
+    /// tripping the single-generation busy guard.
+    @Published public private(set) var hasSustainedPerformanceActivity = false
+    private var sustainedPerformanceDepth = 0
 
     public init(engine: any MacTTSEngine) {
         self.engine = engine
@@ -157,6 +163,16 @@ public final class TTSEngineStore: ObservableObject {
         self.snapshot = snapshot
         frontendState = nextFrontendState
         hasActiveGeneration = nextHasActiveGeneration
+    }
+
+    public func beginSustainedPerformanceActivity() {
+        sustainedPerformanceDepth += 1
+        hasSustainedPerformanceActivity = true
+    }
+
+    public func endSustainedPerformanceActivity() {
+        sustainedPerformanceDepth = max(sustainedPerformanceDepth - 1, 0)
+        hasSustainedPerformanceActivity = sustainedPerformanceDepth > 0
     }
 
     private func beginActiveGeneration() throws {

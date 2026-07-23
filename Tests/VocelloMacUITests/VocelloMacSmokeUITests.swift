@@ -31,6 +31,23 @@ final class VocelloMacSmokeUITests: VocelloMacUITestCase {
         ["QWENVOICE_FAKE_MIC_WAV": Self.virtualClipURL.path]
     }
 
+    /// Emits the project wall time (Generate All → settled outcome) for the
+    /// lane to combine with the newest v4 manifest — the Xcode 26 test runner
+    /// cannot read another app's Application Support (see `virtualClipURL`),
+    /// so filesystem work stays lane-side (`scripts/ui_test.sh`). Attached
+    /// evidence only; canonical registry publication stays with the benchmark
+    /// pipeline and its schema review.
+    private func attachLongFormProjectSummary(wallSeconds: TimeInterval) {
+        let line = String(format: "LONGFORM_WALL_SECONDS=%.1f", wallSeconds)
+        XCTContext.runActivity(named: line) { activity in
+            let attachment = XCTAttachment(string: line)
+            attachment.name = "long-form-project-wall-seconds"
+            attachment.lifetime = .keepAlways
+            activity.add(attachment)
+        }
+        print(line)
+    }
+
     /// Random lowercase pseudo-word: unique enough for History matching while
     /// reading as one spoken token. Hex/UUID nonces are spelled out character
     /// by character with pauses that can trip the punctuation-budget dropout
@@ -205,6 +222,7 @@ final class VocelloMacSmokeUITests: VocelloMacUITestCase {
         XCTAssertTrue(VocelloUIPrimaryAction.perform(on: button("textInput_generateButton"), timeout: 30))
         let generateAll = button("batch_generateAllButton")
         XCTAssertTrue(VocelloUIWait.exists(generateAll, timeout: 30))
+        let projectStartedAt = Date()
         XCTAssertTrue(VocelloUIPrimaryAction.perform(on: generateAll, timeout: 20))
 
         // Completion: the long-form outcome exposes per-segment regeneration
@@ -221,6 +239,8 @@ final class VocelloMacSmokeUITests: VocelloMacUITestCase {
             firstRegenerate.exists && !resume.exists,
             "a clean long-form run must save every segment (resume affordance means a segment failed)"
         )
+        let projectWallSeconds = Date().timeIntervalSince(projectStartedAt)
+        attachLongFormProjectSummary(wallSeconds: projectWallSeconds)
         VocelloUIScreenshot.attach(app, named: "mac-smoke-longform-complete")
 
         let done = button("batch_doneButton")
