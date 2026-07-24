@@ -13,4 +13,3 @@ public typealias GenerationEvent = QwenVoiceCore.GenerationEvent
 public typealias GenerationRequest = QwenVoiceCore.GenerationRequest
 public typealias GenerationResult = QwenVoiceCore.GenerationResult
 public typealias TTSEngineSnapshot = QwenVoiceCore.TTSEngineSnapshot
-public typealias EngineBatchProgressUpdate = QwenVoiceCore.EngineBatchProgressUpdate

@@ -16,10 +16,6 @@ public protocol MacTTSEngine: AnyObject, Sendable {
     func ensureCloneReferencePrimed(modelID: String, reference: CloneReference) async throws
     func cancelClonePreparationIfNeeded() async
     func generate(_ request: GenerationRequest) async throws -> GenerationResult
-    func generateBatch(
-        _ requests: [GenerationRequest],
-        progressHandler: (@Sendable (Double?, String) -> Void)?
-    ) async throws -> [GenerationResult]
     func cancelActiveGeneration() async throws
     func listPreparedVoices() async throws -> [PreparedVoice]
     func enrollPreparedVoice(name: String, audioPath: String, transcript: String?) async throws -> PreparedVoice

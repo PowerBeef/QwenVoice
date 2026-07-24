@@ -42,14 +42,6 @@ protocol XPCNativeEngineTransporting: AnyObject, Sendable {
 typealias XPCNativeEngineTransportFactory = @Sendable (XPCNativeEngineTransportHandlers) -> any XPCNativeEngineTransporting
 typealias XPCNativeEngineTimeoutResolver = @Sendable (EngineCommand) -> Duration?
 
-private final class BatchProgressHandlerBox: @unchecked Sendable {
-    let handler: @Sendable (Double?, String) -> Void
-
-    init(handler: @escaping @Sendable (Double?, String) -> Void) {
-        self.handler = handler
-    }
-}
-
 private final class PendingRequestBox: @unchecked Sendable {
     let commandName: String
     let resume: @Sendable (Result<EngineReply, Error>) -> Void
@@ -177,7 +169,6 @@ actor XPCNativeEngineCoordinator {
     private var activeConnection: ActiveConnection?
     private var didInitializeCurrentConnection = false
     private var initializedAppSupportDirectory: URL?
-    private var batchProgressHandlers: [UUID: BatchProgressHandlerBox] = [:]
     private var pendingRequests: [UUID: PendingRequestBox] = [:]
     private var inFlightBestEffortKeys: Set<BestEffortDeduplicationIdentity> = []
     private var pendingFireAndForgetTasks: [UUID: Task<Void, Never>] = [:]
@@ -254,21 +245,6 @@ actor XPCNativeEngineCoordinator {
         }
     }
 
-    func registerBatchProgressHandler(
-        id: UUID,
-        handler: (@Sendable (Double?, String) -> Void)?
-    ) {
-        if let handler {
-            batchProgressHandlers[id] = BatchProgressHandlerBox(handler: handler)
-        } else {
-            batchProgressHandlers.removeValue(forKey: id)
-        }
-    }
-
-    func clearBatchProgressHandler(id: UUID) {
-        batchProgressHandlers.removeValue(forKey: id)
-    }
-
     func fireAndForget(_ command: EngineCommand) {
         let deduplicationKey = bestEffortDeduplicationKey(for: command)
         if let deduplicationKey {
@@ -337,11 +313,6 @@ actor XPCNativeEngineCoordinator {
                 onSnapshot(snapshot)
             case .generationChunk(let generationEvent):
                 onChunk(generationEvent)
-            case .batchProgress(let update):
-                guard let handler = batchProgressHandlers[update.commandID] else { return }
-                Task { @MainActor in
-                    handler.handler(update.fraction, update.message)
-                }
             }
         } catch {
             Self.logger.error("Unreadable engine event payload: \(error.localizedDescription, privacy: .public)")
@@ -479,7 +450,7 @@ actor XPCNativeEngineCoordinator {
 
     private func cancellationCleanupCommand(for command: EngineCommand) -> EngineCommand? {
         switch command {
-        case .generate, .generateBatch:
+        case .generate:
             return .cancelActiveGeneration
         case .ensureCloneReferencePrimed:
             return .cancelClonePreparationIfNeeded
@@ -530,7 +501,7 @@ actor XPCNativeEngineCoordinator {
         let error = EngineTransportError.timedOut(commandName: pendingRequest.commandName)
         Self.logger.error("\(error.localizedDescription, privacy: .public)")
         pendingRequest.resume(.failure(error))
-        if pendingRequest.commandName == "generate" || pendingRequest.commandName == "generateBatch" {
+        if pendingRequest.commandName == "generate" {
             fireAndForget(.cancelActiveGeneration)
         }
     }
@@ -549,7 +520,6 @@ actor XPCNativeEngineCoordinator {
         }
         connectionToInvalidate.invalidate()
         didInitializeCurrentConnection = false
-        batchProgressHandlers.removeAll()
         inFlightBestEffortKeys.removeAll()
         cancelAllFireAndForgetTasks()
 
@@ -931,29 +901,6 @@ public final class XPCNativeEngineClient: MacTTSEngine, @unchecked Sendable {
         }
     }
 
-    public func generateBatch(
-        _ requests: [GenerationRequest],
-        progressHandler: (@Sendable (Double?, String) -> Void)?
-    ) async throws -> [GenerationResult] {
-        let commandID = UUID()
-        await coordinator.registerBatchProgressHandler(id: commandID, handler: progressHandler)
-        defer {
-            Task {
-                await coordinator.clearBatchProgressHandler(id: commandID)
-            }
-        }
-
-        do {
-            let reply = try await coordinator.send(.generateBatch(commandID: commandID, requests: requests))
-            guard case .generationResults(let results) = reply else {
-                throw EngineTransportError.invalidReply
-            }
-            return results
-        } catch {
-            throw Self.remappedTransportError(error)
-        }
-    }
-
     public func cancelActiveGeneration() async throws {
         _ = try await coordinator.send(.cancelActiveGeneration)
     }
@@ -1038,8 +985,6 @@ private extension EngineCommand {
             "cancelClonePreparationIfNeeded"
         case .generate:
             "generate"
-        case .generateBatch:
-            "generateBatch"
         case .cancelActiveGeneration:
             "cancelActiveGeneration"
         case .listPreparedVoices:
@@ -1061,8 +1006,6 @@ private extension EngineCommand {
         switch self {
         case .generate:
             .seconds(600)
-        case .generateBatch:
-            .seconds(3_600)
         case .initialize, .loadModel, .unloadModel, .ensureModelLoadedIfNeeded,
              .prewarmModelIfNeeded, .prefetchInteractiveReadinessIfNeeded, .ensureCloneReferencePrimed:
             .seconds(180)

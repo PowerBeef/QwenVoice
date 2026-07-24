@@ -133,7 +133,7 @@
     {
       "id": "native-xpc-client",
       "sources": ["Sources/QwenVoiceNative/TTSEngineStore.swift", "Sources/QwenVoiceNative/XPCNativeEngineClient.swift"],
-      "types": ["BatchProgressRelay", "BatchProgressHandlerBox", "PendingRequestBox", "XPCServiceTransport", "XPCNativeEngineClient"],
+      "types": ["PendingRequestBox", "XPCServiceTransport", "XPCNativeEngineClient"],
       "owner": "XPCNativeEngineClient main actor and single-resume pending request boxes",
       "invariant": "Mutable client state stays main-actor isolated; callback bridges are single-resume and lock-protected.",
       "tests": ["Tests/VocelloEngineIntegrationTests/EngineServiceTransportAccumulatorTests.swift"]

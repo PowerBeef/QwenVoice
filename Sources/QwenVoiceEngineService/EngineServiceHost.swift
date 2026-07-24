@@ -109,8 +109,8 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
     /// so the client can match it to the pending request and resolve the
     /// in-flight continuation. The previous implementation used a static
     /// pre-encoded constant with a random `UUID()`, which the client silently
-    /// dropped (no pending request matched the id) — leaving `.generate` and
-    /// `.generateBatch` calls (which carry no transport timeout) hung
+    /// dropped (no pending request matched the id) — leaving long-timeout
+    /// `.generate` calls hung
     /// indefinitely whenever response encoding failed (e.g., a non-finite
     /// numeric metadata field made it into the payload).
     private static func encodeFailureFallback(for requestID: UUID, underlyingError: Error) -> Data {
@@ -379,62 +379,6 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
                     await eventForwardingTask.value
                 }
                 runtimeContext.eventForwardingTask = nil
-                await generationCoordinator.finish(reservation)
-                throw error
-            }
-        case .generateBatch(let commandID, let requests):
-            guard !requests.isEmpty else {
-                return .generationResults([])
-            }
-            let runtimeContext = try requireRuntimeContext()
-            let generationCoordinator = activeGenerationCoordinator
-            let reservation = try await generationCoordinator.reserve()
-            let generationTask = Task { @MainActor [weak self] in
-                guard await generationCoordinator.waitUntilOpen(reservation) else {
-                    throw CancellationError()
-                }
-                try Task.checkCancellation()
-                let results = try await runtimeContext.engine.generateBatch(requests) { fraction, message in
-                    self?.publish(
-                        .batchProgress(
-                            EngineBatchProgressUpdate(
-                                commandID: commandID,
-                                fraction: fraction,
-                                message: message
-                            )
-                        )
-                    )
-                }
-                return results.map(Self.normalizedBatchResult(from:))
-            }
-
-            let mayOpen: Bool
-            do {
-                mayOpen = try await generationCoordinator.bind(
-                    reservation,
-                    cancel: { generationTask.cancel() },
-                    waitForTermination: { _ = await generationTask.result }
-                )
-            } catch {
-                generationTask.cancel()
-                await generationCoordinator.abort(reservation)
-                _ = await generationTask.result
-                throw error
-            }
-            guard mayOpen else {
-                generationTask.cancel()
-                _ = await generationTask.result
-                await generationCoordinator.finish(reservation)
-                throw CancellationError()
-            }
-            do {
-                try await generationCoordinator.open(reservation)
-                let results = try await generationTask.value
-                await generationCoordinator.finish(reservation)
-                return .generationResults(results)
-            } catch {
-                generationTask.cancel()
-                _ = await generationTask.result
                 await generationCoordinator.finish(reservation)
                 throw error
             }
@@ -811,18 +755,5 @@ final class EngineServiceHost: NSObject, NSXPCListenerDelegate, QwenVoiceEngineS
         let marketingVersion = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
         let buildVersion = bundle.object(forInfoDictionaryKey: kCFBundleVersionKey as String) as? String ?? "0"
         return "\(bundleIdentifier)|\(marketingVersion)|\(buildVersion)"
-    }
-
-    private static func normalizedBatchResult(from result: GenerationResult) -> GenerationResult {
-        if let streamSessionDirectoryURL = result.streamSessionDirectoryURL {
-            try? FileManager.default.removeItem(at: streamSessionDirectoryURL)
-        }
-        return GenerationResult(
-            audioPath: result.audioPath,
-            durationSeconds: result.durationSeconds,
-            streamSessionDirectory: nil,
-            usedStreaming: false,
-            finishReason: result.finishReason
-        )
     }
 }

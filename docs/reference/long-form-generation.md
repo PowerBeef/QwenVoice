@@ -19,7 +19,8 @@ segmenter's historical threshold, kept so routing behavior is unchanged) into a 
    planned segment — the same shipping path as a single take, with mandatory per-segment engine
    Fast QC, standard streaming telemetry, and live segment preview (auto-play-gated; the
    request-local `suppressStreamingPreview` flag remains available for silent contexts). Batch
-   markers are never sent; the legacy XPC `generateBatch` route has no app-side caller left.
+   markers are never sent; the legacy XPC `generateBatch` route was retired 2026-07-24 (the
+   in-process engine batch API remains for the CLI).
 3. **Bounded assembly.** `BoundedLongFormAssembler` joins the persisted PCM16 segment WAVs in fixed
    blocks (bounded gain, edge trim/fade over verified non-speech, declared pauses, atomic publish)
    and the joined output passes its own duration-aware Fast QC with the plan's pause budget.
@@ -71,5 +72,3 @@ local/lane-level only.
   three-segment project).
 - **Single-take spoken-text normalization** — single takes do not yet consume the spoken-text
   plan; it drives long-form only.
-- **XPC `generateBatch` retirement** — the wire case remains defined but caller-less; retiring it
-  is a candidate cleanup owned by the convergence program.

@@ -40,15 +40,12 @@ struct BatchProgressSnapshot: Equatable {
 
     var itemStatusText: String {
         guard totalCount > 0 else { return "" }
-        // The "Item N active" suffix used to be appended here, but during
-        // batch generation `activeItemIndex` lags the engine's real
-        // progress: the runner only increments `completedCount` after
-        // `generateBatch` returns and saves run sequentially, while the
-        // engine emits messages like "Generating item 2/2..." mid-batch.
-        // That produced contradictory text such as "Generating item 2/2…
-        // 0 of 2 clips completed · Item 1 active". `statusMessage` already
-        // tells the user which item is in flight, so the count line just
-        // reports completion.
+        // The "Item N active" suffix used to be appended here, but
+        // `activeItemIndex` lags the engine's real progress (completion is
+        // counted only after an item's take persists), which produced
+        // contradictory text such as "Generating item 2/2… 0 of 2 clips
+        // completed · Item 1 active". `statusMessage` already tells the user
+        // which item is in flight, so the count line just reports completion.
         return "\(completedCount) of \(totalCount) clips completed"
     }
 }

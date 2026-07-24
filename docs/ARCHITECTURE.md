@@ -536,8 +536,7 @@ a single envelope method —
 `EngineCommand` cases (the full surface): `initialize`, `ping`, `loadModel`,
 `unloadModel`, `ensureModelLoadedIfNeeded`, `prewarmModelIfNeeded`,
 `prefetchInteractiveReadinessIfNeeded`, `ensureCloneReferencePrimed`,
-`cancelClonePreparationIfNeeded`, `generate`, `generateBatch` (wire case retained;
-no app-side caller since the 2026-07-23 batch unification — retirement candidate),
+`cancelClonePreparationIfNeeded`, `generate`,
 `cancelActiveGeneration`, `listPreparedVoices`, `enrollPreparedVoice`,
 `deletePreparedVoice`, `clearGenerationActivity`, `clearVisibleError`,
 `shutdownWhenIdle`.

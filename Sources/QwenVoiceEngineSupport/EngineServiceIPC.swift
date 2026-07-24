@@ -57,7 +57,6 @@ public enum EngineCommand: Codable, Equatable, Sendable {
     case ensureCloneReferencePrimed(modelID: String, reference: CloneReference)
     case cancelClonePreparationIfNeeded
     case generate(request: GenerationRequest)
-    case generateBatch(commandID: UUID, requests: [GenerationRequest])
     case cancelActiveGeneration
     case listPreparedVoices
     case enrollPreparedVoice(name: String, audioPath: String, transcript: String?)
@@ -110,7 +109,6 @@ public enum EngineReply: Codable, Equatable, Sendable {
     case bool(Bool)
     case capabilities(EngineCapabilities)
     case generationResult(GenerationResult)
-    case generationResults([GenerationResult])
     case preparedVoice(PreparedVoice)
     case preparedVoices([PreparedVoice])
     case interactivePrefetchDiagnostics(InteractivePrefetchDiagnostics)
@@ -122,7 +120,6 @@ public enum EngineEventEnvelope: Codable, Equatable, Sendable {
     public static let currentSchemaVersion = QwenVoiceWireSchema.currentVersion
 
     case snapshot(TTSEngineSnapshot)
-    case batchProgress(EngineBatchProgressUpdate)
     case generationChunk(GenerationEvent)
 
     public var schemaVersion: Int {
@@ -132,21 +129,17 @@ public enum EngineEventEnvelope: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case schemaVersion
         case snapshot
-        case batchProgress
         case generationChunk
     }
 
     private enum LegacyEngineEventEnvelope: Codable {
         case snapshot(TTSEngineSnapshot)
-        case batchProgress(EngineBatchProgressUpdate)
         case generationChunk(GenerationEvent)
 
         var modern: EngineEventEnvelope {
             switch self {
             case .snapshot(let snapshot):
                 return .snapshot(snapshot)
-            case .batchProgress(let progress):
-                return .batchProgress(progress)
             case .generationChunk(let event):
                 return .generationChunk(event)
             }
@@ -162,10 +155,6 @@ public enum EngineEventEnvelope: Codable, Equatable, Sendable {
         do {
             if container.contains(.snapshot) {
                 self = .snapshot(try container.decode(TTSEngineSnapshot.self, forKey: .snapshot))
-                return
-            }
-            if container.contains(.batchProgress) {
-                self = .batchProgress(try container.decode(EngineBatchProgressUpdate.self, forKey: .batchProgress))
                 return
             }
             if container.contains(.generationChunk) {
@@ -198,8 +187,6 @@ public enum EngineEventEnvelope: Codable, Equatable, Sendable {
         switch self {
         case .snapshot(let snapshot):
             try container.encode(snapshot, forKey: .snapshot)
-        case .batchProgress(let progress):
-            try container.encode(progress, forKey: .batchProgress)
         case .generationChunk(let event):
             try container.encode(event, forKey: .generationChunk)
         }

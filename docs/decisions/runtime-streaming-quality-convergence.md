@@ -378,3 +378,19 @@ cleanup. A new smoke journey (`test07_LineBatchJourney`) covers the unified
 path; fixing its editor access also re-homed the `batch_textEditor`
 accessibility identifier from a non-hittable wrapper onto the actual text
 view (same stable value).
+
+## Amendment 2026-07-24 — XPC `generateBatch` route retired
+
+The caller-less XPC batch surface left by amendment 2026-07-23g is deleted:
+the `EngineCommand.generateBatch` wire case, the `.generationResults` reply,
+the `.batchProgress` event envelope with its `EngineBatchProgressUpdate`
+payload type, the service-host handler and `normalizedBatchResult`, the
+client's batch-progress registry and both `@unchecked Sendable` progress-relay
+boxes (removed from `config/concurrency-safety.json`), the
+`MacTTSEngine`/`TTSEngineStore` batch wrappers, and the batch entries in the
+command-name/timeout tables. The single-envelope wire protocol now carries
+exactly the commands the app can issue. The in-process engine batch API
+(`MLXTTSEngine.generateBatch`) is unaffected: the CLI `batch` command still
+uses it directly, and iOS never linked this surface. Verified by the
+deterministic macOS suite (Core, XPC transport, runtime) and both foundation
+compiles.

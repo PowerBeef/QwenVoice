@@ -7,7 +7,7 @@
 - Swift tests: 395 cases in 54 files
 - Python tests: 645 cases in 50 files
 - Required-step assurance: 55 steps across 12 workflows, all covered by forced-failure fixtures
-- Unsafe-concurrency annotations: 48 (48 registered with owner and invariant; contract complete)
+- Unsafe-concurrency annotations: 46 (46 registered with owner and invariant; contract complete)
 
 ## Canonical hardware evidence
 
@@ -25,7 +25,7 @@
 | event-delivery | backend | 3 | 2 / 10 | macos: stale, ios: stale |
 | memory-policy | backend-platform | 6 | 2 / 25 | macos: fresh, ios: fresh |
 | model-delivery | backend-platform | 17 | 3 / 36 | macos: fresh, ios: fresh |
-| xpc-transport | macos | 3 | 3 / 15 | macos: fresh |
+| xpc-transport | macos | 3 | 3 / 15 | macos: stale |
 | benchmark-validation | release-qa | 6 | 4 / 111 | macos: stale, ios: stale |
 | orchestration-assurance | release-qa | 3 | 1 / 12 | not hardware-gated |
 | release-supply-chain | release-qa | 6 | 3 / 51 | macos: fresh |

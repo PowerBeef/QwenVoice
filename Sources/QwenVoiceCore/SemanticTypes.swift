@@ -1746,14 +1746,3 @@ public struct TTSEngineSnapshot: Hashable, Codable, Sendable {
     }
 }
 
-public struct EngineBatchProgressUpdate: Hashable, Codable, Sendable {
-    public let commandID: UUID
-    public let fraction: Double?
-    public let message: String
-
-    public init(commandID: UUID, fraction: Double?, message: String) {
-        self.commandID = commandID
-        self.fraction = fraction
-        self.message = message
-    }
-}
