@@ -95,7 +95,7 @@ struct IOSVoiceDesignBriefSheet: View {
                 }
                 .padding(.horizontal, 20)
                 .onChange(of: voiceDescription) { _, newValue in
-                    // Clamp the voice DESCRIPTION to its own limit (decoupled from the 150-char
+                    // Clamp the voice DESCRIPTION to its own limit (decoupled from the
                     // spoken-script limit). No model cap exists for the open-weights VoiceDesign
                     // model; this is a UX bound that keeps briefs concise.
                     let limit = IOSGenerationTextLimitPolicy.descriptionLimit

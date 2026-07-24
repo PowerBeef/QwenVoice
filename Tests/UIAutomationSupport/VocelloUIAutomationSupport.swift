@@ -482,8 +482,9 @@ public enum VocelloUIBenchMatrix {
     public static let cloneVoiceID = "A_warm_elderly_woman"
 
     #if os(iOS)
-    // iPhone generation intentionally caps spoken scripts at 150 characters.
-    // Its long cell exercises that production boundary instead of bypassing it.
+    // This text sits exactly at 150 characters — the on-device cap in force when it
+    // was chosen. The limit is 900 now (memory-qualified 2026-07-24), but the cell
+    // text stays fixed so benchmark history remains comparable across the change.
     private static let longBenchmarkText =
         "The morning train slipped quietly out of the station, carrying sleepy travelers toward the coast while grey water shimmered beyond the fogged windows."
     #else

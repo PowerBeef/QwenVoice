@@ -134,9 +134,18 @@ evaporation). Remaining work, choose by goal:
 2. ~~**Phase 11 live acceptance**~~ — passed 2026-07-23; phase 11 is complete for macOS. iOS
    long-form follows as its own arc. Phases 12–13 (quality consolidation, history v3) remain
    later work; history schema v2 still ships.
-3. **Smaller open threads** — §H P0 GPU-busy re-capture on a clean CLI Metal trace, the
-   iPhone-15-Pro memory-profile diagnostic, and a 60 Hz-device measurement of the iOS
-   fixed-refresh glass gate if such hardware becomes available.
+3. **Smaller open threads** — ~~§H P0 GPU-busy re-capture~~ (done 2026-07-24: whole-generation
+   GPU busy 31–37% → ~47% on the shipping runtime, still launch-bound; OPTIMIZATION.md §H P0
+   addendum), the iPhone-15-Pro memory-profile diagnostic, and a 60 Hz-device measurement of the
+   iOS fixed-refresh glass gate if such hardware becomes available.
+4. ~~**iOS 900-character single-take limit**~~ — shipped 2026-07-24.
+   `IOSGenerationTextLimitPolicy.sharedScriptLimit` 150 → 900, aligned with the macOS long-form
+   router threshold, gated on an on-device memory-qualified proof: headless 888-character
+   custom/speed take on the canonical iPhone 17 Pro (`ios-engine-20260724-060000-1cc8ef23`,
+   published) — RTF 1.57, physFoot peak 2,825 MB (inside the proven flat ~2.4–3.3 GB streaming
+   band), 100% sampler coverage, zero pressure/warning events, QC pass; `passedWithWarnings`
+   only for one allowed soft trim. The iOS UI-benchmark `long` cell keeps its fixed
+   150-character text for history comparability.
 
 Status report: [`docs/reference/runtime-refactor-status-report.md`](reference/runtime-refactor-status-report.md).
 You-are-here map: trust `config/runtime-refactor-contract.json` over any older “promotion pending”

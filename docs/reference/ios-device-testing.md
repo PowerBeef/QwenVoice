@@ -68,9 +68,10 @@ scripts/ui_test.sh ios benchmark --modes custom --lengths short --warm 1 --label
 scripts/ui_test.sh ios model-download
 ```
 
-The iPhone matrix keeps the shared short/medium/long ordering, but its long script is exactly the
-production 150-character on-device boundary. macOS retains the extended >220-character long corpus;
-the iPhone lane never bypasses its user-facing script limit.
+The iPhone matrix keeps the shared short/medium/long ordering; its long script is the historical
+150-character text from the era of the 150-character limit, kept fixed for benchmark-history
+comparability (the shipping single-take limit is 900, memory-qualified 2026-07-24). macOS retains
+the extended >220-character long corpus; the iPhone lane never bypasses the user-facing limit.
 
 | Lane | Scope |
 | --- | --- |
@@ -138,7 +139,7 @@ The benchmark result is joined with exact device/app identity, current-run engin
 History/database correlation, readable WAV validation, audio QC, crash deltas, thermal state,
 matrix ordering, and take counts. The app mints the generation UUID across Custom, Design, and Clone
 and writes its frontend row durably before only the matching run rows/verbose sidecars are mirrored.
-The 150-character boundary case remains explicitly `long`; no prompt-length inference is used.
+The fixed 150-character case remains explicitly `long`; no prompt-length inference is used.
 Smoke asserts visible active-cancellation recovery, absence of a cancelled History row, subsequent
 completion and History persistence, plus the runner's device/crash checks. It does not claim the
 benchmark's per-take telemetry matrix or synthesize an operating-system pressure event. Headless `bench`, `lang-bench`, `profile`,

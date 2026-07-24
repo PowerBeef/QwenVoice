@@ -13,6 +13,12 @@ from schema-v2 memory trends.
 |---|---|---|---|---|---|---:|---|---|---|---|
 | 2026-07-12 | [`ios-engine-20260712-204019-1f40cea8`](runs/engine-generation/ios-engine-20260712-204019-1f40cea8.json) | focused | exploratory | passed | memory-contract-incomplete | 1 | `1ef1669326b5` dirty | `excluded` | baseline | telemetry-v7-headless-final |
 
+## engine-generation / ios / iphone-17-pro / config `528ba2c2cfe1`
+
+| completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |
+|---|---|---|---|---|---|---:|---|---|---|---|
+| 2026-07-24 | [`ios-engine-20260724-060000-1cc8ef23`](runs/engine-generation/ios-engine-20260724-060000-1cc8ef23.json) | focused | exploratory | passedWithWarnings | qualified-with-warnings | 1 | `f98537cd7115` dirty | `excluded` | baseline | limit-900-proof |
+
 ## engine-generation / ios / iphone-17-pro / config `f1c8dc2684fb`
 
 | completed (UTC) | run | scope | classification | status | memory | takes | source | comparison | trend | label |

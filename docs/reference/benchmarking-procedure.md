@@ -271,9 +271,10 @@ scripts/ui_test.sh ios benchmark
 scripts/ui_test.sh ios benchmark --modes custom --lengths short --warm 1 --label "focused"
 ```
 
-For iPhone UI automation, the `long` cell is the production 150-character boundary case. The
-extended >220-character corpus below remains the macOS/CLI definition; the device UI benchmark
-does not override iOS's on-device input limit.
+For iPhone UI automation, the `long` cell is the historical 150-character text chosen when the
+on-device limit was 150; the shipping limit is 900 (memory-qualified 2026-07-24), but the cell
+text stays fixed so device benchmark history remains comparable. The extended >220-character
+corpus below remains the macOS/CLI definition.
 
 Requires a paired, unlocked physical iPhone and a valid XCUITest destination. Simulator is not
 supported. The benchmark accepts `--modes`, `--lengths`, `--warm`, and `--label`; without filters it
@@ -281,7 +282,7 @@ runs the canonical 29-take matrix.
 
 Artifacts are the `.xcresult` bundle, exported XCTest screenshots, run-scoped engine/app telemetry,
 and the atomic `benchmark-evidence.json`. The validator maps the test-owned ordered matrix directly
-to the matching generation IDs; the 150-character case remains explicitly `long`. Test assertions,
+to the matching generation IDs; the fixed 150-character case remains explicitly `long`. Test assertions,
 the crash delta, and the deterministic telemetry/audio validators form the gate.
 
 The Instruments profile is a separate headless lane, not an attachment to the XCUITest matrix:

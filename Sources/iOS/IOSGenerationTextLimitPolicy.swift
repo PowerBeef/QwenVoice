@@ -2,11 +2,16 @@ import Foundation
 import QwenVoiceCore
 
 struct IOSGenerationTextLimitPolicy {
-    private static let sharedScriptLimit = 150
+    /// Single-take spoken-script ceiling. Matches the delivery-validated 900-character
+    /// boundary shared with the macOS long-form router: the engine's 2,048-token cap
+    /// (~170 s of audio) comfortably covers ~900 characters, and the raise is gated on
+    /// an on-device memory-qualified proof at this length (2026-07-24). Raising it
+    /// further requires new device evidence; scripts beyond it need the iOS long-form arc.
+    private static let sharedScriptLimit = 900
 
     /// Voice Design BRIEF (the voice DESCRIPTION) limit — deliberately decoupled from the
     /// spoken-script limit above. Sourced from the shared catalog so the iOS sheet and the
-    /// macOS inline editor stay in lockstep. (The spoken-script limit stays 150.)
+    /// macOS inline editor stay in lockstep.
     static let descriptionLimit = VoiceDesignBriefCatalog.descriptionLimit
 
     /// Delivery instruction / custom tone limit. The instruction is passed to the model as an
