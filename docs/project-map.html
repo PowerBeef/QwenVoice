@@ -1649,7 +1649,7 @@ scripts/macos_test.sh test
     {"name":"Quality (8-bit) models","macos":"yes","ios":"no","cli":"yes","note":"macOS and source-built CLI only"},
     {"name":"Streaming synthesis","macos":"yes","ios":"yes","cli":"partial","note":"Apps play live preview; CLI reports events without a live player"},
     {"name":"Batch generation","macos":"yes","ios":"no","cli":"yes","note":"Sequential streaming takes since 2026-07-23; intentionally removed from iOS"},
-    {"name":"Long-form projects (v4)","macos":"yes","ios":"no","cli":"no","note":"Scripts over 900 characters: planner segmentation, sequential streaming, joined WAV, manifest v4, History project rows; iOS is a later arc"},
+    {"name":"Long-form projects (v4)","macos":"yes","ios":"yes","cli":"no","note":"Scripts over 900 characters: planner segmentation, sequential streaming, joined WAV, manifest v4, History project rows; iOS single-segment regeneration still macOS-only"},
     {"name":"Saved Voices","macos":"yes","ios":"yes","cli":"yes","note":"List, enroll, use, and delete prepared voices"},
     {"name":"Generation History","macos":"yes","ios":"yes","cli":"no","note":"GRDB history.sqlite; search, playback, export, delete"},
     {"name":"Microphone recording","macos":"yes","ios":"yes","cli":"no","note":"AVFoundation; physical device required for iOS verification"},
@@ -1666,7 +1666,7 @@ scripts/macos_test.sh test
     {
       "label":"Studio",
       "title":"Compose → Generate → Review",
-      "body":"Mode-specific setup, script composer, readiness gate, typed cancellation barrier, streaming player, fail-closed persistence, and replay. iOS enforces a 900-character spoken-script limit (matching the macOS long-form router threshold); macOS warns on long scripts rather than sharing that device gate.",
+      "body":"Mode-specific setup, script composer, readiness gate, typed cancellation barrier, streaming player, fail-closed persistence, and replay. Both platforms route scripts above 900 characters into a long-form project (sequential streaming segments, joined output); single takes keep the 900-character ceiling.",
       "chips":[
         {"t":"GenerationStudioShell","c":""},
         {"t":"StudioGenerationCoordinator","c":""},

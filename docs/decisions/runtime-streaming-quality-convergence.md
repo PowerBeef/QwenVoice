@@ -394,3 +394,33 @@ exactly the commands the app can issue. The in-process engine batch API
 uses it directly, and iOS never linked this surface. Verified by the
 deterministic macOS suite (Core, XPC transport, runtime) and both foundation
 compiles.
+
+## Amendment 2026-07-24b — iOS long-form projects (sequential-streaming port)
+
+iOS ships the long-form v4 design the macOS acceptance arc proved: scripts
+above the 900-character single-take limit route to a planned project of
+ordinary sequential in-process streaming takes — shared planner segmentation
+with per-segment sub-seeds, live per-segment narration (auto-play-gated),
+per-segment and joined-output QC through the ported `AudioQualityGate` twin
+(same pause budgets and duration-aware thresholds), bounded assembly, manifest
+v4 with the shared per-project filenames, and one joined History row per plan
+digest (the iOS `Generation` record and `DatabaseService` gained the v5
+columns and joined-row replacement that the shared migration had already put
+in the schema). History groups projects behind a per-segment disclosure and
+flattens during search; in-session resume reuses saved takes; a
+sustained-performance refcount holds the iOS fixed-refresh glass gate across
+whole runs. Single-segment regeneration stays macOS-only for now (iOS
+manifests carry empty `replacements`), and line-separated batch remains
+absent from iOS: long-form is the device-validated sequential-streaming
+design that the 2026-07-02 batch-removal decision required, not a batch
+reintroduction. Acceptance passed 2026-07-24 on the paired iPhone 17 Pro
+(smoke run `ios-xcui-smoke-20260724-183626-f9961535`, both journeys green):
+the new `testZLongFormProjectJourney` planned a >2,000-character script into
+three segments, streamed them sequentially (55.0 s + 45.4 s + 26.6 s), joined
+127.2 s of audio, and verified the search-flattened rows plus the grouped
+History project with a working per-segment map. The acceptance arc fixed two
+lane-level issues, not product behavior: the iOS smoke lane now selects the
+whole smoke class (it had pinned the single pre-long-form journey), and the
+expansion assertion counts nonce-bearing rows instead of a total-row delta
+(the lazy History list drops older rows out of the instantiated accessibility
+window as segment rows appear, so a total-count delta is not stable).

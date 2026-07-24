@@ -106,7 +106,7 @@ scripts/ios_device.sh gate            # deterministic physical-device/runtime pr
   Delayed MetricKit memory/exit aggregates are field diagnostics only: they are not run-correlated
   and their absence is `notYetDelivered`, never a benchmark failure.
 - **Supported hardware gate.** `IOSDeviceSupport.isSupportedHardware` enforces iPhone 15 Pro+.
-- **No batch on iOS** (removed 2026-07-02, maintainer decision — dead UI, native engine unsupported, Jetsam risk; macOS batch unaffected). Re-adding requires a sequential-streaming design validated on device.
+- **No line batch on iOS** (removed 2026-07-02, maintainer decision — dead UI, native engine unsupported, Jetsam risk; macOS batch unaffected). Long-form projects (2026-07-24) are the required sequential-streaming design validated on device: one ordinary streaming take per planned segment through `IOSLongFormProjectRunner`, never a concurrent batch. Do not reintroduce line-separated batch UI or any non-sequential execution.
 - **Clone load profile.** Respect `.fullCapabilities` vs `.iOSProductionDefault`
   (`.withoutCloneEncoders`) depending on the entitled memory limit.
 - **`accessibilityIdentifier`s are stable.** Values like `voicesRow_*`, `textInput_*`,

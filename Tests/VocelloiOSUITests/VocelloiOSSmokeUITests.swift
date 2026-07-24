@@ -169,13 +169,23 @@ final class VocelloiOSSmokeUITests: VocelloiOSUITestCase {
             VocelloUIWait.exists(segmentsToggle, timeout: 30),
             "The grouped project row must expose its per-segment disclosure"
         )
-        let collapsedCount = historyRows().count
+        // Count nonce-bearing rows, not total rows: the lazy list drops older
+        // rows out of the instantiated window as segment rows appear, so a
+        // total-count delta is not stable. The nonce rows (joined + first
+        // segment) sit at the top of the newest project and are always
+        // instantiated: collapsed shows one, expanded shows both.
+        let nonceRows = app.descendants(matching: .any).matching(
+            NSPredicate(
+                format: "identifier BEGINSWITH %@ AND label CONTAINS %@",
+                "historyRowTap_", nonce
+            )
+        )
         XCTAssertTrue(VocelloUIPrimaryAction.perform(on: segmentsToggle, timeout: 20))
         XCTAssertTrue(
             VocelloUIWait.condition("per-segment map to expand", timeout: 20) {
-                self.historyRows().count >= collapsedCount + 2
+                nonceRows.count == 2
             },
-            "Expanding the newest project must reveal its segment rows"
+            "Expanding the newest project must reveal the nonce-bearing first segment beside the joined row"
         )
         VocelloUIScreenshot.attach(app, named: "ios-longform-history-project")
     }

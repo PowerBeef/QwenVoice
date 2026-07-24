@@ -1,10 +1,8 @@
 # Long-form generation
 
-This reference describes the shipping macOS long-form v4 path (stages A–E, shipping since
-2026-07-23) and what remains open. Source and `config/runtime-refactor-contract.json`
-(`longForm`, `longFormV4`) remain higher authority. iOS long-form UI and execution stay a later
-arc; its batch-removal invariant requires this sequential-streaming design before anything ships
-on device.
+This reference describes the shipping long-form v4 path — macOS since 2026-07-23 (stages A–E),
+iOS since 2026-07-24 — and what remains open. Source and `config/runtime-refactor-contract.json`
+(`longForm`, `longFormV4`) remain higher authority.
 
 ## Shipping path (macOS)
 
@@ -63,10 +61,33 @@ summarizes each long-form run (`long-form-project-summary.txt`). Registry public
 long-form project records would need a benchmark-pipeline schema review first; current evidence is
 local/lane-level only.
 
+## iOS path (since 2026-07-24)
+
+iOS runs the same design in-process — `IOSGenerationTextLimitPolicy` routes scripts above the
+900-character single-take limit into `IOSLongFormCoordinator`/`IOSLongFormProjectRunner`
+(`Sources/iOS/Studio/IOSLongFormProject.swift`): the shared planner, per-segment sub-seeds, one
+ordinary streaming take per segment with live narration (auto-play-gated), per-segment and
+joined-output QC through the ported `AudioQualityGate` twin, bounded assembly, manifest v4, the
+same per-project filenames, and one joined History row (iOS `Generation`/`DatabaseService` gained
+the v5 columns and joined-row replacement). History groups projects behind a per-segment
+disclosure (`history_longFormSegmentsToggle_<digest8>`), flattens during search, and keeps orphan
+segments visible. In-session resume reuses saved takes (`longform_resumeChip`); the
+sustained-performance refcount holds the fixed-refresh glass gate across the whole run. The
+editor ceiling is 30,000 characters with the planner's 100-segment cap authoritative.
+Differences from macOS: single-segment regeneration is not yet exposed (manifests carry empty
+`replacements`), and line-separated batch remains intentionally absent — long-form **is** the
+device-validated sequential-streaming design the iOS batch-removal invariant demanded.
+
+Device acceptance passed 2026-07-24 on the paired iPhone 17 Pro (smoke run
+`ios-xcui-smoke-20260724-183626-f9961535`): a >2,000-character script planned three segments,
+streamed them sequentially (55.0 s + 45.4 s + 26.6 s), joined 127.2 s of audio through the
+per-segment and joined QC gates, and grouped as a History project with a working per-segment
+disclosure. The iOS smoke lane now runs both journeys (standard + long-form).
+
 ## Remaining work
 
-- **iOS long-form** — later arc; requires the on-device sequential-streaming design and
-  memory-qualified proof.
+- **iOS single-segment regeneration** — expose the shared replacement-lineage machinery on
+  device (macOS-only today).
 - **Segment-count scaling evidence** — clean 1-, 10-, and 100-segment macOS memory evidence
   proving steady-state memory does not scale with total audio duration (live acceptance covered a
   three-segment project).

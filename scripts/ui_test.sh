@@ -759,7 +759,7 @@ else
     || die "could not establish the pre-run iPhone crash snapshot"
 
   if [[ "$lane" == "smoke" ]]; then
-    only_test="VocelloiOSUITests/VocelloiOSSmokeUITests/testPhysicalDeviceSmokeJourney"
+    only_test="VocelloiOSUITests/VocelloiOSSmokeUITests"
     export TEST_RUNNER_QVOICE_IOS_SMOKE_RUN_ID="$run_id"
   elif [[ "$lane" == "benchmark" ]]; then
     only_test="VocelloiOSUITests/VocelloiOSBenchmarkUITests/testOrderedConfigurableMatrix"

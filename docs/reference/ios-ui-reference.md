@@ -36,6 +36,11 @@ Generate remains unavailable until the script and Custom model are ready. Smoke 
 completed player and matching History row; the benchmark validator adds readable-audio and exact
 telemetry evidence per take.
 
+Scripts above the 900-character single-take limit route to a long-form project (all three modes):
+the helper line narrates per-segment progress, the dock's Cancel stops the whole run, and a
+stopped project with reusable takes exposes `longform_resumeChip`. The completed project surfaces
+the joined output as the inline player item.
+
 ### Voice Design
 
 Design requires a voice brief, entered directly or from a starter, before generation. The benchmark
@@ -65,9 +70,11 @@ document from Files routes through the same sheet. A saved/imported voice hands 
 a built-in speaker hands off to Studio Custom.
 
 History supports search, mode filtering, sorting, playback, export, saving a take as a voice, and
-deletion. A typed database failure presents `historyRetryButton` rather than an empty list and keeps
-destructive actions disabled until a successful read. Destructive History actions are outside the
-minimal smoke and benchmark lanes.
+deletion. Long-form projects group as one joined row plus a per-segment disclosure
+(`history_longFormSegmentsToggle_<digest8>`); search flattens the grouping, and orphan segments
+(no joined output yet) stay visible as ordinary rows. A typed database failure presents
+`historyRetryButton` rather than an empty list and keeps destructive actions disabled until a
+successful read. Destructive History actions are outside the minimal smoke and benchmark lanes.
 
 ## Settings
 
