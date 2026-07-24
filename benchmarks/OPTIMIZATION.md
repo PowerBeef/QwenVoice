@@ -438,6 +438,27 @@ removed converts ≈1:1 to wall time. Decision table outcomes:
 - **Structural ceiling (recorded, not actionable at 0.30.6):** the ~50% launch-gap idle inside
   stepEval is only addressable by graph capture/compile — measured −5% at 0.30.6 (§F WS0b). Re-test
   under the gated 0.31.x bump (§E) whenever that happens.
+
+**Post-program re-capture (2026-07-24, same command/host, current shipping runtime — post-P2/P3,
+post-Phase-4 cutover, streaming-first bench, `--no-summary` diagnostic):** warm-gen attribution
+(264/294 frames):
+
+| Window | % of generation wall (was) | GPU busy inside (was) |
+|---|---|---|
+| Step Eval Flush | 58.9% (66–67%) | **54.9–55.5%** (41–50%) |
+| Code Predictor Loop | 15.4% (13–15%) | 0.7–0.9% (3–5%) |
+| Talker Forward | 7.5–7.6% (4–5%) | 0.3–0.6% (2–5%) |
+| Audio Chunk Eval (streaming decode) | 3.7% (N/A) | — |
+| **Whole generation** | 100% | **46.9–47.2%** (31–37%) |
+
+Reading: the P2/P3 launch-overhead work moved GPU busy from ~1/3 to ~1/2 — the same GPU work now
+packs into less CPU-idle wall, which is exactly the theory P0 predicted (build-cost ms convert
+≈1:1 to wall). The structure is unchanged: still launch/CPU-bound (« 80%), graph-build windows
+still essentially GPU-idle, so the remaining headroom stays behind the §E-gated graph
+capture/compile ceiling, not behind more kernel work. Trace overhead was negligible this time
+(RTF ≈ 1.09 under trace vs 1.07 canonical warm/long) — consistent with launch-gap reduction also
+shrinking the tracer's per-launch cost surface. Raw trace digested and discarded per the
+ephemeral-trace rule.
 - Clone/long capture: skipped as not decision-relevant (identical per-frame loop; clone differs in
   prefill, and P4's KV decision is a physFoot A/B, not a trace question).
 
