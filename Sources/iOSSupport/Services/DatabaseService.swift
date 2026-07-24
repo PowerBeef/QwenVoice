@@ -90,6 +90,27 @@ final class DatabaseService: @unchecked Sendable {
         }
     }
 
+    /// Deletes any existing joined-output row for the generation's long-form
+    /// project, then saves the new one — one joined record per project.
+    func replaceLongFormJoinedGenerationAsync(_ generation: Generation) async throws -> Generation {
+        let dbQueue = try requireQueue(for: .write)
+        do {
+            return try await dbQueue.write { db in
+                if let projectID = generation.longFormProjectID {
+                    try db.execute(
+                        sql: "DELETE FROM generations WHERE longFormProjectID = ? AND longFormRole = 'joined'",
+                        arguments: [projectID]
+                    )
+                }
+                var copy = generation
+                try copy.save(db)
+                return copy
+            }
+        } catch {
+            throw HistoryPersistenceError.classify(error, operation: .write)
+        }
+    }
+
     func fetchAllGenerations() throws -> [Generation] {
         let dbQueue = try requireQueue(for: .read)
         do {

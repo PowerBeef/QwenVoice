@@ -138,6 +138,7 @@ struct IOSCustomVoiceView: View {
             && !scriptLimitState.trimmedIsEmpty
             && !scriptLimitState.isOverLimit
             && !ttsEngine.hasActiveGeneration
+            && !appModel.longForm.isProcessing
     }
 
     private var canGenerateInCurrentRuntime: Bool {
@@ -155,7 +156,14 @@ struct IOSCustomVoiceView: View {
         return nil
     }
 
+    private var isLongFormActiveHere: Bool {
+        appModel.longForm.isProcessing && appModel.longForm.lastMode == .custom
+    }
+
     private var promptHelper: String? {
+        if isLongFormActiveHere, !appModel.longForm.progress.helperText.isEmpty {
+            return appModel.longForm.progress.helperText
+        }
         if !isScriptFocused && promptText.isEmpty {
             return nil
         }
@@ -163,7 +171,7 @@ struct IOSCustomVoiceView: View {
     }
 
     private var isGenerationActive: Bool {
-        isGenerating || ttsEngine.hasActiveGeneration
+        isGenerating || ttsEngine.hasActiveGeneration || isLongFormActiveHere
     }
 
     @State private var detectedPromptLanguage: Qwen3SupportedLanguage = .auto
@@ -184,7 +192,7 @@ struct IOSCustomVoiceView: View {
             script: promptTextBinding,
             placeholder: "Type or paste your script.",
             modeMetaLabel: "Built-in voice",
-            charLimit: scriptLimitState.limit,
+            charLimit: scriptLimitState.displayLimit,
             tint: IOSBrandTheme.custom,
             genState: studioGenState,
             errorMessage: coordinator.errorMessage,
@@ -194,11 +202,15 @@ struct IOSCustomVoiceView: View {
             setupChips: { customModeChips },
             onGenerate: generate,
             onCancel: {
-                IOSStudioGenerationActions.cancelGeneration(
-                    coordinator: coordinator,
-                    ttsEngine: ttsEngine,
-                    audioPlayer: audioPlayer
-                )
+                if appModel.longForm.isProcessing {
+                    appModel.longForm.cancel(ttsEngine: ttsEngine, audioPlayer: audioPlayer)
+                } else {
+                    IOSStudioGenerationActions.cancelGeneration(
+                        coordinator: coordinator,
+                        ttsEngine: ttsEngine,
+                        audioPlayer: audioPlayer
+                    )
+                }
             },
             onInstallModel: { selectedTab = .settings },
             onPlayerDismiss: { coordinator.dismissInlinePlayer() },
@@ -209,7 +221,61 @@ struct IOSCustomVoiceView: View {
     }
 
     @ViewBuilder
+    private var longFormResumeChip: some View {
+        if appModel.longForm.canResume, appModel.longForm.lastMode == .custom {
+            IOSStudioSetupChip(
+                eyebrow: "Long-form",
+                value: "Resume project",
+                abbreviation: "LF",
+                leadingSymbol: "arrow.clockwise",
+                tint: IOSBrandTheme.custom,
+                accessibilityID: "longform_resumeChip",
+                action: {
+                    appModel.longForm.resume(
+                        ttsEngine: ttsEngine,
+                        audioPlayer: audioPlayer,
+                        studioCoordinator: coordinator
+                    )
+                }
+            )
+        }
+    }
+
+    private func startLongFormProject(model: TTSModel) {
+        guard !appModel.longForm.isProcessing else { return }
+        do {
+            let plan = try IOSLongFormCoordinator.plan(originalText: promptText)
+            guard plan.segments.count <= IOSLongFormCoordinator.maxSegments else {
+                coordinator.fail(
+                    "This script plans \(plan.segments.count) segments; the maximum is \(IOSLongFormCoordinator.maxSegments). Split the text and try again."
+                )
+                return
+            }
+            appModel.longForm.start(
+                request: IOSLongFormProjectRequest(
+                    mode: .custom,
+                    model: model,
+                    plan: plan,
+                    voice: draft.selectedSpeaker,
+                    emotion: model.supportsInstructionControl ? draft.resolvedDeliveryInstruction : nil,
+                    languageHint: draft.selectedLanguage.rawValue,
+                    voiceDescription: nil,
+                    refAudio: nil,
+                    refText: nil,
+                    preparedVoiceID: nil
+                ),
+                ttsEngine: ttsEngine,
+                audioPlayer: audioPlayer,
+                studioCoordinator: coordinator
+            )
+        } catch {
+            coordinator.fail("Long-form planning failed: \(error.localizedDescription)")
+        }
+    }
+
+    @ViewBuilder
     private var customModeChips: some View {
+        longFormResumeChip
         IOSStudioSetupChip(
             eyebrow: "Voice",
             value: speakerDisplayName,
@@ -342,6 +408,10 @@ struct IOSCustomVoiceView: View {
         guard let model = activeModel else { return }
         guard isModelAvailable else {
             coordinator.fail("Install \(model.name) in Settings to generate audio.")
+            return
+        }
+        if scriptLimitState.routesToLongForm {
+            startLongFormProject(model: model)
             return
         }
 
@@ -607,6 +677,7 @@ struct IOSVoiceDesignView: View {
             && !scriptLimitState.trimmedIsEmpty
             && !scriptLimitState.isOverLimit
             && !ttsEngine.hasActiveGeneration
+            && !appModel.longForm.isProcessing
     }
 
     private var canGenerateInCurrentRuntime: Bool {
@@ -624,7 +695,14 @@ struct IOSVoiceDesignView: View {
         return nil
     }
 
+    private var isLongFormActiveHere: Bool {
+        appModel.longForm.isProcessing && appModel.longForm.lastMode == .design
+    }
+
     private var promptHelper: String? {
+        if isLongFormActiveHere, !appModel.longForm.progress.helperText.isEmpty {
+            return appModel.longForm.progress.helperText
+        }
         if !isScriptFocused && promptText.isEmpty {
             return nil
         }
@@ -636,7 +714,7 @@ struct IOSVoiceDesignView: View {
     }
 
     private var isGenerationActive: Bool {
-        isGenerating || ttsEngine.hasActiveGeneration
+        isGenerating || ttsEngine.hasActiveGeneration || isLongFormActiveHere
     }
 
     @State private var detectedPromptLanguage: Qwen3SupportedLanguage = .auto
@@ -859,7 +937,7 @@ struct IOSVoiceDesignView: View {
             script: promptTextBinding,
             placeholder: "Type the lines you want this designed voice to say.",
             modeMetaLabel: "Designed voice",
-            charLimit: scriptLimitState.limit,
+            charLimit: scriptLimitState.displayLimit,
             tint: IOSBrandTheme.design,
             genState: studioGenState,
             errorMessage: coordinator.errorMessage,
@@ -869,11 +947,15 @@ struct IOSVoiceDesignView: View {
             setupChips: { designModeChips },
             onGenerate: generate,
             onCancel: {
-                IOSStudioGenerationActions.cancelGeneration(
-                    coordinator: coordinator,
-                    ttsEngine: ttsEngine,
-                    audioPlayer: audioPlayer
-                )
+                if appModel.longForm.isProcessing {
+                    appModel.longForm.cancel(ttsEngine: ttsEngine, audioPlayer: audioPlayer)
+                } else {
+                    IOSStudioGenerationActions.cancelGeneration(
+                        coordinator: coordinator,
+                        ttsEngine: ttsEngine,
+                        audioPlayer: audioPlayer
+                    )
+                }
             },
             onInstallModel: { selectedTab = .settings },
             onPlayerDismiss: { coordinator.dismissInlinePlayer() },
@@ -885,7 +967,61 @@ struct IOSVoiceDesignView: View {
     }
 
     @ViewBuilder
+    private var longFormResumeChip: some View {
+        if appModel.longForm.canResume, appModel.longForm.lastMode == .design {
+            IOSStudioSetupChip(
+                eyebrow: "Long-form",
+                value: "Resume project",
+                abbreviation: "LF",
+                leadingSymbol: "arrow.clockwise",
+                tint: IOSBrandTheme.design,
+                accessibilityID: "longform_resumeChip",
+                action: {
+                    appModel.longForm.resume(
+                        ttsEngine: ttsEngine,
+                        audioPlayer: audioPlayer,
+                        studioCoordinator: coordinator
+                    )
+                }
+            )
+        }
+    }
+
+    private func startLongFormProject(model: TTSModel) {
+        guard !appModel.longForm.isProcessing else { return }
+        do {
+            let plan = try IOSLongFormCoordinator.plan(originalText: promptText)
+            guard plan.segments.count <= IOSLongFormCoordinator.maxSegments else {
+                coordinator.fail(
+                    "This script plans \(plan.segments.count) segments; the maximum is \(IOSLongFormCoordinator.maxSegments). Split the text and try again."
+                )
+                return
+            }
+            appModel.longForm.start(
+                request: IOSLongFormProjectRequest(
+                    mode: .design,
+                    model: model,
+                    plan: plan,
+                    voice: nil,
+                    emotion: draft.resolvedDeliveryInstruction,
+                    languageHint: draft.selectedLanguage.rawValue,
+                    voiceDescription: draft.voiceDescription,
+                    refAudio: nil,
+                    refText: nil,
+                    preparedVoiceID: nil
+                ),
+                ttsEngine: ttsEngine,
+                audioPlayer: audioPlayer,
+                studioCoordinator: coordinator
+            )
+        } catch {
+            coordinator.fail("Long-form planning failed: \(error.localizedDescription)")
+        }
+    }
+
+    @ViewBuilder
     private var designModeChips: some View {
+        longFormResumeChip
         IOSStudioSetupChip(
             eyebrow: "Voice brief",
             value: briefChipLabel,
@@ -1000,6 +1136,10 @@ struct IOSVoiceDesignView: View {
             } else if scriptLimitState.isOverLimit {
                 coordinator.fail(scriptLimitState.warningMessage)
             }
+            return
+        }
+        if scriptLimitState.routesToLongForm {
+            startLongFormProject(model: model)
             return
         }
 
@@ -1284,6 +1424,7 @@ struct IOSVoiceCloningView: View {
             && !scriptLimitState.trimmedIsEmpty
             && !scriptLimitState.isOverLimit
             && !ttsEngine.hasActiveGeneration
+            && !appModel.longForm.isProcessing
     }
 
     private var setupMessage: String? {
@@ -1330,7 +1471,14 @@ struct IOSVoiceCloningView: View {
         }
     }
 
+    private var isLongFormActiveHere: Bool {
+        appModel.longForm.isProcessing && appModel.longForm.lastMode == .clone
+    }
+
     private var promptHelper: String? {
+        if isLongFormActiveHere, !appModel.longForm.progress.helperText.isEmpty {
+            return appModel.longForm.progress.helperText
+        }
         if !isScriptFocused && promptText.isEmpty {
             return nil
         }
@@ -1342,7 +1490,7 @@ struct IOSVoiceCloningView: View {
     }
 
     private var isGenerationActive: Bool {
-        isGenerating || ttsEngine.hasActiveGeneration
+        isGenerating || ttsEngine.hasActiveGeneration || isLongFormActiveHere
     }
 
     @State private var detectedPromptLanguage: Qwen3SupportedLanguage = .auto
@@ -1395,7 +1543,7 @@ struct IOSVoiceCloningView: View {
                 script: promptTextBinding,
                 placeholder: "Type the new text. The reference voice will speak it.",
                 modeMetaLabel: cloneModeMetaLabel,
-                charLimit: scriptLimitState.limit,
+                charLimit: scriptLimitState.displayLimit,
                 tint: IOSBrandTheme.clone,
                 genState: studioGenState,
                 errorMessage: coordinator.errorMessage,
@@ -1405,11 +1553,15 @@ struct IOSVoiceCloningView: View {
                 setupChips: { cloneModeChips },
                 onGenerate: generate,
                 onCancel: {
-                    IOSStudioGenerationActions.cancelGeneration(
-                        coordinator: coordinator,
-                        ttsEngine: ttsEngine,
-                        audioPlayer: audioPlayer
-                    )
+                    if appModel.longForm.isProcessing {
+                        appModel.longForm.cancel(ttsEngine: ttsEngine, audioPlayer: audioPlayer)
+                    } else {
+                        IOSStudioGenerationActions.cancelGeneration(
+                            coordinator: coordinator,
+                            ttsEngine: ttsEngine,
+                            audioPlayer: audioPlayer
+                        )
+                    }
                 },
                 onInstallModel: { selectedTab = .settings },
                 onPlayerDismiss: { coordinator.dismissInlinePlayer() },
@@ -1420,7 +1572,61 @@ struct IOSVoiceCloningView: View {
     }
 
     @ViewBuilder
+    private var longFormResumeChip: some View {
+        if appModel.longForm.canResume, appModel.longForm.lastMode == .clone {
+            IOSStudioSetupChip(
+                eyebrow: "Long-form",
+                value: "Resume project",
+                abbreviation: "LF",
+                leadingSymbol: "arrow.clockwise",
+                tint: IOSBrandTheme.clone,
+                accessibilityID: "longform_resumeChip",
+                action: {
+                    appModel.longForm.resume(
+                        ttsEngine: ttsEngine,
+                        audioPlayer: audioPlayer,
+                        studioCoordinator: coordinator
+                    )
+                }
+            )
+        }
+    }
+
+    private func startLongFormProject(model: TTSModel, refPath: String) {
+        guard !appModel.longForm.isProcessing else { return }
+        do {
+            let plan = try IOSLongFormCoordinator.plan(originalText: promptText)
+            guard plan.segments.count <= IOSLongFormCoordinator.maxSegments else {
+                coordinator.fail(
+                    "This script plans \(plan.segments.count) segments; the maximum is \(IOSLongFormCoordinator.maxSegments). Split the text and try again."
+                )
+                return
+            }
+            appModel.longForm.start(
+                request: IOSLongFormProjectRequest(
+                    mode: .clone,
+                    model: model,
+                    plan: plan,
+                    voice: referenceChipLabel,
+                    emotion: nil,
+                    languageHint: draft.selectedLanguage.rawValue,
+                    voiceDescription: nil,
+                    refAudio: refPath,
+                    refText: draft.referenceTranscript.isEmpty ? nil : draft.referenceTranscript,
+                    preparedVoiceID: draft.selectedSavedVoiceID
+                ),
+                ttsEngine: ttsEngine,
+                audioPlayer: audioPlayer,
+                studioCoordinator: coordinator
+            )
+        } catch {
+            coordinator.fail("Long-form planning failed: \(error.localizedDescription)")
+        }
+    }
+
+    @ViewBuilder
     private var cloneModeChips: some View {
+        longFormResumeChip
         IOSStudioSetupChip(
             eyebrow: draft.referenceAudioPath == nil ? "Reference" : "Voice",
             value: referenceChipLabel,
@@ -1593,6 +1799,14 @@ struct IOSVoiceCloningView: View {
         guard let model = cloneModel else { return }
         guard isModelAvailable else {
             coordinator.fail("Install \(model.name) in Settings to generate audio.")
+            return
+        }
+        if scriptLimitState.routesToLongForm {
+            guard let refPath = draft.referenceAudioPath else {
+                coordinator.fail("Select a reference audio file before generating.")
+                return
+            }
+            startLongFormProject(model: model, refPath: refPath)
             return
         }
         // Same seed for the live + final card so the decorative waveform doesn't change shape.

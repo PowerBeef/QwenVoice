@@ -61,7 +61,8 @@ struct RootView: View {
         // IOSGenerationPerformanceGateKey.
         .environment(
             \.iosGenerationPerformanceGate,
-            IOSDisplayCapability.isFixedRefreshDisplay && ttsEngine.hasActiveGeneration
+            IOSDisplayCapability.isFixedRefreshDisplay
+                && (ttsEngine.hasActiveGeneration || ttsEngine.hasSustainedPerformanceActivity)
         )
         // The dock is the only persistent bottom chrome. Playback is
         // presented inline in Studio or through IOSPlayerSheet.

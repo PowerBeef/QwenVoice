@@ -139,6 +139,10 @@ final class AppModel {
     let designCoordinator = StudioGenerationCoordinator(mode: .design)
     let cloneCoordinator = StudioGenerationCoordinator(mode: .clone)
 
+    /// One app-wide long-form project coordinator (the engine admits one
+    /// generation at a time); scripts above the single-take limit route here.
+    let longForm = IOSLongFormCoordinator()
+
     func coordinator(for mode: GenerationMode) -> StudioGenerationCoordinator {
         switch mode {
         case .custom: return customCoordinator

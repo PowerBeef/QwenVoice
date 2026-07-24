@@ -103,4 +103,80 @@ final class VocelloiOSSmokeUITests: VocelloiOSUITestCase {
         )
         VocelloUIScreenshot.attach(app, named: "ios-smoke-history")
     }
+
+    /// Long-form project journey: a script above the 900-character single-take
+    /// limit routes to the sequential-streaming project path — planner
+    /// segments, per-segment takes, joined output, and a grouped History
+    /// project with a working per-segment disclosure. Mirrors the macOS
+    /// `test06_LongFormProjectJourney` acceptance semantics on the paired
+    /// physical iPhone.
+    func testZLongFormProjectJourney() {
+        let runnerEnvironment = ProcessInfo.processInfo.environment
+        guard let runID = runnerEnvironment["QVOICE_IOS_SMOKE_RUN_ID"],
+              !runID.isEmpty else {
+            XCTFail("Physical-device smoke requires a run-scoped diagnostics identity")
+            return
+        }
+        beginSession(additionalEnvironment: [
+            "QVOICE_IOS_DEVICE_RUN_ID": runID,
+            "QVOICE_MAC_BENCH_RUN_ID": runID,
+        ])
+        defer { endSession() }
+
+        assertVisibleModelReadiness()
+        prepare(mode: .custom)
+
+        // Pronounceable nonce (hex nonces read as spelled letters and perturb
+        // the QC pause budget — macOS acceptance lesson).
+        let nonce = String((0..<8).map { _ in "abcdefghijklmnopqrstuvwxyz".randomElement()! })
+        let paragraph = "The evening ferry crossed the quiet harbor while gulls circled the "
+            + "breakwater and the lighthouse began its slow rotation over the bay. Along the "
+            + "promenade the vendors folded their awnings, stacked crates of oranges, and "
+            + "compared notes about the tide. Farther up the hill the windows brightened one "
+            + "by one, and the smell of bread and woodsmoke drifted through narrow streets "
+            + "that remembered a century of similar evenings. "
+        var script = "Project \(nonce). "
+        while script.count < 2_000 {
+            script += paragraph
+        }
+
+        replaceScript(with: script)
+        _ = generateAndWaitForCompletedPlayer(timeout: 900)
+        VocelloUIScreenshot.attach(app, named: "ios-longform-complete")
+
+        // Search flattens: the nonce lands in the first segment and the joined
+        // transcript — exactly two flat rows.
+        replaceHistorySearch(with: nonce)
+        XCTAssertTrue(
+            VocelloUIWait.condition("first segment + joined output to appear in History search", timeout: 30) {
+                self.historyRows().count == 2
+            },
+            "Search must surface exactly the first segment and the joined output"
+        )
+
+        // Without search, the project groups: one joined row plus a per-segment
+        // disclosure that expands to the project's segment rows. Clear the
+        // field directly and wait on the grouped outcome — an empty
+        // UITextField reports its placeholder as `value`, so the helper's
+        // value-echo assertion cannot confirm an empty query.
+        let searchField = app.textFields["historySearchField"].firstMatch
+        XCTAssertTrue(VocelloUIWait.exists(searchField, timeout: 30))
+        XCTAssertTrue(VocelloUITextEntry.replace(in: searchField, with: "", timeout: 20))
+        let segmentsToggle = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "history_longFormSegmentsToggle_"))
+            .firstMatch
+        XCTAssertTrue(
+            VocelloUIWait.exists(segmentsToggle, timeout: 30),
+            "The grouped project row must expose its per-segment disclosure"
+        )
+        let collapsedCount = historyRows().count
+        XCTAssertTrue(VocelloUIPrimaryAction.perform(on: segmentsToggle, timeout: 20))
+        XCTAssertTrue(
+            VocelloUIWait.condition("per-segment map to expand", timeout: 20) {
+                self.historyRows().count >= collapsedCount + 2
+            },
+            "Expanding the newest project must reveal its segment rows"
+        )
+        VocelloUIScreenshot.attach(app, named: "ios-longform-history-project")
+    }
 }

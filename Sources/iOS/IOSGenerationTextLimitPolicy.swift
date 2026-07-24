@@ -5,9 +5,15 @@ struct IOSGenerationTextLimitPolicy {
     /// Single-take spoken-script ceiling. Matches the delivery-validated 900-character
     /// boundary shared with the macOS long-form router: the engine's 2,048-token cap
     /// (~170 s of audio) comfortably covers ~900 characters, and the raise is gated on
-    /// an on-device memory-qualified proof at this length (2026-07-24). Raising it
-    /// further requires new device evidence; scripts beyond it need the iOS long-form arc.
+    /// an on-device memory-qualified proof at this length (2026-07-24). Scripts beyond
+    /// it route to a long-form project (sequential streaming segments) rather than
+    /// being blocked.
     private static let sharedScriptLimit = 900
+
+    /// Hard editor ceiling for long-form scripts. Generously above any validated
+    /// project while still bounding the planner input; the planner's 100-segment cap
+    /// is the authoritative project-size gate.
+    static let longFormScriptLimit = 30_000
 
     /// Voice Design BRIEF (the voice DESCRIPTION) limit — deliberately decoupled from the
     /// spoken-script limit above. Sourced from the shared catalog so the iOS sheet and the
@@ -33,30 +39,45 @@ struct IOSGenerationTextLimitPolicy {
             max(limit - count, 0)
         }
 
-        var isOverLimit: Bool {
+        /// Scripts above the single-take limit run as a long-form project.
+        var routesToLongForm: Bool {
             count > limit
         }
 
+        /// Only the hard long-form ceiling blocks generation now.
+        var isOverLimit: Bool {
+            count > IOSGenerationTextLimitPolicy.longFormScriptLimit
+        }
+
+        /// The ceiling the editor counter should show: the single-take limit for
+        /// ordinary scripts, the long-form ceiling once routing engages.
+        var displayLimit: Int {
+            routesToLongForm ? IOSGenerationTextLimitPolicy.longFormScriptLimit : limit
+        }
+
         var counterText: String {
-            "\(count)/\(limit)"
+            "\(count)/\(displayLimit)"
         }
 
         var helperMessage: String {
             if isOverLimit {
                 return warningMessage
             }
-            if remainingCount == 0 {
-                return "At the on-device limit for this mode."
+            if routesToLongForm {
+                return "Long-form script — Vocello plans segments, streams each one, and joins them into a single take."
             }
-            return "\(remainingCount) characters remaining for on-device generation."
+            if remainingCount == 0 {
+                return "At the single-take limit; keep typing for a long-form project."
+            }
+            return "\(remainingCount) characters remaining for a single take."
         }
 
         var warningMessage: String {
-            "Shorten the script to \(limit) characters or less for on-device generation."
+            "Shorten the script to \(IOSGenerationTextLimitPolicy.longFormScriptLimit) characters or less."
         }
 
         var readinessTitle: String {
-            "Shorten script to \(limit) chars"
+            "Shorten script to \(IOSGenerationTextLimitPolicy.longFormScriptLimit) chars"
         }
     }
 
@@ -69,9 +90,8 @@ struct IOSGenerationTextLimitPolicy {
     }
 
     static func clamped(_ text: String, mode: GenerationMode) -> String {
-        let limit = limit(for: mode)
-        guard text.count > limit else { return text }
-        return String(text.prefix(limit))
+        guard text.count > longFormScriptLimit else { return text }
+        return String(text.prefix(longFormScriptLimit))
     }
 
     static func limit(for mode: GenerationMode) -> Int {

@@ -1,0 +1,727 @@
+import AVFoundation
+import Foundation
+import Observation
+import QwenVoiceCore
+
+/// iOS long-form v4: scripts above the single-take limit run as a planned
+/// project of ordinary sequential streaming takes — the same shipping design
+/// the macOS `BatchGenerationRunner` proved (planner segmentation, per-segment
+/// engine + app QC, bounded assembly into one joined WAV, fail-closed manifest
+/// v4, one joined History row per project). Everything model-free is shared
+/// QwenVoiceCore machinery; this file owns only the iOS execution shell.
+///
+/// Scope note: in-session resume reuses saved takes; single-segment
+/// regeneration (replacement lineage) remains macOS-only for now — the shared
+/// manifest schema carries `replacements`, which iOS writes empty.
+
+// MARK: - Segment state
+
+struct IOSLongFormSegmentState: Identifiable, Equatable {
+    enum Status: Equatable {
+        case pending
+        case running
+        case saved(audioPath: String)
+        case failed(message: String)
+        case cancelled
+    }
+
+    let id = UUID()
+    let index: Int
+    let line: String
+    var status: Status
+
+    var audioPath: String? {
+        if case .saved(let audioPath) = status { return audioPath }
+        return nil
+    }
+
+    var isSaved: Bool {
+        if case .saved = status { return true }
+        return false
+    }
+}
+
+// MARK: - Progress
+
+struct IOSLongFormProgressSnapshot: Equatable {
+    var completedCount = 0
+    var totalCount = 0
+    var activeSegmentIndex: Int?
+    var statusMessage = ""
+
+    /// Helper-line text while a project is running; empty when idle.
+    var helperText: String {
+        guard totalCount > 0 else { return "" }
+        return statusMessage
+    }
+}
+
+// MARK: - Outcome
+
+enum IOSLongFormOutcome: Equatable {
+    case completed(
+        segments: [IOSLongFormSegmentState],
+        joinedAudioPath: String,
+        joinedDurationSeconds: Double
+    )
+    case cancelled(segments: [IOSLongFormSegmentState])
+    case failed(segments: [IOSLongFormSegmentState], message: String)
+
+    var segments: [IOSLongFormSegmentState] {
+        switch self {
+        case .completed(let segments, _, _), .cancelled(let segments):
+            return segments
+        case .failed(let segments, _):
+            return segments
+        }
+    }
+}
+
+// MARK: - Project request
+
+struct IOSLongFormProjectRequest {
+    let mode: GenerationMode
+    let model: TTSModel
+    let plan: LongFormPlan
+    let voice: String?
+    let emotion: String?
+    let languageHint: String?
+    let voiceDescription: String?
+    let refAudio: String?
+    let refText: String?
+    let preparedVoiceID: String?
+
+    var lines: [String] { plan.segments.map(\.spokenTextForGeneration) }
+
+    var projectDigestPrefix: String { String(plan.evidence.planDigest.prefix(8)) }
+
+    /// Pause budget for the assembled output: the whole script's punctuation
+    /// plus the assembler's own inserted boundary pauses.
+    var joinedOutputPauseBudget: Int {
+        lines.reduce(0) { $0 + PersistedWAVAudioQCAnalyzer.expectedPauseCount(in: $1) }
+            + max(0, lines.count - 1)
+    }
+
+    func outputText(forSegment index: Int) -> String {
+        String(format: "segment_%04d_%@", index + 1, String(lines[index].prefix(40)))
+    }
+
+    func makeGenerationRequest(
+        segmentIndex: Int,
+        outputPath: String,
+        generationID: UUID
+    ) -> GenerationRequest {
+        let line = lines[segmentIndex]
+        let seed = plan.segments[segmentIndex].evidence.effectiveSubseed
+        let payload: GenerationRequest.Payload
+        switch mode {
+        case .custom:
+            payload = .custom(
+                speakerID: voice ?? TTSModel.defaultSpeaker,
+                deliveryStyle: model.supportsInstructionControl ? emotion : nil
+            )
+        case .design:
+            payload = .design(
+                voiceDescription: voiceDescription ?? "",
+                deliveryStyle: emotion ?? DeliveryProfile.neutralInstruction
+            )
+        case .clone:
+            payload = .clone(
+                reference: CloneReference(
+                    audioPath: refAudio ?? "",
+                    transcript: refText,
+                    preparedVoiceID: preparedVoiceID
+                )
+            )
+        }
+        return GenerationRequest(
+            mode: mode,
+            modelID: model.id,
+            text: line,
+            outputPath: outputPath,
+            shouldStream: true,
+            streamingInterval: GenerationSemantics.appStreamingInterval,
+            languageHint: languageHint,
+            payload: payload,
+            generationID: generationID,
+            seed: seed,
+            variation: IOSGenerationVariationPreference.requestValue()
+        )
+    }
+
+    private var voiceName: String? {
+        switch mode {
+        case .custom:
+            return voice
+        case .design:
+            return voiceDescription
+        case .clone:
+            if let voice { return voice }
+            if let refAudio {
+                return URL(fileURLWithPath: refAudio).deletingPathExtension().lastPathComponent
+            }
+            return nil
+        }
+    }
+
+    func makeSegmentHistoryRecord(forSegment index: Int, audioPath: String, duration: Double?) -> Generation {
+        Generation(
+            text: lines[index],
+            mode: model.mode.rawValue,
+            modelTier: model.tier,
+            voice: voiceName,
+            emotion: emotion,
+            speed: nil,
+            audioPath: audioPath,
+            duration: duration,
+            createdAt: Date(),
+            longFormProjectID: plan.evidence.planDigest,
+            longFormRole: "segment"
+        )
+    }
+
+    func makeJoinedHistoryRecord(assembly: LongFormAssemblyEvidence, outputURL: URL) -> Generation {
+        Generation(
+            text: lines.joined(separator: " "),
+            mode: model.mode.rawValue,
+            modelTier: model.tier,
+            voice: voiceName,
+            emotion: emotion,
+            speed: nil,
+            audioPath: outputURL.path,
+            duration: Double(assembly.outputFrameCount) / Double(assembly.sampleRate),
+            createdAt: Date(),
+            longFormProjectID: plan.evidence.planDigest,
+            longFormRole: "joined"
+        )
+    }
+}
+
+// MARK: - Coordinator
+
+/// One app-wide long-form run at a time (the engine admits one generation
+/// anyway). Owns the run task, retained plan identity for in-session resume,
+/// and the published progress the mode views render.
+@MainActor
+@Observable
+final class IOSLongFormCoordinator {
+    static let maxSegments = 100
+
+    private(set) var isProcessing = false
+    private(set) var progress = IOSLongFormProgressSnapshot()
+    private(set) var segments: [IOSLongFormSegmentState] = []
+    private(set) var outcome: IOSLongFormOutcome?
+    /// Mode that started the current/last project; gates which mode view shows
+    /// progress and the resume affordance.
+    private(set) var lastMode: GenerationMode?
+    /// Retained for in-session resume; the plan inside is the identity authority.
+    private var lastRequest: IOSLongFormProjectRequest?
+    private var runTask: Task<Void, Never>?
+    private let cancellationState = IOSLongFormCancellationState()
+
+    /// A stopped run with retained plan identity and at least one missing
+    /// segment can resume without regenerating saved takes.
+    var canResume: Bool {
+        guard !isProcessing, lastRequest != nil, let outcome else { return false }
+        return outcome.segments.contains { !$0.isSaved }
+    }
+
+    static func plan(originalText: String) throws -> LongFormPlan {
+        let spokenPlan = try SpokenTextPlanner.plan(originalText: originalText)
+        return try LongFormPlanner.plan(
+            spokenTextPlan: spokenPlan,
+            configuration: LongFormPlanningConfiguration(
+                runtimeTokenLimit: LongFormPlanningConfiguration.shippingRuntimeTokenLimit,
+                baseSeed: UInt64.random(in: UInt64.min ... UInt64.max)
+            )
+        )
+    }
+
+    func start(
+        request: IOSLongFormProjectRequest,
+        ttsEngine: TTSEngineStore,
+        audioPlayer: AudioPlayerViewModel,
+        studioCoordinator: StudioGenerationCoordinator
+    ) {
+        begin(
+            request: request,
+            reusing: nil,
+            ttsEngine: ttsEngine,
+            audioPlayer: audioPlayer,
+            studioCoordinator: studioCoordinator
+        )
+    }
+
+    func resume(
+        ttsEngine: TTSEngineStore,
+        audioPlayer: AudioPlayerViewModel,
+        studioCoordinator: StudioGenerationCoordinator
+    ) {
+        guard canResume, let request = lastRequest, let prior = outcome?.segments else { return }
+        begin(
+            request: request,
+            reusing: prior,
+            ttsEngine: ttsEngine,
+            audioPlayer: audioPlayer,
+            studioCoordinator: studioCoordinator
+        )
+    }
+
+    func cancel(ttsEngine: TTSEngineStore, audioPlayer: AudioPlayerViewModel) {
+        guard isProcessing else { return }
+        let state = cancellationState
+        runTask?.cancel()
+        audioPlayer.abortLivePreviewIfNeeded()
+        Task {
+            await state.request()
+            try? await ttsEngine.cancelActiveGeneration()
+        }
+    }
+
+    private func begin(
+        request: IOSLongFormProjectRequest,
+        reusing prior: [IOSLongFormSegmentState]?,
+        ttsEngine: TTSEngineStore,
+        audioPlayer: AudioPlayerViewModel,
+        studioCoordinator: StudioGenerationCoordinator
+    ) {
+        guard !isProcessing, !ttsEngine.hasActiveGeneration else { return }
+        lastRequest = request
+        lastMode = request.mode
+        outcome = nil
+        isProcessing = true
+        studioCoordinator.start(live: nil)
+        let runner = IOSLongFormProjectRunner(
+            ttsEngine: ttsEngine,
+            audioPlayer: audioPlayer,
+            cancellationState: cancellationState
+        )
+        Task { await cancellationState.reset() }
+        segments = request.lines.enumerated().map { index, line in
+            if let prior, index < prior.count, prior[index].isSaved, prior[index].line == line {
+                return prior[index]
+            }
+            return IOSLongFormSegmentState(index: index, line: line, status: .pending)
+        }
+        progress = IOSLongFormProgressSnapshot(
+            completedCount: segments.count(where: \.isSaved),
+            totalCount: segments.count,
+            activeSegmentIndex: nil,
+            statusMessage: "Preparing long-form project…"
+        )
+        runTask = Task { [weak self] in
+            guard let self else { return }
+            let outcome = await runner.run(
+                request: request,
+                initialSegments: segments,
+                onProgress: { [weak self] snapshot in self?.progress = snapshot },
+                onSegmentsUpdated: { [weak self] segments in self?.segments = segments },
+                studioCoordinator: studioCoordinator
+            )
+            self.isProcessing = false
+            self.runTask = nil
+            self.outcome = outcome
+            self.progress = IOSLongFormProgressSnapshot()
+            self.finish(
+                outcome: outcome,
+                request: request,
+                audioPlayer: audioPlayer,
+                studioCoordinator: studioCoordinator
+            )
+        }
+    }
+
+    /// Terminal studio-lifecycle glue: hand the joined output to the shared
+    /// player (auto-play-gated) and surface the inline card, or clear/fail the
+    /// dock state — mirroring what the single-take flows do per take.
+    private func finish(
+        outcome: IOSLongFormOutcome,
+        request: IOSLongFormProjectRequest,
+        audioPlayer: AudioPlayerViewModel,
+        studioCoordinator: StudioGenerationCoordinator
+    ) {
+        switch outcome {
+        case .completed(_, let joinedAudioPath, let joinedDurationSeconds):
+            let shouldAutoPlay = AudioService.shouldAutoPlay
+            audioPlayer.completeStreamingPreview(
+                result: GenerationResult(
+                    audioPath: joinedAudioPath,
+                    durationSeconds: joinedDurationSeconds,
+                    streamSessionDirectory: nil,
+                    usedStreaming: false
+                ),
+                title: String(request.lines.joined(separator: " ").prefix(40)),
+                shouldAutoPlay: shouldAutoPlay
+            )
+            let transcript = request.lines.joined(separator: " ")
+            studioCoordinator.complete(
+                IOSStudioInlinePlayerItem(
+                    generationID: UUID(),
+                    audioURL: URL(fileURLWithPath: joinedAudioPath),
+                    voiceName: "Long-form project",
+                    modeLabel: "Long-form",
+                    mode: request.mode,
+                    transcript: transcript,
+                    waveformSeed: IOSStableVisualHash.int(transcript),
+                    autoplay: false,
+                    ownedBySharedPlayer: shouldAutoPlay
+                )
+            )
+            IOSHaptics.success()
+        case .cancelled:
+            studioCoordinator.finish()
+            studioCoordinator.errorMessage = nil
+        case .failed(_, let message):
+            studioCoordinator.fail(message)
+            IOSHaptics.warning()
+        }
+    }
+}
+
+actor IOSLongFormCancellationState {
+    private var isRequested = false
+    func request() { isRequested = true }
+    func reset() { isRequested = false }
+    func wasRequested() -> Bool { isRequested }
+}
+
+// MARK: - Runner
+
+@MainActor
+final class IOSLongFormProjectRunner {
+    private let ttsEngine: TTSEngineStore
+    private let audioPlayer: AudioPlayerViewModel
+    private let cancellationState: IOSLongFormCancellationState
+
+    init(
+        ttsEngine: TTSEngineStore,
+        audioPlayer: AudioPlayerViewModel,
+        cancellationState: IOSLongFormCancellationState
+    ) {
+        self.ttsEngine = ttsEngine
+        self.audioPlayer = audioPlayer
+        self.cancellationState = cancellationState
+    }
+
+    private func evaluateQC(path: String, expectedPauseCount: Int) async -> AudioQualityGate.Report {
+        await Task.detached(priority: .utility) {
+            AudioQualityGate.evaluate(
+                url: URL(fileURLWithPath: path),
+                expectedPauseCount: expectedPauseCount
+            )
+        }.value
+    }
+
+    func run(
+        request: IOSLongFormProjectRequest,
+        initialSegments: [IOSLongFormSegmentState],
+        onProgress: @escaping @MainActor (IOSLongFormProgressSnapshot) -> Void,
+        onSegmentsUpdated: @escaping @MainActor ([IOSLongFormSegmentState]) -> Void,
+        studioCoordinator: StudioGenerationCoordinator
+    ) async -> IOSLongFormOutcome {
+        // Hold the fixed-refresh performance gate across the whole run —
+        // segments, QC, History saves, and assembly — instead of flickering
+        // per segment.
+        ttsEngine.beginSustainedPerformanceActivity()
+        defer { ttsEngine.endSustainedPerformanceActivity() }
+
+        var segments = initialSegments
+        let total = segments.count
+        var completedCount = segments.count(where: \.isSaved)
+        var qualityReports: [AudioQualityGate.Report?] = []
+
+        func publish(active: Int?, message: String) {
+            onProgress(
+                IOSLongFormProgressSnapshot(
+                    completedCount: completedCount,
+                    totalCount: total,
+                    activeSegmentIndex: active,
+                    statusMessage: message
+                )
+            )
+            onSegmentsUpdated(segments)
+        }
+
+        func markCancelled(startingAt index: Int) {
+            for i in index..<segments.count where !segments[i].isSaved {
+                segments[i].status = .cancelled
+            }
+            onSegmentsUpdated(segments)
+        }
+
+        for index in segments.indices {
+            let line = segments[index].line
+            if await cancellationState.wasRequested() {
+                markCancelled(startingAt: index)
+                return .cancelled(segments: segments)
+            }
+
+            if segments[index].isSaved, let reusedPath = segments[index].audioPath {
+                // Resume: re-verify the retained take instead of regenerating.
+                let report = await evaluateQC(
+                    path: reusedPath,
+                    expectedPauseCount: PersistedWAVAudioQCAnalyzer.expectedPauseCount(in: line)
+                )
+                qualityReports.append(report)
+                guard report.passed else {
+                    segments[index].status = .failed(message: report.failureSummary)
+                    await persistManifest(request: request, segments: segments, qualityReports: qualityReports, assembly: nil)
+                    onSegmentsUpdated(segments)
+                    return .failed(
+                        segments: segments,
+                        message: "A previously generated segment no longer passes audio quality checks."
+                    )
+                }
+                completedCount += 1
+                publish(active: index, message: "Reusing segment \(index + 1) of \(total)…")
+                continue
+            }
+
+            segments[index].status = .running
+            publish(active: index, message: "Generating segment \(index + 1) of \(total)…")
+
+            let generationID = UUID()
+            let outputPath = makeOutputPath(
+                subfolder: request.model.outputSubfolder,
+                text: request.outputText(forSegment: index)
+            )
+            do {
+                // Live narration per segment (playback gated by the user's
+                // auto-play preference; publication always on).
+                audioPlayer.setLivePreviewEstimate(LivePreviewEstimate(text: line))
+                audioPlayer.prepareStreamingPreview(
+                    title: "Segment \(index + 1) of \(total)",
+                    shouldAutoPlay: AudioService.shouldAutoPlay
+                )
+                studioCoordinator.liveItem = IOSStudioLivePreviewItem(
+                    voiceName: "Segment \(index + 1) of \(total)",
+                    modeLabel: "Long-form",
+                    mode: request.mode,
+                    transcript: line,
+                    waveformSeed: IOSStableVisualHash.int(line),
+                    estimatedAudioDuration: LivePreviewEstimate(text: line)?.estimatedAudioDuration ?? 0
+                )
+                await AppGenerationTimeline.shared.recordSubmitted(
+                    id: generationID,
+                    mode: request.mode.rawValue
+                )
+                let result = try await ttsEngine.generate(
+                    request.makeGenerationRequest(
+                        segmentIndex: index,
+                        outputPath: outputPath,
+                        generationID: generationID
+                    )
+                )
+                let cancellationRequestedAfterTake = await cancellationState.wasRequested()
+                if Task.isCancelled || cancellationRequestedAfterTake {
+                    await AppGenerationTimeline.shared.recordFailed(id: generationID, finishReason: .cancelled)
+                    IOSPullableDiagnosticsMirror.syncGenerationTelemetryIfEnabled(generationID: generationID)
+                    try? FileManager.default.removeItem(atPath: result.audioPath)
+                    audioPlayer.abortLivePreviewIfNeeded()
+                    markCancelled(startingAt: index)
+                    return .cancelled(segments: segments)
+                }
+                await AppGenerationTimeline.shared.recordCompleted(
+                    id: generationID,
+                    mode: request.mode.rawValue,
+                    usedStreaming: true,
+                    finishReason: result.finishReason?.rawValue,
+                    summary: result.telemetrySummary
+                )
+                IOSPullableDiagnosticsMirror.syncGenerationTelemetryIfEnabled(generationID: generationID)
+
+                let report = await evaluateQC(
+                    path: result.audioPath,
+                    expectedPauseCount: PersistedWAVAudioQCAnalyzer.expectedPauseCount(in: line)
+                )
+                qualityReports.append(report)
+                guard report.passed else {
+                    segments[index].status = .failed(message: report.failureSummary)
+                    await persistManifest(request: request, segments: segments, qualityReports: qualityReports, assembly: nil)
+                    onSegmentsUpdated(segments)
+                    return .failed(
+                        segments: segments,
+                        message: "Segment \(index + 1) failed audio quality checks. \(report.failureSummary)"
+                    )
+                }
+
+                publish(active: index, message: "Saving segment \(index + 1) of \(total)…")
+                let record = request.makeSegmentHistoryRecord(
+                    forSegment: index,
+                    audioPath: result.audioPath,
+                    duration: result.durationSeconds
+                )
+                GenerationPersistence.persist(record, caller: "IOSLongFormProjectRunner")
+                completedCount += 1
+                segments[index].status = .saved(audioPath: result.audioPath)
+                publish(active: index, message: "Saved segment \(index + 1) of \(total)")
+            } catch {
+                audioPlayer.abortLivePreviewIfNeeded()
+                let cancellationRequested = await cancellationState.wasRequested()
+                await AppGenerationTimeline.shared.recordFailed(
+                    id: generationID,
+                    finishReason: (error is CancellationError || cancellationRequested) ? .cancelled : .failed
+                )
+                IOSPullableDiagnosticsMirror.syncGenerationTelemetryIfEnabled(generationID: generationID)
+                if error is CancellationError || Task.isCancelled || cancellationRequested {
+                    markCancelled(startingAt: index)
+                    return .cancelled(segments: segments)
+                }
+                segments[index].status = .failed(message: error.localizedDescription)
+                onSegmentsUpdated(segments)
+                return .failed(segments: segments, message: error.localizedDescription)
+            }
+        }
+
+        if await cancellationState.wasRequested() {
+            markCancelled(startingAt: 0)
+            return .cancelled(segments: segments)
+        }
+
+        // Close the final segment's live session deterministically before the
+        // join so the completed-project handoff never overlaps a draining
+        // live tail.
+        audioPlayer.abortLivePreviewIfNeeded()
+        publish(active: nil, message: "Joining \(total) segments…")
+        do {
+            let joined = try await assemble(request: request, segments: segments)
+            let joinedReport = await evaluateQC(
+                path: joined.outputURL.path,
+                expectedPauseCount: request.joinedOutputPauseBudget
+            )
+            await persistManifest(
+                request: request,
+                segments: segments,
+                qualityReports: qualityReports,
+                assembly: joined.evidence
+            )
+            guard joinedReport.passed else {
+                return .failed(
+                    segments: segments,
+                    message: "The joined long-form output failed audio quality checks: \(joinedReport.failureSummary)"
+                )
+            }
+            let joinedRecord = request.makeJoinedHistoryRecord(
+                assembly: joined.evidence,
+                outputURL: joined.outputURL
+            )
+            let saved = try await DatabaseService.shared.replaceLongFormJoinedGenerationAsync(joinedRecord)
+            NotificationCenter.default.post(name: .generationSaved, object: nil)
+            IOSSavedOutputsDestination.exportIfConfigured(internalAudioPath: joined.outputURL.path)
+            publish(active: nil, message: "Done")
+            return .completed(
+                segments: segments,
+                joinedAudioPath: joined.outputURL.path,
+                joinedDurationSeconds: saved.duration
+                    ?? Double(joined.evidence.outputFrameCount) / Double(joined.evidence.sampleRate)
+            )
+        } catch {
+            await persistManifest(
+                request: request,
+                segments: segments,
+                qualityReports: qualityReports,
+                assembly: nil
+            )
+            return .failed(
+                segments: segments,
+                message: "Long-form assembly failed: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private enum RunError: LocalizedError {
+        case missingSegmentAudio(index: Int)
+
+        var errorDescription: String? {
+            switch self {
+            case .missingSegmentAudio(let index):
+                return "Segment \(index + 1) has no generated audio to join."
+            }
+        }
+    }
+
+    private func assemble(
+        request: IOSLongFormProjectRequest,
+        segments: [IOSLongFormSegmentState]
+    ) async throws -> (evidence: LongFormAssemblyEvidence, outputURL: URL) {
+        var sources: [LongFormAssemblySegmentSource] = []
+        for (index, segment) in request.plan.segments.enumerated() {
+            guard index < segments.count, let path = segments[index].audioPath else {
+                throw RunError.missingSegmentAudio(index: index)
+            }
+            sources.append(
+                LongFormAssemblySegmentSource(
+                    segmentID: segment.segmentID,
+                    lineage: segment.evidence.lineage,
+                    audioURL: URL(fileURLWithPath: path),
+                    boundary: segment.evidence.boundary,
+                    intendedPauseMilliseconds: segment.evidence.intendedPauseMilliseconds
+                )
+            )
+        }
+        guard let firstPath = segments.compactMap(\.audioPath).first else {
+            throw RunError.missingSegmentAudio(index: 0)
+        }
+        let outputURL = URL(fileURLWithPath: firstPath)
+            .deletingLastPathComponent()
+            .appendingPathComponent(
+                "long_form_joined_\(request.projectDigestPrefix).wav",
+                isDirectory: false
+            )
+        let evidence = try await BoundedLongFormAssembler.assemble(segments: sources, outputURL: outputURL)
+        return (evidence, outputURL)
+    }
+
+    private func persistManifest(
+        request: IOSLongFormProjectRequest,
+        segments: [IOSLongFormSegmentState],
+        qualityReports: [AudioQualityGate.Report?],
+        assembly: LongFormAssemblyEvidence?
+    ) async {
+        let plan = request.plan
+        let audioPaths: [String?] = plan.evidence.segments.indices.map { index in
+            index < segments.count ? segments[index].audioPath : nil
+        }
+        let durations: [Double?] = await Task.detached(priority: .utility) {
+            audioPaths.map { path -> Double? in
+                guard let path,
+                      let audioFile = try? AVAudioFile(forReading: URL(fileURLWithPath: path)),
+                      audioFile.processingFormat.sampleRate > 0 else { return nil }
+                return Double(audioFile.length) / audioFile.processingFormat.sampleRate
+            }
+        }.value
+        var segmentEvidence: [LongFormSegmentExecutionEvidence] = []
+        for (index, segment) in plan.evidence.segments.enumerated() {
+            let report = index < qualityReports.count ? qualityReports[index] : nil
+            segmentEvidence.append(
+                LongFormSegmentExecutionEvidence(
+                    index: segment.index,
+                    segmentID: segment.segmentID,
+                    generated: audioPaths[index] != nil,
+                    audioDurationSeconds: durations[index],
+                    qcPassed: report?.passed,
+                    qcRequiredFailures: report?.requiredFailures ?? [],
+                    qcWarnings: report?.warnings ?? []
+                )
+            )
+        }
+        let manifest = LongFormManifestV4(
+            plan: plan.evidence,
+            execution: LongFormExecutionEvidence(
+                generatedAtUTC: Date().formatted(.iso8601),
+                streamingExecution: true,
+                segments: segmentEvidence
+            ),
+            assembly: assembly,
+            replacements: []
+        )
+        guard let firstAudioPath = segments.compactMap(\.audioPath).first else { return }
+        let directory = URL(fileURLWithPath: firstAudioPath).deletingLastPathComponent()
+        let manifestURL = directory.appendingPathComponent(
+            "long_form_manifest_\(request.projectDigestPrefix).json",
+            isDirectory: false
+        )
+        guard let data = try? manifest.canonicalJSONData() else { return }
+        try? data.write(to: manifestURL, options: .atomic)
+    }
+}

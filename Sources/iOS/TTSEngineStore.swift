@@ -42,6 +42,11 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
     @Published private(set) var clonePreparationState: ClonePreparationState = .idle
     @Published private(set) var latestEvent: GenerationEvent?
     @Published private(set) var hasActiveGeneration = false
+    /// Held across multi-take work (a long-form project run: segments, QC,
+    /// assembly) so the fixed-refresh glass performance gate stays engaged for
+    /// the whole run instead of flickering between segments. Mirrors the macOS
+    /// `TTSEngineStore.hasSustainedPerformanceActivity` refcount.
+    @Published private(set) var hasSustainedPerformanceActivity = false
     @Published private(set) var engineLifecycleState: EngineLifecycleState = .idle
 
     let modelRegistry: any ModelRegistry
@@ -60,6 +65,7 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
     private(set) var latestMemoryContext: IOSMemoryContext
     private var changeObserver: AnyCancellable?
     private var activeGenerationDepth = 0
+    private var sustainedPerformanceDepth = 0
     private var lastForwardedChunkIdentity: GenerationChunkDeliveryIdentity?
     private var activeGenerationMemoryGuardTask: Task<Void, Never>?
     private var activeGenerationPeakMemoryContext: IOSMemoryContext?
@@ -424,6 +430,16 @@ final class TTSEngineStore: ObservableObject, TTSEngine {
 
     func exportGeneratedAudio(from sourceURL: URL, to destinationURL: URL) throws -> ExportedDocument {
         try backend.exportGeneratedAudio(from: sourceURL, to: destinationURL)
+    }
+
+    func beginSustainedPerformanceActivity() {
+        sustainedPerformanceDepth += 1
+        hasSustainedPerformanceActivity = true
+    }
+
+    func endSustainedPerformanceActivity() {
+        sustainedPerformanceDepth = max(sustainedPerformanceDepth - 1, 0)
+        hasSustainedPerformanceActivity = sustainedPerformanceDepth > 0
     }
 
     func clearGenerationActivity() {

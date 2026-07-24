@@ -13,6 +13,11 @@ struct Generation: Identifiable, Codable, Hashable, Sendable {
     var audioPath: String
     var duration: Double?
     var createdAt: Date
+    /// Long-form project association: the owning plan digest, or nil for
+    /// ordinary single takes.
+    var longFormProjectID: String?
+    /// "segment" or "joined" within a long-form project; nil otherwise.
+    var longFormRole: String?
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateStyle = .medium
@@ -52,6 +57,7 @@ extension Generation: TableRecord, FetchableRecord, MutablePersistableRecord {
 
     enum Columns: String, ColumnExpression {
         case id, text, mode, modelTier, voice, emotion, speed, audioPath, duration, createdAt
+        case longFormProjectID, longFormRole
     }
 
     init(row: Row) {
@@ -65,6 +71,8 @@ extension Generation: TableRecord, FetchableRecord, MutablePersistableRecord {
         audioPath = row[Columns.audioPath]
         duration = row[Columns.duration]
         createdAt = row[Columns.createdAt]
+        longFormProjectID = row[Columns.longFormProjectID]
+        longFormRole = row[Columns.longFormRole]
     }
 
     mutating func didInsert(_ inserted: InsertionSuccess) {

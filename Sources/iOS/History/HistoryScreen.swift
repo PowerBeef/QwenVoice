@@ -14,6 +14,32 @@ import QwenVoiceCore
 /// `IOSLibraryContainerView` indirection (which also carried a dead
 /// Voices section — the Voices tab has been `IOSVoicesView` since the
 /// 4-tab IA landed) is gone.
+/// One visible row in the History list: an ordinary take, or a long-form
+/// project (its joined output plus the collapsed per-segment map).
+enum IOSHistoryEntry: Identifiable {
+    case single(Generation)
+    case project(joined: Generation, segments: [Generation])
+
+    var id: String {
+        switch self {
+        case .single(let item):
+            return "single-\(item.historyAccessibilityID)"
+        case .project(let joined, _):
+            return "project-\(joined.longFormProjectID ?? joined.historyAccessibilityID)"
+        }
+    }
+
+    /// Date used for bucket placement; a project sits where its joined output landed.
+    var anchorDate: Date {
+        switch self {
+        case .single(let item):
+            return item.createdAt
+        case .project(let joined, _):
+            return joined.createdAt
+        }
+    }
+}
+
 struct HistoryScreen: View {
     @Environment(AppModel.self) private var appModel
 
@@ -139,8 +165,10 @@ private struct IOSHistoryLibrarySection: View {
     @State private var modeFilter: IOSHistoryModeFilter = .all
     @State private var searchQuery: String = ""
     @State private var debouncedQuery: String = ""
-    @State private var groupedItems: [(bucket: IOSHistoryBucket, items: [Generation])] = []
+    @State private var groupedItems: [(bucket: IOSHistoryBucket, items: [IOSHistoryEntry])] = []
     @State private var filteredItemCount = 0
+    /// Long-form projects whose per-segment map is disclosed (keyed by project ID).
+    @State private var expandedProjects: Set<String> = []
     @State private var reloadTask: Task<Void, Never>?
     @State private var clearConfirmation: IOSHistoryClearConfirmation?
     @State private var databaseUnavailable = false
@@ -215,14 +243,14 @@ private struct IOSHistoryLibrarySection: View {
                     } else {
                         ForEach(groupedItems, id: \.bucket.id) { group in
                             IOSSectionHeading(group.bucket.title)
-                            ForEach(group.items) { item in
-                                IOSHistoryItemCard(
-                                    item: item,
-                                    allowsDeletion: !databaseUnavailable,
-                                    onDelete: { delete(item) }
-                                )
-                                .accessibilityElement(children: .contain)
-                                .accessibilityIdentifier("historyRow_\(item.historyAccessibilityID)")
+                            ForEach(group.items) { entry in
+                                switch entry {
+                                case .single(let item):
+                                    historyCard(for: item)
+                                case .project(let joined, let segments):
+                                    historyCard(for: joined)
+                                    longFormSegmentsDisclosure(joined: joined, segments: segments)
+                                }
                             }
                         }
                     }
@@ -341,7 +369,7 @@ private struct IOSHistoryLibrarySection: View {
         items: [Generation],
         modeFilter: IOSHistoryModeFilter,
         query: String
-    ) -> [(bucket: IOSHistoryBucket, items: [Generation])] {
+    ) -> [(bucket: IOSHistoryBucket, items: [IOSHistoryEntry])] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let filteredItems = items.filter { item in
             guard modeFilter.matches(item) else { return false }
@@ -352,16 +380,102 @@ private struct IOSHistoryLibrarySection: View {
             return false
         }
 
+        // Long-form grouping (mirrors macOS History semantics): a project's
+        // joined row carries its segment map behind a disclosure; segments
+        // whose project has a visible joined row collapse under it. Search
+        // flattens everything, and orphan segments (no joined row yet) stay
+        // visible as ordinary rows.
+        var entries: [IOSHistoryEntry] = []
+        if trimmed.isEmpty {
+            let joinedProjectIDs = Set(
+                filteredItems.compactMap { item -> String? in
+                    guard item.longFormRole == "joined" else { return nil }
+                    return item.longFormProjectID
+                }
+            )
+            var segmentsByProject: [String: [Generation]] = [:]
+            for item in filteredItems
+            where item.longFormRole == "segment" && item.longFormProjectID.map(joinedProjectIDs.contains) == true {
+                segmentsByProject[item.longFormProjectID!, default: []].append(item)
+            }
+            for item in filteredItems {
+                if item.longFormRole == "joined", let projectID = item.longFormProjectID {
+                    entries.append(
+                        .project(
+                            joined: item,
+                            segments: (segmentsByProject[projectID] ?? [])
+                                .sorted { $0.createdAt < $1.createdAt }
+                        )
+                    )
+                } else if item.longFormRole == "segment",
+                          let projectID = item.longFormProjectID,
+                          joinedProjectIDs.contains(projectID) {
+                    continue
+                } else {
+                    entries.append(.single(item))
+                }
+            }
+        } else {
+            entries = filteredItems.map(IOSHistoryEntry.single)
+        }
+
         let reference = Date()
         let calendar = Calendar.current
-        var map: [IOSHistoryBucket: [Generation]] = [:]
-        for item in filteredItems {
-            let bucket = IOSHistoryBucket.bucket(for: item.createdAt, reference: reference, calendar: calendar)
-            map[bucket, default: []].append(item)
+        var map: [IOSHistoryBucket: [IOSHistoryEntry]] = [:]
+        for entry in entries {
+            let bucket = IOSHistoryBucket.bucket(
+                for: entry.anchorDate,
+                reference: reference,
+                calendar: calendar
+            )
+            map[bucket, default: []].append(entry)
         }
         return IOSHistoryBucket.allCases.compactMap { bucket in
             guard let rows = map[bucket], !rows.isEmpty else { return nil }
             return (bucket, rows)
+        }
+    }
+
+    @ViewBuilder
+    private func historyCard(for item: Generation) -> some View {
+        IOSHistoryItemCard(
+            item: item,
+            allowsDeletion: !databaseUnavailable,
+            onDelete: { delete(item) }
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("historyRow_\(item.historyAccessibilityID)")
+    }
+
+    @ViewBuilder
+    private func longFormSegmentsDisclosure(joined: Generation, segments: [Generation]) -> some View {
+        if let projectID = joined.longFormProjectID, !segments.isEmpty {
+            let digestPrefix = String(projectID.prefix(8))
+            let isExpanded = expandedProjects.contains(projectID)
+            Button {
+                if isExpanded {
+                    expandedProjects.remove(projectID)
+                } else {
+                    expandedProjects.insert(projectID)
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "rectangle.stack")
+                    Text("\(segments.count) segments")
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                }
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(IOSAppTheme.textSecondary)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 28)
+            .accessibilityIdentifier("history_longFormSegmentsToggle_\(digestPrefix)")
+            if isExpanded {
+                ForEach(segments) { segment in
+                    historyCard(for: segment)
+                        .padding(.leading, 16)
+                }
+            }
         }
     }
 
